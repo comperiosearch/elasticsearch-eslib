@@ -15,7 +15,7 @@ class DocumentProcessor(PipelineStage):
 
 
     def write(self, doc):
-        text = json.dumps(doc)
+        text = json.dumps(doc, ensure_ascii=False)
         super(DocumentProcessor, self).write(text)
 
   

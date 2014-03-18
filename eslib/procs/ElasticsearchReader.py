@@ -104,7 +104,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
             eslib.DocumentProcessor.write(self, doc)
         elif self.field:
             # Dump ID and fields
-            fieldvalue = " | ".join(doc["fields"].get(self.field) or [])
+            fieldvalue = " | ".join(eslib.getfield(doc["fields"], self.field, []))
             if self.doctype:
                 eslib.PipelineStage.write(self, "[%-40s] %s" % (id, fieldvalue))
             else:

@@ -71,7 +71,7 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
                     self.eout(exception=e)
                     return None
 
-        if self.DEBUG: self.dout("/%s/%s/%s:" % (index,doctype,(id or "")) + json.dumps(debugFields))
+        if self.DEBUG: self.dout("/%s/%s/%s:" % (index,doctype,(id or "")) + json.dumps(debugFields, ensure_ascii=False))
         if self.DEBUG and self.VERBOSE and res: self.dout_raw(res)
 
         if self.terminal: return None # Do not write the new document to output
