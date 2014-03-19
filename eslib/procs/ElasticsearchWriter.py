@@ -92,90 +92,36 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
 # For running as a script
 # ============================================================================
 
-import sys, getopt
 from eslib.prog import progname
-
-
-OUT = sys.stderr
-
-
-def usage(err = None, rich= False):
-    if err:
-        print("Argument error: %s" % err, file=OUT)
-
-    p = progname()
-    print("Usage:", file=OUT)
-    print("  %s -h" % p, file=OUT)
-    print("  %s [options] [fileNames]" % p, file=OUT)
-
-    if rich:
-        print(file=OUT)
-        print("Options:", file=OUT)
-        print("  -i <index>     Feed to this index instead of the original in '_index'.", file=OUT)
-        print("  -t <type>      Feed as this document type instead of the original in '_type'.", file=OUT)
-        print("  -r             Read only and dump output to stdout.", file=OUT)
-        print("  -v             Verbose, display progress.", file=OUT)
-        print("  -f <fieldList> Write only these fields, using partial update instead full docs.", file=OUT)
-        print("  --terminal     Do not write output.", file=OUT)
-        print("  --debug        Display debug info.", file=OUT)
-        print(file=OUT)
-        print("Field names are separated by commas. File names are normal command normal line", file=OUT)
-        print("arguments. If no file name is given then stdin is used instead.", file=OUT)
-
-    if err:
-        sys.exit(-1)
-    else:
-        sys.exit(0)
-
-
+import argparse
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--index",     help="Feed to this index instead of the original in '_index'")
+    parser.add_argument("-t", "--type",      help="Feed as this document type instead of the original in '_type'")
+    parser.add_argument("-r", "--read",      help="Read only and dump output to stdout")
+    parser.add_argument("-f", "--fieldList", help="Write only these fields, using partial update instead full docs")
+    parser.add_argument("--terminal",        help="Do not write output", action="store_true")
+    parser.add_argument("--debug",           help="Display debug info", action="store_true")
+    parser.add_argument("--verbose",         help="Verbose, display progress", action="store_true")
+    parser.add_argument("filenames",         help="If no input files are specified stdin will be used as input", nargs="*")
 
-    # Default values
-    index = None
-    doctype = None
-    fieldListStr = None
+    args = parser.parse_args()
     fieldList = []
-    filenames = []
-    verbose = False
-    readOnly = False
-    debug = False
-    terminal = False
-
-    # Parse command line input
-    #if len(sys.argv) == 1: usage()
-    try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':i:t:f:vrh', ["debug", "terminal"])
-    except:
-        usage()
-    for (o, a) in optlist:
-        if   o == "-h": usage(rich=True)
-        elif o == "-f": fieldListStr = a
-        elif o == "-t": doctype = a
-        elif o == "-i": index = a
-        elif o == "-v": verbose = True
-        elif o == "-r": readOnly = True
-        elif o == "--debug": debug = True
-        elif o == "--terminal": terminal = True
-    filenames = args
-
-    #if not index: usage("no index specified")
-    #if not doctype: usage("doc type not specified")
-
-    if fieldListStr:
-        fieldList = [x.strip() for x in fieldListStr.split(",")]
+    if args.fieldList:
+        fieldList = [field.strip() for field in args.fieldList.split(",")]
     
     # Set up and run this processor
     dp = ElasticsearchWriter(progname())
-    dp.index = index
-    dp.doctype = doctype
+    dp.index = args.index
+    dp.doctype = args.type
     dp.updateFieldList = fieldList
-    dp.readOnly = readOnly
-    dp.terminal = terminal
+    dp.readOnly = args.read
+    dp.terminal = args.terminal
 
-    dp.VERBOSE = verbose
-    dp.DEBUG = debug
+    dp.VERBOSE = args.verbose
+    dp.DEBUG = args.debug
 
-    dp.run(filenames)
+    dp.run(args.filenames)
 
 
 if __name__ == "__main__": main()
