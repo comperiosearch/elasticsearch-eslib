@@ -13,7 +13,8 @@ class PipelineStage(object):
 
         self.DEBUG       = False
         self.VERBOSE     = False
-        self.failOnError = False
+        self.failOnError = False # Whether a processing error should raise and terminate the process or continue
+        self.terminal    = False # True if this is the last stage and should not produce any more output
 
 
     # Implemented by inheriting classes:
@@ -34,7 +35,8 @@ class PipelineStage(object):
         pass
 
     def write(self, text):
-        print(text, file=sys.stdout)
+        if not self.terminal:
+            print(text, file=sys.stdout)
 
 
     def convert(self, line):

@@ -74,6 +74,8 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         if self.DEBUG: self.dout("/%s/%s/%s:" % (index,doctype,(id or "")) + json.dumps(debugFields, ensure_ascii=False))
         if self.DEBUG and self.VERBOSE and res: self.dout_raw(res)
 
+        # Note: The following line is a performance optimization. The pipeline runner or self.write()
+        # will not write output regardless, if self.terminal.
         if self.terminal: return None # Do not write the new document to output
 
         doc.update({"_index"  : index  }) # Might have changed to self.index

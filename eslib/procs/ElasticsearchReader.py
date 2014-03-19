@@ -97,6 +97,8 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
 
     def write(self, doc):
+        if self.terminal: return
+
         id = doc["_id"]
         t = doc["_type"]
         if self.outputFormat == "json":
@@ -121,6 +123,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 from eslib.prog import progname
 import eslib.time
 import argparse
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--index", required=True, help="Which index to return documents from")
@@ -129,12 +132,13 @@ def main():
     parser.add_argument("-f", "--field", help="Return only the specified field")
     parser.add_argument("-s", "--since", help="Returns all documents added after SINCE. Specified in the 'ago' format(1d,3w,1y etc.)")
     parser.add_argument("-b", "--before", help="Returns all documents added after BEFORE. Specified in the 'ago' format(1d,3w,1y etc.)")
-    parser.add_argument("-T", "--timefield", default="_timestamp", help="The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'.")
-    parser.add_argument("-F", "--filter", help="Format for filter is, by example: 'category:politicians,party:democrats'.")
-    parser.add_argument("-o", "--format", default="json", help="Available formats for 'format': json (default), id, field (used by default if -f given)")
-    parser.add_argument("-d", "--debug", action="store_true")
+    parser.add_argument("--timefield", default="_timestamp", help="The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'.")
+    parser.add_argument("--filter", help="Format for filter is, by example: 'category:politicians,party:democrats'.")
+    parser.add_argument("--format", default="json", help="Available formats for 'format': json (default), id, field (used by default if -f given)")
+    parser.add_argument("--debug", action="store_true")
 
     args = parser.parse_args()
+
     # Time validation conversion and checks
     if args.before:
         try:
@@ -147,6 +151,7 @@ def main():
         except:
            print("illegal 'ago' time format to 'since' argument, '%s'" % args.since)
     filters = {}
+
     # Parse filter string
     if args.filter:
         parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]

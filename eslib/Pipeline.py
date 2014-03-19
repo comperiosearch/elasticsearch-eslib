@@ -6,10 +6,11 @@
 
 
 
-import threading, queue
+import threading, queue, datetime
+
 import time
 def _sleep():
-    time.sleep(0.001)
+    time.sleep(0.0001)
 
 
 class Pipeline(object):
@@ -27,11 +28,14 @@ class Pipeline(object):
         self._done = False
         # ... well.. if the pipeline has not been started, we could also consider all
         # that is queued (i.e. nothing) to be done and input ended.
+        self._started = None
+        self._terminal_thread = None
 
 
     def _handle(self, proc, item):
         processed = proc.process(item)
-        proc.output_queue.put(processed)
+        if processed and not proc.terminal:
+            proc.output_queue.put(processed)
 
 
     def _run(self, proc, feeder):
@@ -71,6 +75,7 @@ class Pipeline(object):
 
         self._input_ended = False
         self._done = False
+        self._started = datetime.datetime.utcnow()
 
         # Set up processors
         for proc in self.processors:
@@ -85,9 +90,18 @@ class Pipeline(object):
             feeder = None
             if i > 0: feeder = self.processors[i-1]
             terminal_thread = t = threading.Thread(target=self._run, args=(proc, feeder))
+            t.daemon = False
             t.start()
 
+        self._terminal_thread = terminal_thread
         return terminal_thread
+
+
+    def wait(self):
+        "Wait for pipeline to complete. Blocks thread."
+        if self._terminal_thread:
+            self._terminal_thread.join()
+        self._terminal_thread = None
 
 
     def end(self):
@@ -122,4 +136,17 @@ class Pipeline(object):
     def done(self):
         "Reports True if the final pipeline stage has completed all processing."
         return self._done
+
+    @property
+    def started(self):
+        "When the pipeline was started"
+        return self._started
+
+    @property
+    def elapsed(self):
+        "How long this pipeline has been running. 'None' if not started."
+        if self._started:
+            return datetime.datetime.utcnow() - self._started
+        return None
+
 
