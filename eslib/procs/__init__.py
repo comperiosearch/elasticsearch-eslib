@@ -12,11 +12,15 @@ from .ElasticsearchWriter import ElasticsearchWriter
 from .CSVReader import CSVReader
 from .ShowProgress import ShowProgress
 from .SentimentProcessor import SentimentProcessor
+from .RemovePattern import RemovePattern
+from .TweetRemoveLinks import TweetRemoveLinks
 
 __all__ = (
     "ElasticsearchReader",
     "ElasticsearchWriter",
     "CSVReader",
     "ShowProgress",
-    "SentimentProcessor"
+    "SentimentProcessor",
+    "RemovePattern",
+    "TweetRemveLinks"
 )

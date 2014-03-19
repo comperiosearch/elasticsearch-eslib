@@ -15,8 +15,9 @@ class DocumentProcessor(PipelineStage):
 
 
     def write(self, doc):
-        text = json.dumps(doc, ensure_ascii=False)
-        super(DocumentProcessor, self).write(text)
+        if not self.terminal:
+            text = json.dumps(doc, ensure_ascii=False)
+            super(DocumentProcessor, self).write(text)
 
   
     def convert(self, line):
