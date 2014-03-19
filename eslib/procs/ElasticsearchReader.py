@@ -118,120 +118,56 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 # For running as a script
 # ============================================================================
 
-import sys, getopt
 from eslib.prog import progname
 import eslib.time
-
-
-OUT = sys.stderr
-
-
-def usage(err = None, rich= False):
-    if err:
-        print("Argument error: %s" % err, file=OUT)
-
-    p = progname()
-    print("Usage:", file=OUT)
-    print("  %s -h                                                 More help" % p, file=OUT)
-    print("  %s -i <index> [-t <type>] [-l limit>] [-f <field>]    Show feed info" % p, file=OUT)
-
-    if rich:
-        print(file=OUT)
-        print("  Additional options:", file=OUT)
-        print("    --since <ago>", file=OUT)
-        print("    --before <ago>", file=OUT)
-        print("    --timefield <field>", file=OUT)
-        print("    --filter <filters>", file=OUT)
-        print("    --format <format>", file=OUT)
-        print("    --debug", file=OUT)
-        print(file=OUT)
-        print("  'ago' format is '1d', '2w', etc. Default 'timefield' to slice on is '_timestamp'.", file=OUT)
-        print("  Format for filter is, by example: 'category:politicians,party:democrats'.", file=OUT)
-        print(file=OUT)
-        print("  Available formats for 'format':", file=OUT)
-        print("    json (default), id, field (used by default if -f given)", file=OUT)
-
-    if err:
-        sys.exit(-1)
-    else:
-        sys.exit(0)
-
-
+import argparse
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--index", required=True, help="Which index to return documents from")
+    parser.add_argument("-t", "--type", help="Which type of document to return")
+    parser.add_argument("-l", "--limit", default=0, type=int, help="The maximum number of documents to return. Will by default return all documents")
+    parser.add_argument("-f", "--field", help="Return only the specified field")
+    parser.add_argument("-s", "--since", help="Returns all documents added after SINCE. Specified in the 'ago' format(1d,3w,1y etc.)")
+    parser.add_argument("-b", "--before", help="Returns all documents added after BEFORE. Specified in the 'ago' format(1d,3w,1y etc.)")
+    parser.add_argument("-T", "--timefield", default="_timestamp", help="The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'.")
+    parser.add_argument("-F", "--filter", help="Format for filter is, by example: 'category:politicians,party:democrats'.")
+    parser.add_argument("-o", "--format", default="json", help="Available formats for 'format': json (default), id, field (used by default if -f given)")
+    parser.add_argument("-d", "--debug", action="store_true")
 
-    # Default values
-    field = None
-    index = None
-    doctype = None
-    limit = 0
-    filter = None
-    sinceStr = None
-    beforeStr = None
-    since = None
-    before = None
-    timefield = None
-    filters = {}
-    filterStr = None
-    outputFormat = "json"
-    debug = False
-
-    # Parse command line input
-    if len(sys.argv) == 1: usage()
-    try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':l:t:i:f:h', \
-            ["filter=","before=","since=","timefield=","format=","debug"])
-    except:
-        usage()
-    for (o, a) in optlist:
-        if   o == "-h": usage(rich=True)
-        elif o == "-f": field = a
-        elif o == "-l": limit = int(a)
-        elif o == "-t": doctype = a
-        elif o == "-i": index = a
-        elif o == "--filter": filterStr = a
-        elif o == "--before": beforeStr = a
-        elif o == "--since": sinceStr = a
-        elif o == "--timefield": timefield = a
-        elif o == "--format": outputFormat = a
-        elif o == "--debug": debug = a
-    if len(args) > 0: usage("unknown option '%s'" % args[0])
-
-    if not index: usage("no index specified")
-
+    args = parser.parse_args()
     # Time validation conversion and checks
-    if beforeStr:
+    if args.before:
         try:
-            before = eslib.time.ago2date(beforeStr)
+            before = eslib.time.ago2date(args.before)
         except:
-            usage("illegal 'ago' time format to 'before' argument, '%s'" % beforeStr)
-    if sinceStr:
+            print("Illegal 'ago' time format to 'before' argument, '%s'" % args.before)
+    if args.since:
         try:
-            since = eslib.time.ago2date(sinceStr)
+            since = eslib.time.ago2date(args.since)
         except:
-            usage("illegal 'ago' time format to 'since' argument, '%s'" % sinceStr)
-
+           print("illegal 'ago' time format to 'since' argument, '%s'" % args.since)
+    filters = {}
     # Parse filter string
-    if filterStr:
-        parts = [{y[0]:y[1]} for y in [x.split(":") for x in filterStr.split(",")]]
-        for f in parts:
-            filters.update(f)
+    if args.filter:
+        parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]
+        for part in parts:
+            filters.update(part)
 
     # Set up and run this processor
     dp = ElasticsearchReader(progname())
-    dp.index = index
-    dp.doctype = doctype
-    dp.field = field
-    dp.limit = limit
+    dp.index = args.index
+    dp.doctype = args.type
+    dp.field = args.field
+    dp.limit = args.limit
     dp.filters = filters
-    dp.since = since
-    dp.before = before
-    dp.timefield = timefield
-    dp.outputFormat = outputFormat
+    dp.since = args.since
+    dp.before = args.before
+    dp.timefield = args.timefield
+    dp.outputFormat = args.format
 
-    dp.DEBUG = debug
+    dp.DEBUG = args.debug
 
     dp.run()
 
 
 if __name__ == "__main__": main()
-
