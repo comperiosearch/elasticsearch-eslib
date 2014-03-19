@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# -*- coding: iso-8859-1 -*-
+# -*- coding: utf-8 -*-
 
 # Show progress, dump number of items that have passed through the stream
 
@@ -49,53 +49,18 @@ class ShowProgress(eslib.PipelineStage):
 # For running as a script
 # ============================================================================
 
-import sys, getopt
+import argparse 
 from eslib.prog import progname
 
-
-OUT = sys.stderr
-
-
-def usage(err = None, rich= False):
-    if err:
-        print("Argument error: %s" % err, file=OUT)
-
-    p = progname()
-    print("Usage:", file=OUT)
-    print("  %s -h" % p, file=OUT)
-    print("  %s [-f <frequency>] [--terminal]" % p, file=OUT)
-
-    if rich:
-        pass
-
-    if err:
-        sys.exit(-1)
-    else:
-        sys.exit(0)
-
-
 def main():
-#    parser = argparse.ArgumentParser()
-#    parser.add_argument('')
-    # Default values
-    frequency = 1000
-    terminal = False
-
-    # Parse command line input
-    try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':s:f:t:h', ["terminal"])
-    except:
-        usage()
-    for (o, a) in optlist:
-        if   o == "-h": usage(rich=True)
-        elif o == "-f": frequency = int(a)
-        elif o == --"terminal" : terminal = True
-    filenames = args
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--frequency", type=int, default=1000, help="How often should progress get printed. Default: 1000")
+    parser.add_argument("-t", "--terminal", action="store_true")
+    args = parser.parse_args()
     # Set up and run this processor
     dp = ShowProgress(progname())
-    dp.frequency = frequency
-    dp.terminal = terminal
+    dp.frequency = args.frequency
+    dp.terminal = args.terminal
 
     dp.run()
 
