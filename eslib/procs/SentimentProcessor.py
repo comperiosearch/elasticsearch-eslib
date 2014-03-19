@@ -99,79 +99,32 @@ class SentimentProcessor(eslib.DocumentProcessor):
 # For running as a script
 # ============================================================================
 
-import sys, getopt
+import argparse
 from eslib.prog import progname
-
-
-OUT = sys.stderr
-
-
-def usage(err = None, rich= False):
-    if err:
-        print("Argument error: %s" % err, file=OUT)
-
-    p = progname()
-    print("Usage:", file=OUT)
-    print("  %s -h" % p, file=OUT)
-    print("  %s -s <sentimentFile> -f <fieldList> [-v] [-t <targetField>] [<fileNames>]" % p, file=OUT)
-
-    if rich:
-        print(file=OUT)
-        print("Field names are separated by commas. File names are normal command line arguments.", file=OUT)
-        print("If no file name is given then stdin is used instead. Field names can be suffixed", file=OUT)
-        print("with ^weight where weight is a floating point number (0,1] to denote field weight.", file=OUT)
-        print(file=OUT)
-        print("Sentiment description file has the format, by example:", file=OUT)
-        print("{ \"strenghts\": {\"very\": 0.5, \"terribly\": 0.9},", file=OUT)
-        print("  \"adjectives\": {\"good\": 0.5, \"bad\": -0.5} }", file=OUT)
-
-    if err:
-        sys.exit(-1)
-    else:
-        sys.exit(0)
-
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--sentimentFile", required=True, help="The file containing the sentiment information. Must have format '{ \"strenghts\": {\"very\": 0.5, \"terribly\": 0.9}, \"adjectives\": {\"good\": 0.5, \"bad\": -0.5} }")
+    parser.add_argument("-f", "--fieldList", required=True, help="Field names are separated by commas, can be suffixed with ^<float [0,1]> to denote field weight")
+    parser.add_argument("-t", "--targetField", default="sentiment", help="Which field to write the sentiment to. Defaults to 'sentiment'")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-d", "--debug", action="store_true")
+    parser.add_argument("filenames", nargs="*", help="If not specified stdin will be used instead.")
+    args = parser.parse_args()
 
-    # Default values
-    fieldListStr = None
     fieldList = []
-    filenames = []
-    sentimentDescFile = None
-    sentimentMeta = None
-    targetField = "sentiment"
-    verbose = False
-    debug = False
-
-    # Parse command line input
-    try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':s:f:t:vh', ["debug"])
-    except:
-        usage()
-    for (o, a) in optlist:
-        if   o == "-h": usage(rich=True)
-        elif o == "-s": sentimentDescFile = a
-        elif o == "-f": fieldListStr = a
-        elif o == "-t": targetField = a
-        elif o == "-v": verbose = True
-        elif o == "--debug": debug = True
-    filenames = args
-
-    if not sentimentDescFile: usage("missing sentiment description file")
-    
-    if fieldListStr:
-        fieldList = [x.strip() for x in fieldListStr.split(",")]
+    if args.fieldList:
+        fieldList = [field.strip() for field in args.fieldList.split(",")]
 
     # Set up and run this processor
     dp = SentimentProcessor(progname())
-    dp.sentimentDescFile = sentimentDescFile
+    dp.sentimentDescFile = args.sentimentFile 
     dp.fieldList = fieldList
-    dp.targetField = targetField
+    dp.targetField = args.targetField
 
-    dp.VERBOSE = verbose
-    dp.DEBUG = debug
+    dp.VERBOSE = args.verbose
+    dp.DEBUG = args.debug
 
-    dp.run(filenames)
+    dp.run(args.filenames )
 
 
 if __name__ == "__main__": main()
