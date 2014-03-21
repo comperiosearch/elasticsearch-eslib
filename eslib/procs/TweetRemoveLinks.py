@@ -47,12 +47,14 @@ from eslib.prog import progname
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="%(prog)s -f FIELD [-t TARGET]")
-    parser.add_argument("--debug",   action="store_true")
-    parser.add_argument("-t", "--target",  required=False, \
-        help="Write cleaned text to this field instead of overwriting input field.")
-    parser.add_argument("-f", "--field",   default="text", \
-        help="Field to clean. Defaults to 'text'.")
+    help_t = "Write cleaned text to this field instead of overwriting input field."
+    help_f = "Field to clean. Defaults to 'text'."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -f field [-t target]")
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-f", "--field",   default="text", help=help_f)
+    parser.add_argument("-t", "--target",  required=False, help=help_t)
+    parser.add_argument(      "--debug",   action="store_true")
 
     args = parser.parse_args()
 

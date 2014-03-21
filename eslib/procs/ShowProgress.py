@@ -53,10 +53,13 @@ import argparse
 from eslib.prog import progname
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--frequency", type=int, default=1000, help="How often should progress get printed. Default: 1000")
-    parser.add_argument("--terminal", action="store_true")
+    help_f = "How often should progress get printed. Default: 1000 (i.e. per 1000 items.)"
+    parser = argparse.ArgumentParser(usage="\n %(prog)s [-f frequency]")
+    parser.add_argument("-f", "--frequency", type=int, default=1000, help=help_f)
+    parser.add_argument(      "--terminal" , action="store_true")
+
     args = parser.parse_args()
+
     # Set up and run this processor
     dp = ShowProgress(progname())
     dp.frequency = args.frequency

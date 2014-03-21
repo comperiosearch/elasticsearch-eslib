@@ -45,20 +45,23 @@ class RemovePattern(eslib.DocumentProcessor):
 # For running as a script
 # ============================================================================
 
-import argparse
+import argparse, sys
 from eslib.prog import progname
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-d", "--debug",   action="store_true")
-    parser.add_argument("-t", "--target", \
-        help="The field to write the cleaned text to. Defaults to overwrite input field.")
-    parser.add_argument("-f", "--field",   required=True, \
-        help="The path to field to clean. Paths are assumed to start in _source. The field is not modified.")
-    parser.add_argument("-p", "--pattern", required=True, \
-        help="A regex pattern that should be removed from the field.")
+    help_t = "The field to write the cleaned text to. Defaults to overwrite input field."
+    help_f = "The path to field to clean. Paths are assumed to start in _source. The field is not modified."
+    help_p = "A regex pattern that should be removed from the field."
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -f field -p pattern [-t target]")
+    parser.add_argument("-f", "--field"  , required=True, help=help_f)
+    parser.add_argument("-p", "--pattern", required=True, help=help_p)
+    parser.add_argument("-t", "--target" , help=help_t)
+    parser.add_argument(      "--debug"  , action="store_true")
+
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        sys.exit(0)
 
     args = parser.parse_args()
 
@@ -68,7 +71,6 @@ def main():
     dp.target  = args.target
     dp.pattern = args.pattern
 
-    dp.VERBOSE = args.verbose
     dp.DEBUG   = args.debug
 
     dp.run()

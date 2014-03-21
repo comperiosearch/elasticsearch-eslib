@@ -41,15 +41,17 @@ from eslib.prog import progname
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="%(prog)s -f FIELD [-t TARGET]")
-    parser.add_argument("--debug",   action="store_true")
-    parser.add_argument("-t", "--target",  required=False, \
-        help="Write cleaned text to this field instead of overwriting input field.")
-    parser.add_argument("-f", "--field",   required=True, help="Field to clean.")
+    help_t = "Write cleaned text to this field instead of overwriting input field."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -f FIELD [-t TARGET]")
+    parser.add_argument("-t", "--target",  required=False, help=help_t)
+    parser.add_argument("-f", "--field" ,  required=True , help="Field to clean.")
+    parser.add_argument(      "--debug" ,  action="store_true")
 
     if len(sys.argv) == 1:
-       parser.print_usage()
-       sys.exit(0)
+        parser.print_usage()
+        sys.exit(0)
+
     args = parser.parse_args()
 
     # Set up and run this processor
