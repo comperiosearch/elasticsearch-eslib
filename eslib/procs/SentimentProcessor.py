@@ -135,7 +135,6 @@ def main():
     dp.fieldList = fieldList
     dp.targetField = args.targetField
 
-    dp.VERBOSE = args.verbose
     dp.DEBUG = args.debug
 
     dp.run(args.filenames )
