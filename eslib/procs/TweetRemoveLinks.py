@@ -61,7 +61,6 @@ def main():
     dp.field   = args.field
     dp.target  = args.target
 
-    dp.VERBOSE = args.verbose
     dp.DEBUG   = args.debug
 
     dp.run()
