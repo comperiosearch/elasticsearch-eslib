@@ -42,6 +42,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
             partialSentiment = self._analyze(self._sentimentMeta, fields.get(field))
             if partialSentiment: # Skip completely neutral fields
                 sentiments.append(partialSentiment * weight)
+
         # Calculate weighted average
         sentiment = 0.0
         if sentiments:
@@ -101,6 +102,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
 
 import argparse
 from eslib.prog import progname
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--sentimentFile", required=True, help="The file containing the sentiment information. Must have format '{ \"strenghts\": {\"very\": 0.5, \"terribly\": 0.9}, \"adjectives\": {\"good\": 0.5, \"bad\": -0.5} }")
