@@ -71,6 +71,8 @@ class SentimentProcessor(eslib.DocumentProcessor):
         scores = []
         aa = sentimentMeta["adjectives"]
         ss = sentimentMeta["strengths"]
+        if sentimentMeta["negations"]:
+            negationWords = sentimentMeta["negations"] 
         words = re.findall(r"[\w']+", text)
         for i in range(len(words)):
             word = words[i].lower()
