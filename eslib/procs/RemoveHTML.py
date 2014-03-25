@@ -13,12 +13,12 @@ class RemoveHTML(eslib.DocumentProcessor):
         self.target = None
         self.field = None
 
-
     def configure(self, config=None):
         if not self.target: self.target = self.field
 
 
     def process(self, doc):
+        stripper = MLStripper()
         text = eslib.getfield(doc["_source"], self.field)
         if not text or not type(text) is str: return doc
         cleaned = eslib.text.remove_html(text)
