@@ -118,7 +118,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
                 for target in word_index[word]:
                     ok = True
                     for j, tword in enumerate(target["words"]):
-                        if len(text_words) >= i+j or not text_words[i+j] == tword:
+                        if i+j >= len(text_words) or not text_words[i+j] == tword:
                             ok = False
                             break
                     if ok:
