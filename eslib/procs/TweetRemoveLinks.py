@@ -7,6 +7,7 @@
 import eslib.DocumentProcessor
 import eslib.text
 
+import sys
 
 class TweetRemoveLinks(eslib.DocumentProcessor):
 
