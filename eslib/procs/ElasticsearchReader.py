@@ -122,37 +122,56 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
 from eslib.prog import progname
 import eslib.time
-import argparse
+import argparse, sys
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--index", required=True, help="Which index to return documents from")
-    parser.add_argument("-t", "--type", help="Which type of document to return")
-    parser.add_argument("-l", "--limit", default=0, type=int, help="The maximum number of documents to return. Will by default return all documents")
-    parser.add_argument("-f", "--field", help="Return only the specified field")
-    parser.add_argument("-s", "--since", help="Returns all documents added after SINCE. Specified in the 'ago' format(1d,3w,1y etc.)")
-    parser.add_argument("-b", "--before", help="Returns all documents added after BEFORE. Specified in the 'ago' format(1d,3w,1y etc.)")
-    parser.add_argument("--timefield", default="_timestamp", help="The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'.")
-    parser.add_argument("--filter", help="Format for filter is, by example: 'category:politicians,party:democrats'.")
-    parser.add_argument("--format", default="json", help="Available formats for 'format': json (default), id, field (used by default if -f given)")
-    parser.add_argument("--debug", action="store_true")
+    help_i  = "Which index to return documents from."
+    help_t  = "Which type of document to return."
+    help_l  = "The maximum number of documents to return. Will by default return all documents."
+    help_f  = "Return display the specified field (forces 'field' format)."
+    help_s  = "Returns all documents added after SINCE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+    help_b  = "Returns all documents added after BEFORE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+    help_tf = "The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'."
+    help_fi = "Format for filter is, by example: 'category:politicians,party:democrats'."
+    help_fo = "Available formats for 'format': 'json' (default), 'id', 'field' (used by default if -f given)."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -i index [-t type] [-f field] [-l limit] [more options]")
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-i", "--index"    , help=help_i, required=True)
+    parser.add_argument("-t", "--type"     , help=help_t)
+    parser.add_argument("-l", "--limit"    , help=help_l, default=0, type=int)
+    parser.add_argument("-f", "--field"    , help=help_f)
+    parser.add_argument("-s", "--since"    , help=help_s)
+    parser.add_argument("-b", "--before"   , help=help_b)
+    parser.add_argument(      "--timefield", help=help_tf, default="_timestamp")
+    parser.add_argument(      "--filter"   , help=help_fi)
+    parser.add_argument(      "--format"   , help=help_fo, default="json")
+    parser.add_argument(      "--debug"    , action="store_true")
+
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        sys.exit(0)
 
     args = parser.parse_args()
 
     # Time validation conversion and checks
+    before = None
+    since  = None
     if args.before:
         try:
             before = eslib.time.ago2date(args.before)
         except:
             print("Illegal 'ago' time format to 'before' argument, '%s'" % args.before)
+            sys.exit(-1)
     if args.since:
         try:
             since = eslib.time.ago2date(args.since)
         except:
            print("illegal 'ago' time format to 'since' argument, '%s'" % args.since)
-    filters = {}
+           sys.exit(-1)
 
     # Parse filter string
+    filters = {}
     if args.filter:
         parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]
         for part in parts:
@@ -160,14 +179,14 @@ def main():
 
     # Set up and run this processor
     dp = ElasticsearchReader(progname())
-    dp.index = args.index
-    dp.doctype = args.type
-    dp.field = args.field
-    dp.limit = args.limit
-    dp.filters = filters
-    dp.since = args.since
-    dp.before = args.before
-    dp.timefield = args.timefield
+    dp.index        = args.index
+    dp.doctype      = args.type
+    dp.field        = args.field
+    dp.limit        = args.limit
+    dp.filters      = filters
+    dp.since        = since
+    dp.before       = before
+    dp.timefield    = args.timefield
     dp.outputFormat = args.format
 
     dp.DEBUG = args.debug
@@ -176,3 +195,4 @@ def main():
 
 
 if __name__ == "__main__": main()
+

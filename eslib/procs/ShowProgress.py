@@ -5,7 +5,7 @@
 
 
 import datetime
-import eslib.PipelineStage, eslib.time
+import eslib.PipelineStage, eslib.time, eslib.debug
 
 
 class ShowProgress(eslib.PipelineStage):
@@ -36,13 +36,15 @@ class ShowProgress(eslib.PipelineStage):
         self.count += 1
         if self.frequency and self.count % self.frequency == 0:
             durationString = eslib.time.durationString(self.elapsed())
-            self.dout("count: %7d, duration: %10s" % (self.count, durationString))
+            memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
+            self.dout("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
         return line # .. so it will be written to output
 
 
     def finish(self):
         durationString = eslib.time.durationString(self.elapsed())
-        self.dout("count: %7d, duration: %10s (finished)" % (self.count, durationString))
+        memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
+        self.dout("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
 
 
 # ============================================================================
@@ -53,10 +55,13 @@ import argparse
 from eslib.prog import progname
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--frequency", type=int, default=1000, help="How often should progress get printed. Default: 1000")
-    parser.add_argument("--terminal", action="store_true")
+    help_f = "How often should progress get printed. Default: 1000 (i.e. per 1000 items.)"
+    parser = argparse.ArgumentParser(usage="\n %(prog)s [-f frequency]")
+    parser.add_argument("-f", "--frequency", type=int, default=1000, help=help_f)
+    parser.add_argument(      "--terminal" , action="store_true")
+
     args = parser.parse_args()
+
     # Set up and run this processor
     dp = ShowProgress(progname())
     dp.frequency = args.frequency

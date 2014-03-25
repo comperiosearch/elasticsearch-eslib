@@ -42,6 +42,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
             partialSentiment = self._analyze(self._sentimentMeta, fields.get(field))
             if partialSentiment: # Skip completely neutral fields
                 sentiments.append(partialSentiment * weight)
+
         # Calculate weighted average
         sentiment = 0.0
         if sentiments:
@@ -101,16 +102,29 @@ class SentimentProcessor(eslib.DocumentProcessor):
 # For running as a script
 # ============================================================================
 
-import argparse
+import argparse, sys
 from eslib.prog import progname
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--sentimentFile", required=True, help="The file containing the sentiment information. Must have format '{ \"strenghts\": {\"very\": 0.5, \"terribly\": 0.9}, \"adjectives\": {\"good\": 0.5, \"bad\": -0.5} }")
-    parser.add_argument("-f", "--fieldList", required=True, help="Field names are separated by commas, can be suffixed with ^<float [0,1]> to denote field weight")
-    parser.add_argument("-t", "--targetField", default="sentiment", help="Which field to write the sentiment to. Defaults to 'sentiment'")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-d", "--debug", action="store_true")
+    help_s = """
+        The file containing the sentiment information. Must have format
+        '{ \"strenghts\": {\"very\": 0.5, \"terribly\": 0.9},
+        \"adjectives\": {\"good\": 0.5, \"bad\": -0.5} }"""
+    help_f = "Field names are separated by commas, can be suffixed with ^<float [0,1]> to denote field weight"
+    help_t = "Which field to write the sentiment to. Defaults to 'sentiment'"
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -s sentimentFile -f fieldList [-t targetField] [file ...]")
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-s", "--sentimentFile", required=True      , help=help_s)
+    parser.add_argument("-f", "--fieldList"    , required=True      , help=help_f)
+    parser.add_argument("-t", "--targetField"  , default="sentiment", help=help_t)
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument("filenames", nargs="*", help="If not specified stdin will be used instead.")
+
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        sys.exit(0)
+
     args = parser.parse_args()
 
     fieldList = []
@@ -123,7 +137,6 @@ def main():
     dp.fieldList = fieldList
     dp.targetField = args.targetField
 
-    dp.VERBOSE = args.verbose
     dp.DEBUG = args.debug
 
     dp.run(args.filenames )

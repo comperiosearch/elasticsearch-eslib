@@ -143,15 +143,15 @@ import argparse
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s [-i index] [-t type] [-f fieldList] [file ...]")
+    parser._actions[0].help = argparse.SUPPRESS
     parser.add_argument("-i", "--index",     help="Feed to this index instead of the original in '_index'")
     parser.add_argument("-t", "--type",      help="Feed as this document type instead of the original in '_type'")
-    parser.add_argument("-r", "--readonly",  help="Read only and dump output to stdout")
     parser.add_argument("-f", "--fieldList", help="Write only these fields, using partial update instead full docs")
+    parser.add_argument("-r", "--readonly",  action="store_true", help="Read only and dump output to stdout")
     parser.add_argument("--batchsize", type=int, default=1000, help="Batch size for bulk shipments to Elasticsearch")
     parser.add_argument("--terminal",        help="Do not write output", action="store_true")
     parser.add_argument("--debug",           help="Display debug info", action="store_true")
-    parser.add_argument("--verbose",         help="Verbose, display progress", action="store_true")
     parser.add_argument("filenames",         help="If no input files are specified stdin will be used as input", nargs="*")
 
     args = parser.parse_args()
@@ -169,7 +169,6 @@ def main():
 
     dp.terminal = args.terminal
 
-    dp.VERBOSE = args.verbose
     dp.DEBUG = args.debug
 
     dp.run(args.filenames)
