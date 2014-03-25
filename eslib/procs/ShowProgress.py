@@ -5,7 +5,7 @@
 
 
 import datetime
-import eslib.PipelineStage, eslib.time
+import eslib.PipelineStage, eslib.time, eslib.debug
 
 
 class ShowProgress(eslib.PipelineStage):
@@ -36,13 +36,15 @@ class ShowProgress(eslib.PipelineStage):
         self.count += 1
         if self.frequency and self.count % self.frequency == 0:
             durationString = eslib.time.durationString(self.elapsed())
-            self.dout("count: %7d, duration: %10s" % (self.count, durationString))
+            memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
+            self.dout("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
         return line # .. so it will be written to output
 
 
     def finish(self):
         durationString = eslib.time.durationString(self.elapsed())
-        self.dout("count: %7d, duration: %10s (finished)" % (self.count, durationString))
+        memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
+        self.dout("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
 
 
 # ============================================================================
