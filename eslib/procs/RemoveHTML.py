@@ -25,7 +25,6 @@ class RemoveHTML(eslib.DocumentProcessor):
         self.field = None
         self.keep_style = False
         self.keep_scripts = False
-        self.stripper = MLStripper()
         self.whitespace = re.compile(r'\s+')
         self.scripts = re.compile(r"""<script\s*(type=((".*?")|('.*?')))?>.*?</script>""", re.MULTILINE|re.DOTALL)
         self.style = re.compile(r"""(<style\s*(type=((".*?")|('.*?')))?>.*?</style>)""", re.MULTILINE|re.DOTALL)
@@ -34,15 +33,16 @@ class RemoveHTML(eslib.DocumentProcessor):
 
 
     def process(self, doc):
+        stripper = MLStripper()
         text = eslib.getfield(doc["_source"], self.field)
         if not text or not type(text) is str: return doc
         if not self.keep_scripts:
             text = re.sub(self.scripts, " ", text)
         if not self.keep_style:
             text = re.sub(self.style, " ", text)
-        cleaned = self.stripper.unescape(text)
-        self.stripper.feed(cleaned) 
-        cleaned = self.stripper.get_data()
+        cleaned = stripper.unescape(text)
+        stripper.feed(cleaned) 
+        cleaned = stripper.get_data()
         cleaned = re.sub(self.whitespace, " ", cleaned)
         eslib.putfield(doc["_source"], self.target, cleaned)
 
