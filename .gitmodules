@@ -1,0 +1,9 @@
+[submodule "modules/elasticsearch"]
+	path = modules/elasticsearch
+	url = https://github.com/elasticsearch/puppet-elasticsearch.git
+[submodule "modules/java"]
+	path = modules/java
+	url = https://github.com/puppetlabs/puppetlabs-java.git
+[submodule "modules/stdlib"]
+	path = modules/stdlib
+	url = https://github.com/puppetlabs/puppetlabs-stdlib.git
