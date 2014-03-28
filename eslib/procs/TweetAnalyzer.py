@@ -76,6 +76,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         return 0.0
 
     def _get_actors(self, fields):
+
         author = eslib.getfield(fields, "user.screen_name")
         mentions = [eslib.getfield(mention, "screen_name") for mention in eslib.getfield(fields, "mention", [])]
         retweet = eslib.getfield(fields, "retweet.user_screen_name")
@@ -107,6 +108,8 @@ class TweetAnalyzer(eslib.DocumentProcessor):
 
     # Devider = hackish stuff
     def _get_text_stuff(self, fields, text, word_index, node_field, score_field, divider=1.0):
+        if not text: return 0.0
+
         score = 0.0
         targets = []
         weights = []
@@ -141,7 +144,11 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         fields  = doc.get("_source")
         text = eslib.getfield(fields, self.field, "")
 
-        actor_score  = self._get_actors(fields)
+        if self._actors_db:
+            actor_score  = self._get_actors(fields)
+        else:
+            actor_score = 1.0
+
         action_score = self._get_text_stuff(fields, text, self._action_index, "actions", "action_score", divider=1.5)
         target_score = self._get_text_stuff(fields, text, self._target_index, "targets", "target_score")
 
@@ -151,6 +158,10 @@ class TweetAnalyzer(eslib.DocumentProcessor):
             doctype = doc.get("_type")
             self.dout("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
                 (index, doctype, id, actor_score, target_score, action_score))
+
+        # A simple summary score
+        score = (action_score * (1 + actor_score)) / 2.0
+        fields.update({"score": score})
 
         return doc # This must be returned, otherwise the doc is considered to be dumped
 
