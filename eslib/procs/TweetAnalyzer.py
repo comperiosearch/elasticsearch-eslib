@@ -184,6 +184,7 @@ def main():
     parser.add_argument("-t", "--targets" , help=help_t, required=True , metavar="file")
     parser.add_argument("-f", "--field"   , help=help_f, required=False, metavar="field", default="text")
     parser.add_argument(      "--debug"   , help="Display debug info." , action="store_true")
+    parser.add_argument(      "--verbose"   , help="Display verbose debug info." , action="store_true")
     parser.add_argument("filenames", nargs="*", help="If not specified stdin will be used instead.")
 
     if len(sys.argv) == 1:
@@ -200,6 +201,7 @@ def main():
     dp.field        = args.field
 
     dp.DEBUG = args.debug
+    dp.VERBOSE = args.verbose
 
     dp.run(args.filenames)
 
