@@ -51,7 +51,7 @@ class ShowProgress(eslib.PipelineStage):
 # For running as a script
 # ============================================================================
 
-import argparse 
+import argparse, sys
 from eslib.prog import progname
 
 def main():
@@ -71,4 +71,3 @@ def main():
 
 
 if __name__ == "__main__": main()
-
