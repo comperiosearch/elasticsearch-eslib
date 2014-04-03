@@ -23,7 +23,7 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
 
     def process(self, doc):
         text = eslib.getfield(doc["_source"], self.field)
-        if not text or not type(text) is str: return doc
+        if not text or not type(text) is str: yield doc
         cleaned = text
         linkinfos = eslib.getfield(doc["_source"], "link", [])
         linkcoords = [(l.get("start"), l.get("end")) for l in linkinfos]
@@ -36,7 +36,7 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
             x += "CLEANED =%s\n\n" % cleaned
             self.dout(x)
 
-        return doc # This must be returned, otherwise the doc is considered to be dumped
+        yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
 # ============================================================================

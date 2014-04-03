@@ -164,7 +164,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         score = (action_score * (1 + actor_score)) / 2.0
         fields.update({"score": score})
 
-        return doc # This must be returned, otherwise the doc is considered to be dumped
+        yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
     def _cramp(self, value):

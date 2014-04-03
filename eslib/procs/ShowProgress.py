@@ -38,7 +38,7 @@ class ShowProgress(eslib.PipelineStage):
             durationString = eslib.time.durationString(self.elapsed())
             memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
             self.dout("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
-        return line # .. so it will be written to output
+        yield line # .. so it will be written to output
 
 
     def finish(self):

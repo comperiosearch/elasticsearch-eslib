@@ -30,7 +30,7 @@ class PipelineStage(object):
         pass
 
     def process(self, doc):
-        return doc # Pure passthrough by default
+        yield doc # Pure passthrough by default
 
     def finish(self):
         pass
@@ -94,8 +94,8 @@ class PipelineStage(object):
             self.load()
             self.start()
             for doc in self.read(filenames):
-                processed = self.process(doc)
-                if processed: self.write(processed)
+                for processed in self.process(doc):
+                    if processed: self.write(processed)
             # In case there is unfinished business...
             self.finish()
         except KeyboardInterrupt:
