@@ -115,7 +115,6 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         weights = []
         # EXTREMELY SIMPLE TOKENIZATION AND TARGET MATCHING:
         text_words = re.split(r'\W', text.lower())
-        print(text_words, file=sys.stderr)
         for i, word in enumerate(text_words):
             if word in word_index:
                 #self.dout("CHECKING WORD=[%s]" % word)
