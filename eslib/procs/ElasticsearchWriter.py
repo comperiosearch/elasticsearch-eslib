@@ -67,20 +67,20 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
 #        es = None
 #        if not self.readOnly:
 #            es = elasticsearch.Elasticsearch()
-
         id = doc.get("_id")
         index = self.index or doc.get("_index")
         doctype = self.doctype or doc.get("_type")
         fields = doc.get("_source")
+
         #if not id:
         #    self.eout(exception=ValueError("Missing '_id' field in input."))
         #    return None
         if not index:
             self.eout(exception=ValueError("Missing '_index' field in input and no override."))
-            return None
+            yield None
         if not doctype:
             self.eout(exception=Exception("Missing '_type' field in input and no override."))
-            return None
+            yield None
 
         debugFields = ""
         res = None
@@ -119,12 +119,12 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
 
         # Note: The following line is a performance optimization. The pipeline runner or self.write()
         # will not write output regardless, if self.terminal.
-        if self.terminal: return None # Do not write the new document to output
+        #if self.terminal: yield None # Do not write the new document to output
 
 #        if not self.readOnly:
 #            doc.update({"_id"     : res["_id"]})
 #            doc.update({"_version": res["_version"]})
-        return doc
+        yield doc
 
 
     def finish(self):
@@ -170,7 +170,6 @@ def main():
     dp.terminal = args.terminal
 
     dp.DEBUG = args.debug
-
     dp.run(args.filenames)
 
 
