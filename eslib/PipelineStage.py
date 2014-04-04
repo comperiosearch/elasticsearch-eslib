@@ -2,7 +2,7 @@
 # Base class for pipeline stages.
 # ============================================================================
 
-import sys, signal
+import sys, signal, logging
 
 
 class PipelineStage(object):
@@ -17,6 +17,8 @@ class PipelineStage(object):
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
+        logging.basicConfig(level=logging.WARNING)
+        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
 
     # Implemented by inheriting classes:
 
