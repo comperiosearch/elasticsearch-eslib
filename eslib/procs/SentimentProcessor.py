@@ -52,7 +52,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            self.log.debug("/%s/%s/%s: %5.2f" % (index, doctype, id, sentiment))
+            self.console.debug("/%s/%s/%s: %5.2f" % (index, doctype, id, sentiment))
 
         # Add sentiment to the document
         fields.update({self.targetField : sentiment})

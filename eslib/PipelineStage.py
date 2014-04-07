@@ -18,9 +18,10 @@ class PipelineStage(object):
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
-        config = yaml.load(open('/home/eee/elasticsearch-eslib/eslib/logging.yml'))
+        config = yaml.load(open('../logging.yml'))
         logging.config.dictConfig(config=config)
-        self.log = logging.getLogger(__name__ + "." + name)
+        self.console = logging.getLogger("console." + __name__ + "." + name)
+        self.log = logging.getLogger(__name__)
 
     # Implemented by inheriting classes:
 
@@ -58,10 +59,10 @@ class PipelineStage(object):
         for filename in filenames:
             input = None
             if filename == "-":
-                if self.VERBOSE: self.log.debug("Reading from stdin...")
+                if self.VERBOSE: self.console.debug("Reading from stdin...")
                 input = sys.stdin
             else:
-                if self.VERBOSE: self.log.debug("Reading from file '%s'..." % filename)
+                if self.VERBOSE: self.console.debug("Reading from file '%s'..." % filename)
                 input = open(filename, "rt")
 
             # Read lines from stream
@@ -74,7 +75,7 @@ class PipelineStage(object):
             if not input == sys.stdin:
                 input.close()
 
-        if self.DEBUG: self.log.debug("All files read. Total items = %d" % count)
+        if self.DEBUG: self.console.debug("All files read. Total items = %d" % count)
 
 
     def _keyboard_interrupt_handler(self, signal, frame):
@@ -110,20 +111,10 @@ class PipelineStage(object):
 
 
     # Output
-
-    def dout(self, text):
-        if self.DEBUG: print("%s: %s" % (self.name, text), file=sys.stderr)
-
-    def dout_raw(self, obj):
-        if self.DEBUG: print(obj, file=sys.stderr)
-
-    def vout(self, text):
-        if self.VERBOSE: print("%s: %s" % (self.name, text), file=sys.stderr)
-
-    def eout(self, text=None, exception=None):
+    def error(self, text=None, exception=None):
         if not text and exception: text = exception.args[0]
         if not text: text = "???"
-        print("ERROR, %s: %s" % (self.name, text), file=sys.stderr)
+        self.console.error("%s" % text)
         if self.failOnError and exception:
             raise exception
 

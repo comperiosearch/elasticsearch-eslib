@@ -2,6 +2,7 @@ version: 1
 formatters:
   simple:
     format: '%(name)s - %(message)s'
+
 # Legal attributes for the format string
 # args            You shouldn’t need to format this yourself.     The tuple of arguments merged into msg to produce message.
 # asctime         %(asctime)s                                     Human-readable time when the LogRecord was created. By default this is of the form ‘2003-07-08 16:49:45,896’ (the numbers after the comma are millisecond portion of the time).
@@ -27,7 +28,7 @@ formatters:
 handlers:
   console:
     class: logging.StreamHandler
-    level: DEBUG
+    level: WARN
     formatter: simple
 
 root:
@@ -35,7 +36,8 @@ root:
   handlers: [console]
 
 loggers:
-  eslib:
+  console:
     level: DEBUG
     handlers: [console]
+
 

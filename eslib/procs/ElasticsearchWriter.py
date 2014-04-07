@@ -47,15 +47,10 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
             elif "update" in docop: doc = docop["update"]
             if doc:
                 if self.DEBUG:
-                    self.log.debug(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
-                    #self.dout("VER: OLD=%s, NEW=%s" % (docs[i].get("_version"), doc["_version"]))
+                    self.console.debug(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
                 docs[i].update({"_id"     : doc["_id"]})
                 docs[i].update({"_version": doc["_version"]})
 
-#        import sys
-#        self.dout(json.dumps(res))
-#        sys.exit(0)
-         
          # TODO: Now we can report the documents in 'doc' as presisted using a callback mechanism
 
 
@@ -76,10 +71,10 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         #    self.eout(exception=ValueError("Missing '_id' field in input."))
         #    return None
         if not index:
-            self.eout(exception=ValueError("Missing '_index' field in input and no override."))
+            self.error(exception=ValueError("Missing '_index' field in input and no override."))
             yield None
         if not doctype:
-            self.eout(exception=Exception("Missing '_type' field in input and no override."))
+            self.error(exception=Exception("Missing '_type' field in input and no override."))
             yield None
 
         debugFields = ""
