@@ -64,67 +64,34 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         # Note: 'updateFieldList' contains the list of fields for a partial update.
         # A full index request is submitted unless fields are given in 'updateFieldList'.
 
-#        es = None
-#        if not self.readOnly:
-#            es = elasticsearch.Elasticsearch()
         id = doc.get("_id")
         index = self.index or doc.get("_index")
         doctype = self.doctype or doc.get("_type")
         fields = doc.get("_source")
 
-        #if not id:
-        #    self.eout(exception=ValueError("Missing '_id' field in input."))
-        #    return None
         if not index:
             self.eout(exception=ValueError("Missing '_index' field in input and no override."))
-            yield None
-        if not doctype:
+        elif not doctype:
             self.eout(exception=Exception("Missing '_type' field in input and no override."))
-            yield None
-
-        debugFields = ""
-        res = None
-
-        doc.update({"_index"  : index  }) # Might have changed to self.index
-        doc.update({"_type"   : doctype}) # Might have changed to self.doctype
-
-        if self.updateFieldList: # This means to use the partial 'update' API
-            updateFields = {}
-            for f in fields:
-                if f in self.updateFieldList:
-                    updateFields.update({f: fields[f]})
-            debugFields = updateFields
-            if not self.readOnly:
-                meta = {"_index": index, "_type": doctype, "_id" : id}
-                self._add(doc, {"update": meta}, {"doc": updateFields})
-#                try:
-#                    res = es.update(index=index, doc_type=doctype, id=id, body={"doc": updateFields})
-#                except Exception as e:
-#                    self.eout("Elasticsearch update operation failed for id '%s'." % id, exception=e)
-#                    return None
         else:
-            debugFields = fields
-            if not self.readOnly:
-                meta = {"_index": index, "_type": doctype}
-                if id: meta.update({"_id": id})
-                self._add(doc, {"index": meta}, fields)
-#                try:
-#                    res = es.index(index=index, doc_type=doctype, id=id, body=fields)
-#                except Exception as e:
-#                    self.eout(exception=e)
-#                    return None
+            doc.update({"_index"  : index  }) # Might have changed to self.index
+            doc.update({"_type"   : doctype}) # Might have changed to self.doctype
 
-#        if self.DEBUG: self.dout("/%s/%s/%s:" % (index,doctype,(id or "")) + json.dumps(debugFields, ensure_ascii=False))
-#        if self.DEBUG and self.VERBOSE and res: self.dout_raw(res)
+            if self.updateFieldList: # This means to use the partial 'update' API
+                updateFields = {}
+                for f in fields:
+                    if f in self.updateFieldList:
+                        updateFields.update({f: fields[f]})
+                if not self.readOnly:
+                    meta = {"_index": index, "_type": doctype, "_id" : id}
+                    self._add(doc, {"update": meta}, {"doc": updateFields})
+            else:
+                if not self.readOnly:
+                    meta = {"_index": index, "_type": doctype}
+                    if id: meta.update({"_id": id})
+                    self._add(doc, {"index": meta}, fields)
 
-        # Note: The following line is a performance optimization. The pipeline runner or self.write()
-        # will not write output regardless, if self.terminal.
-        #if self.terminal: yield None # Do not write the new document to output
-
-#        if not self.readOnly:
-#            doc.update({"_id"     : res["_id"]})
-#            doc.update({"_version": res["_version"]})
-        yield doc
+            if not self.terminal: yield doc
 
 
     def finish(self):
