@@ -57,7 +57,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
         # Add sentiment to the document
         fields.update({self.targetField : sentiment})
 
-        return doc # This must be returned, otherwise the doc is considered to be dumped
+        yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
     def _cramp(self, value):

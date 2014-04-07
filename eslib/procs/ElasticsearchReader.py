@@ -103,7 +103,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
     def write(self, doc):
         if self.terminal: return
-
+        print("###" , doc)
         id = doc["_id"]
         t = doc["_type"]
         if self.outputFormat == "json":

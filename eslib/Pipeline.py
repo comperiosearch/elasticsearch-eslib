@@ -33,9 +33,9 @@ class Pipeline(object):
 
 
     def _handle(self, proc, item):
-        processed = proc.process(item)
-        if processed and not proc.terminal:
-            proc.output_queue.put(processed)
+        for processed in proc.process(item):
+            if processed and not proc.terminal:
+                proc.output_queue.put(processed)
 
 
     def _run(self, proc, feeder):

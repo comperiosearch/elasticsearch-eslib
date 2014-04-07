@@ -2,7 +2,7 @@
 # Base class for pipeline stages.
 # ============================================================================
 
-import sys, signal
+import sys, signal, logging
 
 
 class PipelineStage(object):
@@ -17,6 +17,8 @@ class PipelineStage(object):
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
+        logging.basicConfig(level=logging.WARNING)
+        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
 
     # Implemented by inheriting classes:
 
@@ -30,7 +32,7 @@ class PipelineStage(object):
         pass
 
     def process(self, doc):
-        return doc # Pure passthrough by default
+        yield doc # Pure passthrough by default
 
     def finish(self):
         pass
@@ -94,8 +96,8 @@ class PipelineStage(object):
             self.load()
             self.start()
             for doc in self.read(filenames):
-                processed = self.process(doc)
-                if processed: self.write(processed)
+                for processed in self.process(doc):
+                    if processed: self.write(processed)
             # In case there is unfinished business...
             self.finish()
         except KeyboardInterrupt:
