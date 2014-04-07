@@ -14,7 +14,7 @@ from .ShowProgress        import ShowProgress
 from .SentimentProcessor  import SentimentProcessor
 from .RemovePattern       import RemovePattern
 from .TweetRemoveLinks    import TweetRemoveLinks
-from .TweetAnalyzer       import TweetAnalyze
+from .TweetAnalyzer       import TweetAnalyzer
 
 __all__ = (
     "ElasticsearchReader",
