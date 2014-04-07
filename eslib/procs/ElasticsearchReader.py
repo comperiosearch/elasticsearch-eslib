@@ -85,12 +85,17 @@ class ElasticsearchReader(eslib.DocumentProcessor):
         self.dout("Total number of items to fetch: %d" % remaining)
 
         while remaining > 0:
+            if self.report_soft_abort():
+                return
+
             res = es.scroll(scroll="2m", scroll_id=scrollid)
             scrollid = res["_scroll_id"]
             hits = res["hits"]["hits"]
             remaining -= len(hits)
 
             for hit in hits:
+                if self.report_soft_abort():
+                    return
                 count += 1
                 if self.limit and count > self.limit: return
                 yield hit
@@ -98,7 +103,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
     def write(self, doc):
         if self.terminal: return
-
+        print("###" , doc)
         id = doc["_id"]
         t = doc["_type"]
         if self.outputFormat == "json":
@@ -195,4 +200,3 @@ def main():
 
 
 if __name__ == "__main__": main()
-

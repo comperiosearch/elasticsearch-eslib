@@ -19,16 +19,16 @@ class RemoveHTML(eslib.DocumentProcessor):
 
     def process(self, doc):
         text = eslib.getfield(doc["_source"], self.field)
-        if not text or not type(text) is str: return doc
+        if not text or not type(text) is str: yield doc
         cleaned = eslib.text.remove_html(text)
         eslib.putfield(doc["_source"], self.target, cleaned)
 
         if self.DEBUG:
-            x += "\nORIGINAL=%s\n" % text
+            x = "\nORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
             self.dout(x)
 
-        return doc # This must be returned, otherwise the doc is considered to be dumped
+        yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
 # ============================================================================
