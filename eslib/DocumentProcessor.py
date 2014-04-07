@@ -31,7 +31,6 @@ class DocumentProcessor(PipelineStage):
             jobj = json.loads(line)
             return jobj
         except ValueError as e:
-            self.onError()
             self.error("JSON decode error in line below: %s\n%s" % (e.args[0], line), e)
             return None 
 
