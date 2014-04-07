@@ -156,7 +156,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            self.dout("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
+            self.log.debug("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
                 (index, doctype, id, actor_score, target_score, action_score))
 
         # A simple summary score

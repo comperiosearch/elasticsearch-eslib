@@ -2,8 +2,9 @@
 # Base class for pipeline stages.
 # ============================================================================
 
-import sys, signal, logging
-
+import sys, signal
+import logging, logging.config
+import yaml
 
 class PipelineStage(object):
     "Base class for pipeline stage."
@@ -17,8 +18,9 @@ class PipelineStage(object):
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
-        logging.basicConfig(level=logging.WARNING)
-        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
+        config = yaml.load(open('/home/eee/elasticsearch-eslib/eslib/logging.yml'))
+        logging.config.dictConfig(config=config)
+        self.log = logging.getLogger(__name__ + "." + name)
 
     # Implemented by inheriting classes:
 
@@ -56,10 +58,10 @@ class PipelineStage(object):
         for filename in filenames:
             input = None
             if filename == "-":
-                if self.VERBOSE: self.vout("Reading from stdin...")
+                if self.VERBOSE: self.log.debug("Reading from stdin...")
                 input = sys.stdin
             else:
-                if self.VERBOSE: self.vout("Reading from file '%s'..." % filename)
+                if self.VERBOSE: self.log.debug("Reading from file '%s'..." % filename)
                 input = open(filename, "rt")
 
             # Read lines from stream
@@ -72,7 +74,7 @@ class PipelineStage(object):
             if not input == sys.stdin:
                 input.close()
 
-        if self.VERBOSE: self.vout("All files read. Total items = %d" % count)
+        if self.DEBUG: self.log.debug("All files read. Total items = %d" % count)
 
 
     def _keyboard_interrupt_handler(self, signal, frame):

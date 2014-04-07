@@ -47,7 +47,7 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
             elif "update" in docop: doc = docop["update"]
             if doc:
                 if self.DEBUG:
-                    self.dout("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"]))
+                    self.log.debug(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
                     #self.dout("VER: OLD=%s, NEW=%s" % (docs[i].get("_version"), doc["_version"]))
                 docs[i].update({"_id"     : doc["_id"]})
                 docs[i].update({"_version": doc["_version"]})

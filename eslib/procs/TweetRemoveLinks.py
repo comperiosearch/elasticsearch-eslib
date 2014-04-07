@@ -34,7 +34,7 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
             x = "\n#LINKS=%d\n" % len(links)
             x += "ORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
-            self.dout(x)
+            self.log.debug(x)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 
