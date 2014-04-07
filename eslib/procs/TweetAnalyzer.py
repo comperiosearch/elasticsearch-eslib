@@ -115,7 +115,6 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         weights = []
         # EXTREMELY SIMPLE TOKENIZATION AND TARGET MATCHING:
         text_words = re.split(r'\W', text.lower())
-        print(text_words, file=sys.stderr)
         for i, word in enumerate(text_words):
             if word in word_index:
                 #self.dout("CHECKING WORD=[%s]" % word)
@@ -164,7 +163,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         score = (action_score * (1 + actor_score)) / 2.0
         fields.update({"score": score})
 
-        return doc # This must be returned, otherwise the doc is considered to be dumped
+        yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
     def _cramp(self, value):

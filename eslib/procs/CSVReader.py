@@ -41,7 +41,6 @@ class CSVReader(eslib.DocumentProcessor):
 
             if not len(self.fieldList) == len(csvrow):
                 self.eout(exception = Exception("Column count does not match number of fields, row =\n%s" % csvrow))
-                return None
 
             doc = {}
             id = None
@@ -56,7 +55,7 @@ class CSVReader(eslib.DocumentProcessor):
                     doc.update({self.fieldList[i]: csvrow[i]})
             # Convert to Elasticsearch json document
             outerDoc = {"_index":self.index, "_type":self.doctype, "_id":id, "_source":doc}
-            return outerDoc
+            yield outerDoc
 
 
 # ============================================================================
