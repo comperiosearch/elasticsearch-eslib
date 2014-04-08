@@ -153,6 +153,7 @@ def main():
     parser.add_argument(      "--filter"   , help=help_fi)
     parser.add_argument(      "--format"   , help=help_fo, default="json")
     parser.add_argument(      "--debug"    , action="store_true")
+    parser.add_argument(      "--name"     , help="Process name.", default=None)
 
     if len(sys.argv) == 1:
         parser.print_usage()
@@ -184,7 +185,7 @@ def main():
             filters.update(part)
 
     # Set up and run this processor
-    dp = ElasticsearchReader(progname())
+    dp = ElasticsearchReader(args.name or progname())
     dp.index        = args.index
     dp.doctype      = args.type
     dp.field        = args.field

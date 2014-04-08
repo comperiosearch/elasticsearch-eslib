@@ -118,7 +118,8 @@ def main():
     parser.add_argument("-s", "--sentimentFile", required=True      , help=help_s)
     parser.add_argument("-f", "--fieldList"    , required=True      , help=help_f)
     parser.add_argument("-t", "--targetField"  , default="sentiment", help=help_t)
-    parser.add_argument("--debug", action="store_true")
+    parser.add_argument(      "--debug"        , action="store_true")
+    parser.add_argument(      "--name"         , help="Process name.", default=None)
     parser.add_argument("filenames", nargs="*", help="If not specified stdin will be used instead.")
 
     if len(sys.argv) == 1:
@@ -132,14 +133,14 @@ def main():
         fieldList = [field.strip() for field in args.fieldList.split(",")]
 
     # Set up and run this processor
-    dp = SentimentProcessor(progname())
+    dp = SentimentProcessor(args.name or progname())
     dp.sentimentDescFile = args.sentimentFile 
     dp.fieldList = fieldList
     dp.targetField = args.targetField
 
     dp.DEBUG = args.debug
 
-    dp.run(args.filenames )
+    dp.run(args.filenames)
 
 
 if __name__ == "__main__": main()

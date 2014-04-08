@@ -46,7 +46,7 @@ def main():
     parser.add_argument("-t", "--target",  required=False, help=help_t)
     parser.add_argument("-f", "--field" ,  required=True , help="Field to clean.")
     parser.add_argument(      "--debug" ,  action="store_true")
-
+    parser.add_argument(      "--name"  , help="Process name.", default=None)
     if len(sys.argv) == 1:
         parser.print_usage()
         sys.exit(0)
@@ -54,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = RemoveHTML(progname())
+    dp = RemoveHTML(args.name or progname())
     dp.field   = args.field
     dp.target  = args.target
 

@@ -21,45 +21,45 @@ class WebGetter(object):
         if max_size > 0: self.max_size = max_size
 
     def get(self, url, index=None, doctype=None):
-            # Fetch web page
-            try:
-                res = requests.get(url, verify=False)
-            except:
-                msg = "URL failed: %s" % url
-                raise IOError(msg)
-            if not res.ok:
-                msg = "URL not ok, status_code=%s for URL: %s" % (res.status_code, url)
-                raise IOError(msg)
+        # Fetch web page
+        try:
+            res = requests.get(url, verify=False)
+        except:
+            msg = "URL failed: %s" % url
+            raise IOError(msg)
+        if not res.ok:
+            msg = "URL not ok, status_code=%s for URL: %s" % (res.status_code, url)
+            raise IOError(msg)
 
-            # Verify allowed content type
-            content_type = (res.headers.get("content-type") or "").split(";")[0]
-            if not content_type in self.content_types:
-                msg = "Skipping web page with content type '%s', URL: %s" % (content_type, url)
+        # Verify allowed content type
+        content_type = (res.headers.get("content-type") or "").split(";")[0]
+        if not content_type in self.content_types:
+            msg = "Skipping web page with content type '%s', URL: %s" % (content_type, url)
+            raise ValueError(msg)
+
+        # Size check with reported content size
+        if self.max_size > 0:
+            size = int(res.headers.get("content-length") or -1)
+            if size > 0 and size > self.max_size:
+                msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
                 raise ValueError(msg)
 
-            # Size check with reported content size
-            if self.max_size > 0:
-                size = int(res.headers.get("content-length") or -1)
-                if size > 0 and size > self.max_size:
-                    msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
-                    raise ValueError(msg)
+        # Extract vitals from web result
+        id = url # res.url
+        encoding = res.encoding
+        content = res.text # TODO: Convert to UTF-8 right away if pure text? Or how to tell Elasticsearch about encoding?
+        # TODO: created/updated date
 
-            # Extract vitals from web result
-            id = url # res.url
-            encoding = res.encoding
-            content = res.text # TODO: Convert to UTF-8 right away if pure text? Or how to tell Elasticsearch about encoding?
-            # TODO: created/updated date
+        # Repeat size check with actual content size
+        if self.max_size > 0:
+            size = len(content)
+            if size > self.max_size:
+                msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
+                raise ValueError(msg)
 
-            # Repeat size check with actual content size
-            if self.max_size > 0:
-                size = len(content)
-                if size > self.max_size:
-                    msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
-                    raise ValueError(msg)
-
-            # Create ES document from web page
-            body = {"content": content, "content_type": content_type, "encoding": encoding}
-            webdoc = eslib.createdoc(body, index, doctype, id)
-            return webdoc
+        # Create ES document from web page
+        body = {"content": content, "content_type": content_type, "encoding": encoding}
+        webdoc = eslib.createdoc(body, index, doctype, id)
+        return webdoc
 
 

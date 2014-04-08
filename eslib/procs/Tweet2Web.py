@@ -96,13 +96,14 @@ def main():
     parser.add_argument("-i", "--index" , help=help_i, required=False , metavar="index", default=None)
     parser.add_argument("-t", "--type"  , help=help_t, required=False , metavar="type" , default="webpage")
     parser.add_argument("-l", "--links" , help=help_l, required=False , metavar="linkfile", default=[], dest="linkfile")
-    parser.add_argument(      "--debug"   , help="Display debug info." , action="store_true")
+    parser.add_argument(      "--debug" , help="Display debug info." , action="store_true")
+    parser.add_argument(      "--name"  , help="Process name.", default=None)
     parser.add_argument("links", nargs="*", help="URL prefixes to fetch documents from.")
 
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = Tweet2Web(progname())
+    dp = Tweet2Web(args.name or progname())
     dp.index = args.index
     dp.doctype = args.type
     dp.link_prefix_file = args.linkfile

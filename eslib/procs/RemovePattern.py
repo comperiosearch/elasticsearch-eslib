@@ -33,9 +33,7 @@ class RemovePattern(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            num_removed = 0
-            for field in fields:
-                num_removed += len(remove_regex.findall(field))
+            num_removed = len(self.remove_regex.findall(self.field))
             self.dout("/%s/%s/%s: #matches removed: %d" % (index, doctype, id, num_removed))
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
@@ -58,6 +56,7 @@ def main():
     parser.add_argument("-p", "--pattern", required=True, help=help_p)
     parser.add_argument("-t", "--target" , help=help_t)
     parser.add_argument(      "--debug"  , action="store_true")
+    parser.add_argument(      "--name"   , help="Process name.", default=None)
 
     if len(sys.argv) == 1:
         parser.print_usage()
@@ -66,7 +65,7 @@ def main():
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = RemovePattern(progname())
+    dp = RemovePattern(args.name or progname())
     dp.field   = args.field
     dp.target  = args.target
     dp.pattern = args.pattern
