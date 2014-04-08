@@ -22,7 +22,7 @@ def byteSizeString(bytes, decimals=1):
     if   GB > 1.0: s = "%.*f GB" % (decimals, GB)
     elif MB > 1.0: s = "%.*f MB" % (decimals, MB)
     elif kB > 1.0: s = "%.*f kB" % (decimals, kB)
-    else: s = "%s B"
+    else: s = "%s B" % bytes
     return s
 
 

@@ -12,6 +12,8 @@ import eslib, eslib.time
 
 class ElasticsearchReader(eslib.DocumentProcessor):
 
+    SCROLL_TTL = "10m"
+
     def __init__(self, name):
         eslib.DocumentProcessor.__init__(self, name)
 
@@ -76,7 +78,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
         body = self._getbody()
 
         es = elasticsearch.Elasticsearch()
-        res = es.search(index=self.index, doc_type=self.doctype, search_type="scan", scroll="1m", size=50, body=body)
+        res = es.search(index=self.index, doc_type=self.doctype, search_type="scan", scroll=self.SCROLL_TTL, size=50, body=body)
         scrollid = res["_scroll_id"]
         nhits = res["hits"]["total"]
         remaining = nhits
@@ -88,7 +90,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
             if self.report_soft_abort():
                 return
 
-            res = es.scroll(scroll="2m", scroll_id=scrollid)
+            res = es.scroll(scroll=self.SCROLL_TTL, scroll_id=scrollid)
             scrollid = res["_scroll_id"]
             hits = res["hits"]["hits"]
             remaining -= len(hits)
@@ -103,7 +105,6 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
     def write(self, doc):
         if self.terminal: return
-        print("###" , doc)
         id = doc["_id"]
         t = doc["_type"]
         if self.outputFormat == "json":

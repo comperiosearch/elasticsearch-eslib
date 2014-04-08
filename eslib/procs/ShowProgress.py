@@ -59,11 +59,12 @@ def main():
     parser = argparse.ArgumentParser(usage="\n %(prog)s [-f frequency]")
     parser.add_argument("-f", "--frequency", type=int, default=1000, help=help_f)
     parser.add_argument(      "--terminal" , action="store_true")
+    parser.add_argument(      "--name"     , help="Process name.", default=None)
 
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = ShowProgress(progname())
+    dp = ShowProgress(args.name or progname())
     dp.frequency = args.frequency
     dp.terminal = args.terminal
 
