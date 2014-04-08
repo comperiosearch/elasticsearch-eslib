@@ -160,7 +160,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
                 (index, doctype, id, actor_score, target_score, action_score))
 
         # A simple summary score
-        score = (action_score * (1 + actor_score)) / 2.0
+        score = (action_score * ((1.0 + actor_score) / 2.0) * target_score)
         fields.update({"score": score})
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
