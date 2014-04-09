@@ -40,7 +40,7 @@ class CSVReader(eslib.DocumentProcessor):
         for csvrow in csv.reader([line]): # Although there is at max one in 'line'..
 
             if not len(self.fieldList) == len(csvrow):
-                self.eout(exception = Exception("Column count does not match number of fields, row =\n%s" % csvrow))
+                self.error(exception = Exception("Column count does not match number of fields, row =\n%s" % csvrow))
 
             doc = {}
             id = None
