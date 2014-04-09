@@ -34,6 +34,7 @@ def getfield(doc, fieldpath, default=None):
     if not d: return default
     return d.get(fp[-1])
 
+
 def putfield(doc, fieldpath, value):
     if not doc or not fieldpath: return
     fp = fieldpath.split(".")
@@ -49,14 +50,10 @@ def putfield(doc, fieldpath, value):
             d = dd
     d.update({fp[-1]: value}) # OBS: This also overwrites a node if this is was a node
 
-def make_es_doc(source, index=None, type=None, id=None):
-    doc = {}
-    doc['_source']  = source
-    if index:
-        doc['_index']   = index
-    if type:
-        doc['_type']    = type
-    if id:
-        doc['_id']      = id
 
+def createdoc(source, index=None, doctype=None, id=None):
+    doc = {"_source": source}
+    if index: doc['_index']  = index
+    if type : doc['_type' ]  = doctype
+    if id   : doc['_id'   ]  = id
     return doc
