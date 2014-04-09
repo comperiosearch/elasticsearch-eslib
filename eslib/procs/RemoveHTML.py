@@ -26,7 +26,7 @@ class RemoveHTML(eslib.DocumentProcessor):
         if self.DEBUG:
             x = "\nORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
-            self.dout(x)
+            self.console.debug(x)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 

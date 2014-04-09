@@ -84,7 +84,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
         remaining = nhits
         count = 0
 
-        self.dout("Total number of items to fetch: %d" % remaining)
+        self.console.debug("Total number of items to fetch: %d" % remaining)
 
         while remaining > 0:
             if self.report_soft_abort():
