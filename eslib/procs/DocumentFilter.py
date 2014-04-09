@@ -30,7 +30,6 @@ class FilterDocuments(eslib.DocumentProcessor):
         for field in self.filter_fields:
             text = eslib.getfield(fields, field, "").lower()
             for keyword, blacklist in self.filter.items():
-                #self.console.debug("%s: %s" % (keyword, blacklist))
                 if keyword in text:
                     for item in blacklist:
                         if item in text:
