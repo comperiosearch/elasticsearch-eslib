@@ -31,7 +31,7 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
         eslib.putfield(doc["_source"], self.target, cleaned)
 
         if self.DEBUG:
-            x = "\n#LINKS=%d\n" % len(links)
+            x = "\n#LINKS=%d\n" % len(linkinfos)
             x += "ORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
             self.console.debug(x)

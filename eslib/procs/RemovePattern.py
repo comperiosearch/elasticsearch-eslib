@@ -33,7 +33,7 @@ class RemovePattern(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            num_removed = len(self.remove_regex.findall(self.field))
+            num_removed = len(self._remove_regex.findall(self.field))
             self.log.debug("/%s/%s/%s: #matches removed: %d" % (index, doctype, id, num_removed))
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
