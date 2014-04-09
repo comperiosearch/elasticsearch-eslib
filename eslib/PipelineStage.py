@@ -2,7 +2,7 @@
 # Base class for pipeline stages.
 # ============================================================================
 
-import sys, signal
+import sys, signal, os
 import logging, logging.config
 import yaml
 
@@ -18,7 +18,11 @@ class PipelineStage(object):
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
-        config = yaml.load(open('../logging.yml'))
+        __location__ = os.path.realpath(
+            os.path.join(os.getcwd(), os.path.dirname(__file__)))
+        f = os.path.join(__location__, 'logging.yml')
+
+        config = yaml.load(open(f))
         logging.config.dictConfig(config=config)
         self.console = logging.getLogger("console." + __name__ + "." + name)
         self.log = logging.getLogger(__name__)
