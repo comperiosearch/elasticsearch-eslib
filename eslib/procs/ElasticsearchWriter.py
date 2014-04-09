@@ -47,15 +47,10 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
             elif "update" in docop: doc = docop["update"]
             if doc:
                 if self.DEBUG:
-                    self.dout("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"]))
-                    #self.dout("VER: OLD=%s, NEW=%s" % (docs[i].get("_version"), doc["_version"]))
+                    self.console.debug(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
                 docs[i].update({"_id"     : doc["_id"]})
                 docs[i].update({"_version": doc["_version"]})
 
-#        import sys
-#        self.dout(json.dumps(res))
-#        sys.exit(0)
-         
          # TODO: Now we can report the documents in 'doc' as presisted using a callback mechanism
 
 
@@ -70,9 +65,9 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         fields = doc.get("_source")
 
         if not index:
-            self.eout(exception=ValueError("Missing '_index' field in input and no override."))
+            self.error(exception=ValueError("Missing '_index' field in input and no override."))
         elif not doctype:
-            self.eout(exception=Exception("Missing '_type' field in input and no override."))
+            self.error(exception=Exception("Missing '_type' field in input and no override."))
         else:
             doc.update({"_index"  : index  }) # Might have changed to self.index
             doc.update({"_type"   : doctype}) # Might have changed to self.doctype
@@ -116,9 +111,10 @@ def main():
     parser.add_argument("-t", "--type",      help="Feed as this document type instead of the original in '_type'")
     parser.add_argument("-f", "--fieldList", help="Write only these fields, using partial update instead full docs")
     parser.add_argument("-r", "--readonly",  action="store_true", help="Read only and dump output to stdout")
-    parser.add_argument("--batchsize", type=int, default=1000, help="Batch size for bulk shipments to Elasticsearch")
+    parser.add_argument("--batchsize",       type=int, default=1000, help="Batch size for bulk shipments to Elasticsearch")
     parser.add_argument("--terminal",        help="Do not write output", action="store_true")
     parser.add_argument("--debug",           help="Display debug info", action="store_true")
+    parser.add_argument("--name",            help="Process name.", default=None)
     parser.add_argument("filenames",         help="If no input files are specified stdin will be used as input", nargs="*")
 
     args = parser.parse_args()
@@ -127,7 +123,7 @@ def main():
         fieldList = [field.strip() for field in args.fieldList.split(",")]
     
     # Set up and run this processor
-    dp = ElasticsearchWriter(progname())
+    dp = ElasticsearchWriter(args.name or progname())
     dp.index = args.index
     dp.doctype = args.type
     dp.updateFieldList = fieldList

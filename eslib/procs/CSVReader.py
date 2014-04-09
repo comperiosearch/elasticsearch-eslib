@@ -40,7 +40,7 @@ class CSVReader(eslib.DocumentProcessor):
         for csvrow in csv.reader([line]): # Although there is at max one in 'line'..
 
             if not len(self.fieldList) == len(csvrow):
-                self.eout(exception = Exception("Column count does not match number of fields, row =\n%s" % csvrow))
+                self.error(exception = Exception("Column count does not match number of fields, row =\n%s" % csvrow))
 
             doc = {}
             id = None
@@ -109,11 +109,12 @@ def main():
     verbose = False
     debug = False
     skipFirstLine = False
+    procname = None
 
     # Parse command line input
     if len(sys.argv) == 1: usage()
     try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':i:t:f:svh', ["debug"])
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':i:t:f:svh', ["debug", "name="])
     except:
         usage()
     for (o, a) in optlist:
@@ -124,6 +125,7 @@ def main():
         elif o == "-s": skipFirstLine = True
         elif o == "-v": verbose = True
         elif o == "--debug": debug = True
+        elif o == "--name": procname = a
     filenames = args
 
     if not index: usage("no index specified")
@@ -133,7 +135,7 @@ def main():
     fieldList = [x.strip() for x in fieldListStr.split(",")]
     
     # Set up and run this processor
-    dp = CSVReader(progname())
+    dp = CSVReader(procname or progname())
     dp.index = index
     dp.doctype = doctype
     dp.fieldList = fieldList

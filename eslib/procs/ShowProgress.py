@@ -37,14 +37,15 @@ class ShowProgress(eslib.PipelineStage):
         if self.frequency and self.count % self.frequency == 0:
             durationString = eslib.time.durationString(self.elapsed())
             memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
-            self.dout("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
+            self.console.debug("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
+
         yield line # .. so it will be written to output
 
 
     def finish(self):
         durationString = eslib.time.durationString(self.elapsed())
         memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
-        self.dout("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
+        self.console.debug("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
 
 
 # ============================================================================
@@ -57,13 +58,15 @@ from eslib.prog import progname
 def main():
     help_f = "How often should progress get printed. Default: 1000 (i.e. per 1000 items.)"
     parser = argparse.ArgumentParser(usage="\n %(prog)s [-f frequency]")
+    parser._actions[0].help = argparse.SUPPRESS
     parser.add_argument("-f", "--frequency", type=int, default=1000, help=help_f)
     parser.add_argument(      "--terminal" , action="store_true")
+    parser.add_argument(      "--name"     , help="Process name.", default=None)
 
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = ShowProgress(progname())
+    dp = ShowProgress(args.name or progname())
     dp.frequency = args.frequency
     dp.terminal = args.terminal
 

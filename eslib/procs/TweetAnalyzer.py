@@ -29,30 +29,30 @@ class TweetAnalyzer(eslib.DocumentProcessor):
 
     def load(self):
         if self.actors_file:
-            if self.VERBOSE: self.vout("Loading actors file: %s" % self.actors_file)
+            if self.VERBOSE: self.console.debug("Loading actors file: %s" % self.actors_file)
             f = open(self.actors_file)
             actors = json.load(f)
             f.close()
             for actor in actors:
                 self._actors_db.update({actor["name"].lower(): actor})
         else:
-            self.vout("No actor data loaded.")
+            self.console.debug("No actor data loaded.")
 
         if self.targets_file:
-            if self.VERBOSE: self.vout("Loading targets file: %s" % self.targets_file)
+            if self.VERBOSE: self.console.debug("Loading targets file: %s" % self.targets_file)
             f = open(self.targets_file)
             targets = json.load(f)
             f.close()
         else:
-            self.vout("No target data loaded.")
+            self.console.debug("No target data loaded.")
 
         if self.actions_file:
-            if self.VERBOSE: self.vout("Loading actions file: %s" % self.actions_file)
+            if self.VERBOSE: self.console.debug("Loading actions file: %s" % self.actions_file)
             f = open(self.actions_file)
             actions = json.load(f)
             f.close()
         else:
-            self.vout("No actions data loaded.")
+            self.console.debug("No actions data loaded.")
 
         self._target_index = {}
         self._populate_index(self._target_index, targets)
@@ -156,11 +156,11 @@ class TweetAnalyzer(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            self.dout("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
+            self.console.debug("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
                 (index, doctype, id, actor_score, target_score, action_score))
 
         # A simple summary score
-        score = (action_score * (1 + actor_score) * (1 + target_score)) / 3.0
+        score = (action_score * ((1.0 + actor_score) / 2.0) * target_score)
         fields.update({"score": score})
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
@@ -196,6 +196,7 @@ def main():
     parser.add_argument("-f", "--field"   , help=help_f, required=False, metavar="field", default="text")
     parser.add_argument(      "--debug"   , help="Display debug info." , action="store_true")
     parser.add_argument(      "--verbose"   , help="Display verbose debug info." , action="store_true")
+    parser.add_argument(      "--name"    , help="Process name.", default=None)
     parser.add_argument("filenames", nargs="*", help="If not specified stdin will be used instead.")
 
     if len(sys.argv) == 1:
@@ -205,7 +206,7 @@ def main():
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = TweetAnalyzer(progname())
+    dp = TweetAnalyzer(args.name or progname())
     dp.actions_file = args.actions
     dp.actors_file  = args.actors 
     dp.targets_file = args.targets

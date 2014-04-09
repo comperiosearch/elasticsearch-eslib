@@ -34,7 +34,7 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
             x = "\n#LINKS=%d\n" % len(links)
             x += "ORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
-            self.dout(x)
+            self.console.debug(x)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 
@@ -56,11 +56,12 @@ def main():
     parser.add_argument("-f", "--field",   default="text", help=help_f)
     parser.add_argument("-t", "--target",  required=False, help=help_t)
     parser.add_argument(      "--debug",   action="store_true")
+    parser.add_argument(      "--name"   , help="Process name.", default=None)
 
     args = parser.parse_args()
 
     # Set up and run this processor
-    dp = TweetRemoveLinks(progname())
+    dp = TweetRemoveLinks(args.name or progname())
     dp.field   = args.field
     dp.target  = args.target
 
