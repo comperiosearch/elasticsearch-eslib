@@ -77,7 +77,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
 
         body = self._getbody()
 
-        es = elasticsearch.Elasticsearch()
+        es = elasticsearch.Elasticsearch(self.hosts if self.hosts else None)
         res = es.search(index=self.index, doc_type=self.doctype, search_type="scan", scroll=self.SCROLL_TTL, size=50, body=body)
         scrollid = res["_scroll_id"]
         nhits = res["hits"]["total"]
@@ -149,6 +149,7 @@ def main():
     parser.add_argument("-f", "--field"    , help=help_f)
     parser.add_argument("-s", "--since"    , help=help_s)
     parser.add_argument("-b", "--before"   , help=help_b)
+    parser.add_argument(      "--host"     , help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
     parser.add_argument(      "--timefield", help=help_tf, default="_timestamp")
     parser.add_argument(      "--filter"   , help=help_fi)
     parser.add_argument(      "--format"   , help=help_fo, default="json")
@@ -186,6 +187,7 @@ def main():
 
     # Set up and run this processor
     dp = ElasticsearchReader(args.name or progname())
+    dp.hosts        = [args.host] if args.host else []
     dp.index        = args.index
     dp.doctype      = args.type
     dp.field        = args.field

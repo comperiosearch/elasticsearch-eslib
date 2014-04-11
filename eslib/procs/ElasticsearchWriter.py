@@ -39,7 +39,7 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
             docs.append(doc)
             payload.append(l1)
             payload.append(l2)
-        es = elasticsearch.Elasticsearch()
+        es = elasticsearch.Elasticsearch(self.hosts if self.hosts else None)
         res = es.bulk(payload)
         for i, docop in enumerate(res["items"]):
             doc = None
@@ -111,6 +111,7 @@ def main():
     parser.add_argument("-t", "--type",      help="Feed as this document type instead of the original in '_type'")
     parser.add_argument("-f", "--fieldList", help="Write only these fields, using partial update instead full docs")
     parser.add_argument("-r", "--readonly",  action="store_true", help="Read only and dump output to stdout")
+    parser.add_argument("--host",            help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
     parser.add_argument("--batchsize",       type=int, default=1000, help="Batch size for bulk shipments to Elasticsearch")
     parser.add_argument("--terminal",        help="Do not write output", action="store_true")
     parser.add_argument("--debug",           help="Display debug info", action="store_true")
@@ -121,18 +122,20 @@ def main():
     fieldList = []
     if args.fieldList:
         fieldList = [field.strip() for field in args.fieldList.split(",")]
-    
+
     # Set up and run this processor
     dp = ElasticsearchWriter(args.name or progname())
-    dp.index = args.index
-    dp.doctype = args.type
+    dp.hosts           = [args.host] if args.host else []
+    dp.index           = args.index
+    dp.doctype         = args.type
     dp.updateFieldList = fieldList
-    dp.readOnly = args.readonly
-    dp.batchsize = args.batchsize
+    dp.readOnly        = args.readonly
+    dp.batchsize       = args.batchsize
 
-    dp.terminal = args.terminal
+    dp.terminal        = args.terminal
 
-    dp.DEBUG = args.debug
+    dp.DEBUG           = args.debug
+
     dp.run(args.filenames)
 
 
