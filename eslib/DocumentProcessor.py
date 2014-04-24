@@ -14,6 +14,17 @@ class DocumentProcessor(PipelineStage):
         PipelineStage.__init__(self, name)
 
 
+    def doclog(self, doc, message):
+        """
+        :type doc: dict
+        :type message: str
+        """
+        id      = doc.get("_id")
+        index   = doc.get("_index")
+        doctype = doc.get("_type")
+        self._doclog.debug("/%s/%s/%s: %s" % (index, doctype, id))
+
+
     def write(self, doc):
         if not self.terminal:
             text = json.dumps(doc, ensure_ascii=False)

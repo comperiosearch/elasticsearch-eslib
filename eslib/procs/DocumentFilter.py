@@ -1,15 +1,19 @@
 #!/usr/bin/python3
+
 __author__ = 'eelseth'
+
 import eslib
 import json
+
+
 class FilterDocuments(eslib.DocumentProcessor):
+
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self.filter_file = None
         self.filter_fields = None
         self.filter = {}
-
 
 
     def configure(self, config=None):
@@ -18,9 +22,9 @@ class FilterDocuments(eslib.DocumentProcessor):
 
     def load(self):
         # Load filter file. Ok to fail with exception here if file is not found
+        self.log.info("Loading filter file: %s" % self.filter)
         f = open(self.filter_file)
         self.filter = json.load(f)
-        self.console.debug(self.filter)
         f.close()
 
 
@@ -28,15 +32,14 @@ class FilterDocuments(eslib.DocumentProcessor):
         fields  = doc.get("_source")
         filtered = False
         for field in self.filter_fields:
-            text = eslib.getfield(fields, field, "").lower()
+            text = eslib.getfield(fields, field, "")
             for keyword, blacklist in self.filter.items():
+                #self.console.debug("%s: %s" % (keyword, blacklist))
                 if keyword in text:
                     for item in blacklist:
                         if item in text:
-                            if self.DEBUG:
-                                id = doc.get("_id")
-                                self.console.debug('Document with id %s contained both %s and %s and was removed' %
-                                (id, keyword, item))
+                            if self.debuglevel >= 0:
+                                self.doclog(doc, 'Document with id %s contained both %s and %s and was removed' % (id, keyword, item))
                             filtered = True
                     if filtered: break
             if filtered: break
@@ -44,8 +47,14 @@ class FilterDocuments(eslib.DocumentProcessor):
             yield doc # This must be returned, otherwise the doc is considered to be dumped
 
 
+# ============================================================================
+# For running as a script
+# ============================================================================
+
 import argparse
 from eslib.prog import progname
+
+
 def main():
     """
 
@@ -67,7 +76,7 @@ def main():
     dp.filter_file = args.filterFile
     dp.filter_fields = args.field.split(',')
 
-    dp.DEBUG = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run(args.filenames)
 

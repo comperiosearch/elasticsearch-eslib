@@ -2,9 +2,10 @@
 # Base class for pipeline stages.
 # ============================================================================
 
-import sys, signal, os
-import logging, logging.config
-import yaml
+import sys, signal
+import logging
+import eslib.prog
+
 
 class PipelineStage(object):
     "Base class for pipeline stage."
@@ -12,20 +13,27 @@ class PipelineStage(object):
     def __init__(self, name):
         self.name = name
 
-        self.DEBUG       = False
-        self.VERBOSE     = False
+        self.debuglevel  = -1 # Off
         self.failOnError = False # Whether a processing error should raise and terminate the process or continue
         self.terminal    = False # True if this is the last stage and should not produce any more output
 
         self.abort_request = False
-        __location__ = os.path.realpath(
-            os.path.join(os.getcwd(), os.path.dirname(__file__)))
-        f = os.path.join(__location__, 'logging.yml')
 
-        config = yaml.load(open(f))
-        logging.config.dictConfig(config=config)
-        self.console = logging.getLogger("console." + __name__ + "." + name)
-        self.log = logging.getLogger(__name__)
+        parts = []
+        if not self.__module__ == "__main__": parts.append(self.__module__)
+        className = self.__class__.__name__
+        parts.append(className)
+        if name:
+            if name.endswith(".py"):
+                name = name[:-3]
+            if not name == className: parts.append(name)
+        fullPath = ".".join(parts)
+
+        #print("FULL=[%s]" % fullPath, file=sys.stderr)
+
+        self._doclog = logging.getLogger("doclog.%s"  % fullPath)
+        self.log     = logging.getLogger("proclog.%s" % fullPath)
+
 
     # Implemented by inheriting classes:
 
@@ -63,10 +71,8 @@ class PipelineStage(object):
         for filename in filenames:
             input = None
             if filename == "-":
-                if self.VERBOSE: self.console.debug("Reading from stdin...")
                 input = sys.stdin
             else:
-                if self.VERBOSE: self.console.debug("Reading from file '%s'..." % filename)
                 input = open(filename, "rt")
 
             # Read lines from stream
@@ -79,7 +85,9 @@ class PipelineStage(object):
             if not input == sys.stdin:
                 input.close()
 
-        if self.DEBUG: self.console.debug("All files read. Total items = %d" % count)
+
+    def print(self, text):
+        self.log.info(text)
 
 
     def _keyboard_interrupt_handler(self, signal, frame):
@@ -99,6 +107,7 @@ class PipelineStage(object):
         signal.signal(signal.SIGINT, self._keyboard_interrupt_handler)
 
         try:
+            eslib.prog.initlogs()
             self.configure()
             self.load()
             self.start()
@@ -115,10 +124,12 @@ class PipelineStage(object):
 
 
     # Output
+
     def error(self, text=None, exception=None):
         if not text and exception: text = exception.args[0]
         if not text: text = "???"
-        self.console.error("%s" % text)
+        self.console.error(text)
+        self.log.error(text)
         if self.failOnError and exception:
             raise exception
 

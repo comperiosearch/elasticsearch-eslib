@@ -11,12 +11,10 @@ import eslib.PipelineStage, eslib.time, eslib.debug
 class ShowProgress(eslib.PipelineStage):
 
     def __init__(self, name):
-        eslib.PipelineStage.__init__(self, name)
+        super().__init__(name)
 
         self.started = datetime.datetime.utcnow() # Though not really started yet... just to prevent potential errors
         self.count = 0
-
-        self.DEBUG = True # This is a debug stage, by nature
 
 
     def elapsed(self):
@@ -37,7 +35,7 @@ class ShowProgress(eslib.PipelineStage):
         if self.frequency and self.count % self.frequency == 0:
             durationString = eslib.time.durationString(self.elapsed())
             memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
-            self.console.info("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
+            self.print("count: %7d, duration: %10s, memory: %10s" % (self.count, durationString, memString))
 
         yield line # .. so it will be written to output
 
@@ -45,15 +43,15 @@ class ShowProgress(eslib.PipelineStage):
     def finish(self):
         durationString = eslib.time.durationString(self.elapsed())
         memString = eslib.debug.byteSizeString(eslib.debug.getMemoryUsed())
-        self.console.debug("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
+        self.print("count: %7d, duration: %10s, memory: %10s (finished)" % (self.count, durationString, memString))
 
 
 # ============================================================================
 # For running as a script
 # ============================================================================
 
-import argparse, sys
-from eslib.prog import progname
+import argparse
+from eslib.prog import progname, initlogs
 
 def main():
     help_f = "How often should progress get printed. Default: 1000 (i.e. per 1000 items.)"

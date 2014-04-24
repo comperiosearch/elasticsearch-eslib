@@ -15,7 +15,7 @@ class ElasticsearchReader(eslib.DocumentProcessor):
     SCROLL_TTL = "10m"
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self.index = None
         self.doctype = None
@@ -84,7 +84,8 @@ class ElasticsearchReader(eslib.DocumentProcessor):
         remaining = nhits
         count = 0
 
-        self.console.debug("Total number of items to fetch: %d" % remaining)
+        if self.debuglevel >= 0:
+            self.print("Total number of items to fetch: %d" % remaining)
 
         while remaining > 0:
             if self.report_soft_abort():
@@ -169,13 +170,13 @@ def main():
         try:
             before = eslib.time.ago2date(args.before)
         except:
-            print("Illegal 'ago' time format to 'before' argument, '%s'" % args.before)
+            print("Illegal 'ago' time format to 'before' argument, '%s'" % args.before, file=sys.stderr)
             sys.exit(-1)
     if args.since:
         try:
             since = eslib.time.ago2date(args.since)
         except:
-           print("illegal 'ago' time format to 'since' argument, '%s'" % args.since)
+           print("illegal 'ago' time format to 'since' argument, '%s'" % args.since, file=sys.stderr)
            sys.exit(-1)
 
     # Parse filter string
@@ -198,7 +199,7 @@ def main():
     dp.timefield    = args.timefield
     dp.outputFormat = args.format
 
-    dp.DEBUG = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run()
 

@@ -11,7 +11,7 @@ import eslib.DocumentProcessor
 class TweetAnalyzer(eslib.DocumentProcessor):
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(self)
 
         self.actions_file = None
         self.actors_file  = None
@@ -29,7 +29,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
 
     def load(self):
         if self.actors_file:
-            if self.VERBOSE: self.console.debug("Loading actors file: %s" % self.actors_file)
+            self.log.info("Loading actors file: %s" % self.actors_file)
             f = open(self.actors_file)
             actors = json.load(f)
             f.close()
@@ -39,25 +39,26 @@ class TweetAnalyzer(eslib.DocumentProcessor):
             self.console.debug("No actor data loaded.")
 
         if self.targets_file:
-            if self.VERBOSE: self.console.debug("Loading targets file: %s" % self.targets_file)
+            self.log.info("Loading targets file: %s" % self.targets_file)
             f = open(self.targets_file)
             targets = json.load(f)
             f.close()
         else:
-            self.console.debug("No target data loaded.")
+            self.log.info("No target data loaded.")
 
         if self.actions_file:
-            if self.VERBOSE: self.console.debug("Loading actions file: %s" % self.actions_file)
+            self.log.info("Loading actions file: %s" % self.actions_file)
             f = open(self.actions_file)
             actions = json.load(f)
             f.close()
         else:
-            self.console.debug("No actions data loaded.")
+            self.log.info("No actions data loaded.")
 
         self._target_index = {}
         self._populate_index(self._target_index, targets)
         self._action_index = {}
         self._populate_index(self._action_index, actions)
+
 
     def _populate_index(self, target_index, source_list):
         for item in source_list:
@@ -105,16 +106,16 @@ class TweetAnalyzer(eslib.DocumentProcessor):
 
         return score
 
+    __tokenizer_regex = re.compile(r"\W")
 
-    # Devider = hackish stuff
+    # Divider = hackish stuff
     def _get_text_stuff(self, fields, text, word_index, node_field, score_field, divider=1.0):
         if not text: return 0.0
 
-        score = 0.0
         targets = []
         weights = []
         # EXTREMELY SIMPLE TOKENIZATION AND TARGET MATCHING:
-        text_words = re.split(r'\W', text.lower())
+        text_words = self.__tokenizer_regex.split(text.lower())
         for i, word in enumerate(text_words):
             if word in word_index:
                 ###self.dout("CHECKING WORD=[%s]" % word)
@@ -156,8 +157,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            self.console.debug("/%s/%s/%s: actor=%5.2f, target=%5.2f, action=%5.2f" % \
-                (index, doctype, id, actor_score, target_score, action_score))
+            self.doclog(doc, "actor=%5.2f, target=%5.2f, action=%5.2f" % (actor_score, target_score, action_score))
 
         # A simple summary score
         score = (action_score * ((1.0 + actor_score) / 2.0) * target_score)
@@ -192,7 +192,7 @@ def main():
     parser._actions[0].help = argparse.SUPPRESS
     parser.add_argument("-a", "--actions" , help=help_a, required=True , metavar="file")
     parser.add_argument("-A", "--actors"  , help=help_A, required=False, metavar="file" , default=None)
-    parser.add_argument("-T", "--targets" , help=help_t, required=True , metavar="file")
+    parser.add_argument("-t", "--targets" , help=help_t, required=True , metavar="file")
     parser.add_argument("-f", "--field"   , help=help_f, required=False, metavar="field", default="text")
     parser.add_argument(      "--debug"   , help="Display debug info." , action="store_true")
     parser.add_argument(      "--verbose"   , help="Display verbose debug info." , action="store_true")
@@ -212,8 +212,7 @@ def main():
     dp.targets_file = args.targets
     dp.field        = args.field
 
-    dp.DEBUG = args.debug
-    dp.VERBOSE = args.verbose
+    if args.debug: dp.debuglevel = 0
 
     dp.run(args.filenames)
 

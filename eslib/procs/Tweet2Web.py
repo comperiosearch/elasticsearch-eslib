@@ -15,7 +15,7 @@ class Tweet2Web(eslib.DocumentProcessor):
 
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self.delay = 0
         self.delay_ms = self.delay / 1000.0
@@ -33,7 +33,7 @@ class Tweet2Web(eslib.DocumentProcessor):
 
     def load(self):
         if self.link_prefix_file:
-            if self.VERBOSE: self.vout("Loading link prefix file: %s" % self.link_prefix_file)
+            self.log.info("Loading link prefix file: %s" % self.link_prefix_file)
             ss = set(self.link_prefixes)
             f = open(self.link_prefix_file)
             for line in f:
@@ -66,15 +66,14 @@ class Tweet2Web(eslib.DocumentProcessor):
             try:
                 webdoc = self.web_getter.get(url, self.index, self.doctype, created_at=created_at)
                 if not webdoc: continue
-                if self.DEBUG:
-                    # TODO: Log this to console instead
-                    self.dout("Created doc with content size=%-8s as %s/%s/%s" % \
+                if self.debuglevel >= 0:
+                    self.doclog(doc, "Created doc with content size=%-8s as /%s/%s/%s" % \
                         (eslib.debug.byteSizeString(len(webdoc["_source"]["content"]), 1), self.index, self.doctype, webdoc.get("_id")))
             except IOError as e:
-                self.eout(e.args[0]) # TODO: Log to doclog with WARNING  (WARNING, index/type/id, msg)
+                self.doclog(doc, e.args[0], loglevel=logger.WARNING)
                 continue
             except ValueError as e:
-                self.dout(e.args[0]) # TODO: Log to doclog with DEBUG (DEBUG, index/type/id, msg)
+                self.doclog(doc, e.args[0], loglevel=logger.ERROR)
                 continue
 
             yield webdoc
@@ -121,7 +120,7 @@ def main():
     dp.link_prefixes  = args.links
     dp.delay = args.delay
 
-    dp.DEBUG = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run()
 

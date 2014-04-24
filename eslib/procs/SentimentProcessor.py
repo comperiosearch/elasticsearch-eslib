@@ -11,7 +11,7 @@ import eslib.DocumentProcessor
 class SentimentProcessor(eslib.DocumentProcessor):
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self._sentimentMeta = {}
         self.sentimentDescFile = None
@@ -25,6 +25,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
 
     def load(self):
         # Load sentiment file. Ok to fail with exception here if file is not found
+        self.log.info("Loading sentiment description file: %s" % self.sentimentDescFile)
         f = open(self.sentimentDescFile)
         self._sentimentMeta = json.load(f)
         f.close()
@@ -52,7 +53,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
             id      = doc.get("_id")
             index   = doc.get("_index")
             doctype = doc.get("_type")
-            self.console.debug("/%s/%s/%s: %5.2f" % (index, doctype, id, sentiment))
+            self.doclog(doc, "%5.2f" % sentiment)
 
         # Add sentiment to the document
         fields.update({self.targetField : sentiment})
@@ -138,7 +139,7 @@ def main():
     dp.fieldList = fieldList
     dp.targetField = args.targetField
 
-    dp.DEBUG = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run(args.filenames)
 

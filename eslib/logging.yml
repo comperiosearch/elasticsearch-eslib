@@ -1,11 +1,11 @@
 version: 1
 formatters:
   simple:
-    format: 'Reader %(filename)s - %(message)s'
+    format: '%(name)s: - %(message)s'
   complex:
-    format: 'Console %(asctime)s - %(message)s'
+    format: 'COMPLEX %(asctime)s - %(message)s'
   root:
-    format: 'Root %(asctime)s - %(message)s'
+    format: 'ROOT %(asctime)s - %(message)s'
 
 
 # Legal attributes for the format string
@@ -44,17 +44,20 @@ handlers:
 
 
 loggers:
-  console:
+  doclog:
     level: DEBUG
     propagate: no
     handlers: [console]
-  console.eslib.PipelineStage.ElasticsearchReader.py:
-    propagate: no
+#  doclog.eslib.PipelineStage.ElasticsearchReader.py:
+#    propagate: no
+#    level: DEBUG
+#    handlers: [console]
+  proclog:
     level: DEBUG
+    propagate: no
     handlers: [console]
-
 
 
 root:
-  level: WARNING
+  level: INFO
   handlers: [root]

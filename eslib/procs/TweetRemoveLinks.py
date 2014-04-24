@@ -12,7 +12,8 @@ import sys
 class TweetRemoveLinks(eslib.DocumentProcessor):
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
+
         self.target = None
         self.field = None
 
@@ -24,17 +25,16 @@ class TweetRemoveLinks(eslib.DocumentProcessor):
     def process(self, doc):
         text = eslib.getfield(doc["_source"], self.field)
         if not text or not type(text) is str: yield doc
-        cleaned = text
         linkinfos = eslib.getfield(doc["_source"], "link", [])
         linkcoords = [(l.get("start"), l.get("end")) for l in linkinfos]
         cleaned = eslib.text.remove_parts(text, linkcoords)
         eslib.putfield(doc["_source"], self.target, cleaned)
 
-        if self.DEBUG:
+        if self.debuglevel >= 0:
             x = "\n#LINKS=%d\n" % len(linkinfos)
             x += "ORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
-            self.console.debug(x)
+            self.doclog(doc, x)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 

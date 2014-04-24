@@ -9,7 +9,8 @@ import eslib.text
 class RemoveHTML(eslib.DocumentProcessor):
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
+
         self.target = None
         self.field = None
 
@@ -23,10 +24,10 @@ class RemoveHTML(eslib.DocumentProcessor):
         cleaned = eslib.text.remove_html(text)
         eslib.putfield(doc["_source"], self.target, cleaned)
 
-        if self.DEBUG:
+        if self.debuglevel >= 0:
             x = "\nORIGINAL=%s\n" % text
             x += "CLEANED =%s\n\n" % cleaned
-            self.console.debug(x)
+            self.doclog(doc, x)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 
@@ -58,8 +59,7 @@ def main():
     dp.field   = args.field
     dp.target  = args.target
 
-    #dp.VERBOSE = args.verbose
-    dp.DEBUG   = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run()
 

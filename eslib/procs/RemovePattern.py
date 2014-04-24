@@ -24,16 +24,14 @@ class RemovePattern(eslib.DocumentProcessor):
 
     def process(self, doc):
         text = eslib.getfield(doc["_source"], self.field)
-        if text and type(text) is str:
-            cleaned = self._remove_regex.sub("", text)
-            eslib.putfield(doc['_source'], self.target, cleaned)
+        if not text or not type(text) is str: yield doc
 
-            if self.DEBUG:
-                id      = doc.get("_id")
-                index   = doc.get("_index")
-                doctype = doc.get("_type")
-                num_removed = len(self.remove_regex.findall(self.field))
-                self.log.debug("/%s/%s/%s: #matches removed: %d" % (index, doctype, id, num_removed))
+        cleaned = self._remove_regex.sub("", text)
+        eslib.putfield(doc['_source'], self.target, cleaned)
+
+        if self.debuglevel >= 0:
+            num_removed = len(self.remove_regex.findall(self.field))
+            self.doclog(doc, "#matches removed: %d" % num_removed)
 
         yield doc # This must be returned, otherwise the doc is considered to be dumped
 
@@ -69,7 +67,7 @@ def main():
     dp.target  = args.target
     dp.pattern = args.pattern
 
-    dp.DEBUG   = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run()
 

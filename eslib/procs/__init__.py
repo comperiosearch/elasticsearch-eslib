@@ -17,12 +17,15 @@ from .TweetRemoveLinks    import TweetRemoveLinks
 from .TweetAnalyzer       import TweetAnalyzer
 
 __all__ = (
+    "CSVReader",
+    "DocumentFilter"
     "ElasticsearchReader",
     "ElasticsearchWriter",
-    "CSVReader",
-    "ShowProgress",
-    "SentimentProcessor",
+    "RemoveHTML",
     "RemovePattern",
-    "TweetRemoveLinks",
-    "TweetAnalyzer"
+    "SentimentProcessor",
+    "ShowProgress",
+    "Tweet2Web",
+    "TweetAnalyzer",
+    "TweetRemoveLinks"
 )

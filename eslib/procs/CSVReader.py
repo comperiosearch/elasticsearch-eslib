@@ -13,7 +13,7 @@ class CSVReader(eslib.DocumentProcessor):
     "Read CSV formatted text lines and write as Elasticsearch JSON."
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self.index = None
         self.doctype = None
@@ -104,17 +104,13 @@ def main():
     index = None
     doctype = None
     fieldListStr = None
-    fieldList = []
-    filenames = []
-    verbose = False
-    debug = False
     skipFirstLine = False
     procname = None
 
     # Parse command line input
     if len(sys.argv) == 1: usage()
     try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':i:t:f:svh', ["debug", "name="])
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], ':i:t:f:sh', ["name="])
     except:
         usage()
     for (o, a) in optlist:
@@ -123,8 +119,6 @@ def main():
         elif o == "-t": doctype = a
         elif o == "-i": index = a
         elif o == "-s": skipFirstLine = True
-        elif o == "-v": verbose = True
-        elif o == "--debug": debug = True
         elif o == "--name": procname = a
     filenames = args
 
@@ -140,9 +134,6 @@ def main():
     dp.doctype = doctype
     dp.fieldList = fieldList
     dp.skipFirstLine = skipFirstLine
-
-    dp.VERBOSE = verbose
-    dp.DEBUG   = debug
 
     dp.run(filenames)
 

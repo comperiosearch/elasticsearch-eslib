@@ -6,7 +6,7 @@
 
 
 
-import threading, queue, datetime
+import threading, queue, datetime, logging
 
 import time
 def _sleep():
@@ -16,11 +16,13 @@ def _sleep():
 class Pipeline(object):
     "A multi-threaded pipeline runner for document processors for Elasticsearch."
 
+
     def __init__(self, name, processors, takes_input = False):
         """
         :arg processors: Assumes a list of instances of :class:`~eslib.PipelineStage`.
         """
 
+        self.name = name
         self.processors = processors
         self._takes_input = takes_input
         self._input_queue = queue.Queue()

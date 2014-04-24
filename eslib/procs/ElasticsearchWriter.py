@@ -11,7 +11,7 @@ import eslib.DocumentProcessor
 class ElasticsearchWriter(eslib.DocumentProcessor):
 
     def __init__(self, name):
-        eslib.DocumentProcessor.__init__(self, name)
+        super().__init__(name)
 
         self.index = None
         self.doctype = None
@@ -46,8 +46,8 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
             if   "index"  in docop: doc = docop["index"]
             elif "update" in docop: doc = docop["update"]
             if doc:
-                if self.DEBUG:
-                    self.console.debug(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
+                if self.debuglevel >= 0:
+                    self.print(("ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"])))
                 docs[i].update({"_id"     : doc["_id"]})
                 docs[i].update({"_version": doc["_version"]})
 
@@ -65,9 +65,9 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         fields = doc.get("_source")
 
         if not index:
-            self.error(exception=ValueError("Missing '_index' field in input and no override."))
+            self.doclog(doc, "Missing '_index' field in input and no override.", loglevel=logging.ERROR)
         elif not doctype:
-            self.error(exception=Exception("Missing '_type' field in input and no override."))
+            self.doclog(doc, "Missing '_type' field in input and no override.", loglevel=logging.ERROR)
         else:
             doc.update({"_index"  : index  }) # Might have changed to self.index
             doc.update({"_type"   : doctype}) # Might have changed to self.doctype
@@ -134,7 +134,7 @@ def main():
 
     dp.terminal        = args.terminal
 
-    dp.DEBUG           = args.debug
+    if args.debug: dp.debuglevel = 0
 
     dp.run(args.filenames)
 
