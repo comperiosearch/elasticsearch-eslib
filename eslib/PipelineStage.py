@@ -128,7 +128,7 @@ class PipelineStage(object):
     def error(self, text=None, exception=None):
         if not text and exception: text = exception.args[0]
         if not text: text = "???"
-        self.console.error(text)
+        #self.console.error(text)
         self.log.error(text)
         if self.failOnError and exception:
             raise exception

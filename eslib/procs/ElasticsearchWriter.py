@@ -4,7 +4,7 @@
 # Feed documents to Eleasticsearch
 
 
-import elasticsearch, json, queue
+import elasticsearch, queue
 import eslib.DocumentProcessor
 
 
@@ -94,50 +94,3 @@ class ElasticsearchWriter(eslib.DocumentProcessor):
         if not self.readOnly:
             if not self.batchsize or self._queue.qsize() > 0:
                 self._send()
-
-
-# ============================================================================
-# For running as a script
-# ============================================================================
-
-from eslib.prog import progname
-import argparse
-
-
-def main():
-    parser = argparse.ArgumentParser(usage="\n  %(prog)s [-i index] [-t type] [-f fieldList] [file ...]")
-    parser._actions[0].help = argparse.SUPPRESS
-    parser.add_argument("-i", "--index",     help="Feed to this index instead of the original in '_index'")
-    parser.add_argument("-t", "--type",      help="Feed as this document type instead of the original in '_type'")
-    parser.add_argument("-f", "--fieldList", help="Write only these fields, using partial update instead full docs")
-    parser.add_argument("-r", "--readonly",  action="store_true", help="Read only and dump output to stdout")
-    parser.add_argument("--host",            help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
-    parser.add_argument("--batchsize",       type=int, default=1000, help="Batch size for bulk shipments to Elasticsearch")
-    parser.add_argument("--terminal",        help="Do not write output", action="store_true")
-    parser.add_argument("--debug",           help="Display debug info", action="store_true")
-    parser.add_argument("--name",            help="Process name.", default=None)
-    parser.add_argument("filenames",         help="If no input files are specified stdin will be used as input", nargs="*")
-
-    args = parser.parse_args()
-    fieldList = []
-    if args.fieldList:
-        fieldList = [field.strip() for field in args.fieldList.split(",")]
-
-    # Set up and run this processor
-    dp = ElasticsearchWriter(args.name or progname())
-    dp.hosts           = [args.host] if args.host else []
-    dp.index           = args.index
-    dp.doctype         = args.type
-    dp.updateFieldList = fieldList
-    dp.readOnly        = args.readonly
-    dp.batchsize       = args.batchsize
-
-    dp.terminal        = args.terminal
-
-    if args.debug: dp.debuglevel = 0
-
-    dp.run(args.filenames)
-
-
-if __name__ == "__main__": main()
-

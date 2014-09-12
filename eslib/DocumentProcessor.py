@@ -22,7 +22,7 @@ class DocumentProcessor(PipelineStage):
         id      = doc.get("_id")
         index   = doc.get("_index")
         doctype = doc.get("_type")
-        self._doclog.debug("/%s/%s/%s: %s" % (index, doctype, id))
+        self._doclog.debug("/%s/%s/%s: %s" % (index, doctype, id, message))
 
 
     def write(self, doc):
