@@ -32,13 +32,15 @@ class TerminalInfo(object):
         elif self.type is Connector:
             type_indicator = "-"
 
-        print "%s%c%s.%s(%s) (conns=%d)" % (spc, type_indicator, self.owner, self.name, self.protocol, self.count)
+        print "%s%c%s.%s(%s) (conns=%d)%s" % (spc, type_indicator, self.owner, self.name, self.protocol, self.count, kat_count_str)
         if verbose and self.description:
-            print "\"%s%s%s%c\"" % (spc, spc, self.description)
+            print "\"%s%s%s\"" % (spc, spc, self.description)
 
         if follow_connections and self.connections:
+            subindent = 0
             if verbose:
                 print "%sConnections:" % spc
-                indent += 1
+                subindent += 1
             for c in self.connections:
-                c.DUMP(False, verbose, indent+1)
+                c.DUMP(False, verbose, subindent+1)
+

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+
 from .Terminal import Terminal
 import Queue
 import threading
@@ -102,7 +104,7 @@ class Connector(Terminal):
     def stop(self):
         self.accepting = False
         self.stopping = True  # We must wait for items in the queue to be processed before we finally stop running
-        self.thread.join()
+        self.thread.join()  # NOTE: Are we sure we want to wait for this ??
 
     def abort(self):
         self.aborted = True

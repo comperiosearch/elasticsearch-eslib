@@ -2,6 +2,7 @@
 
 # Note: Destroying terminals not implemented. Possibly no use for that..
 
+from __future__ import absolute_import
 
 import logging
 import threading, time
@@ -18,7 +19,7 @@ class Processor(object):
     def __init__(self, name):
         self.sleep = 0.001
 
-        self.name = name
+        self.name = name or self.__class__.__name__
 
         self.is_generator = False
 
@@ -47,8 +48,10 @@ class Processor(object):
         self.running = False
         self.suspended = False
         self.aborted = False
-        self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
+        self.keepalive = False  # True means that this processor will not be stopped automatically when a producer stops.
 
+        self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
+        self._initialized = False # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
 
     def _iter_subscribers(self):
         for socket in self.sockets.itervalues():
@@ -64,7 +67,7 @@ class Processor(object):
         terminal.owner = self
         terminal.description = description
         self.connectors.update({terminal.name: terminal})
-
+        return terminal
 
     def create_socket(self, name=None, protocol=None, description=None):
         terminal = Socket(name, protocol)
@@ -73,31 +76,33 @@ class Processor(object):
         terminal.owner = self
         terminal.description = description
         self.sockets.update({terminal.name: terminal})
+        return terminal
 
     #endregion Terminal creation
 
     #region Connection management
 
-    def _get_terminals(self, producer, socket_name, connector_name):
+    @staticmethod
+    def _get_terminals(producer, socket_name, subscriber, connector_name):
         """
         :return (socket, connector):
         """
 
         connector = None
-        if len(self.connectors) == 0:
-            raise Exception("Processor '%s' has no connectors." % self.name)
+        if len(subscriber.connectors) == 0:
+            raise Exception("Processor '%s' has no connectors." % subscriber.name)
         if len(producer.sockets) == 0:
             raise Exception("Processor '%s' has no sockets to connect to." % producer.name)
 
         if not connector_name:
-            if len(self.connectors) > 1:
-                raise Exception("More than one connector, requires connector_name to be specified.")
+            if len(subscriber.connectors) > 1:
+                raise Exception("Processor '%s' has more than one connector, requires connector_name to be specified.", subscriber.name)
             else:
-                connector = self.connectors.itervalues().next()
+                connector = subscriber.connectors.itervalues().next()
         else:
-            connector = self.connectors.get(connector_name)
+            connector = subscriber.connectors.get(connector_name)
             if not connector:
-                raise Exception("Connector named '%s' not found in processor '%s'." % (connector_name, self.name))
+                raise Exception("Connector named '%s' not found in processor '%s'." % (connector_name, subscriber.name))
 
         socket = None
         if not socket_name:
@@ -112,19 +117,17 @@ class Processor(object):
 
         return (socket, connector)
 
-
     def subscribe(self, producer, socket_name=None, connector_name=None):
         """
         Connect this named connector to a named socket on a Processor."
-
-        :param producer:
-        :param socket_name: Optional if only one socket exists on the other processor (producer).
-        :param connector_name: Optional if only one connector exists for this processor.
+        :param Processor producer: Processor which socket to subscribe to.
+        :param str socket_name: Optional if only one socket exists on the other processor (producer).
+        :param str connector_name: Optional if only one connector exists for this processor.
         :return self: For fluent programming style.
         """
 
         # Find the specified terminals
-        socket, connector = self._get_terminals(producer, socket_name, connector_name)
+        socket, connector = Processor._get_terminals(producer, socket_name, self, connector_name)
 
         # Verify protocol compliance
         if not Terminal.protocol_compliance(socket, connector):
@@ -136,13 +139,12 @@ class Processor(object):
 
         return self # For fluent programming
 
-
     def unsubscribe(self, producer=None, socket_name=None, connector_name=None):
         """
         Remove a named connector as output target for specified producer socket.
-        :param producer: If missing, socket_name and connector_name are ignored, and all subscriptions are removed.
-        :param socket_name: Optional if only one socket exists in the other processor (producer).
-        :param connector_name: If missing, detach all connections to given socket.
+        :param Processor producer: If missing, socket_name and connector_name are ignored, and all subscriptions are removed.
+        :param str socket_name: Optional if only one socket exists in the other processor (producer).
+        :param str connector_name: If missing, detach all connections to given socket.
         :return self: For fluent programming style.
         """
 
@@ -154,13 +156,34 @@ class Processor(object):
 
         return self # For fluent programming
 
+    def attach(self, subscriber, socket_name=None, connector_name=None):
+        """
+        Connect this named connector to a named socket on a Processor."
+        :param Processor subscriber: Processor that will subscribe to output from this processor.
+        :param str socket_name: Optional if only one socket exists for this processor.
+        :param str connector_name: Optional if only one connector exists on the other processor (subscriber).
+        :return self: For fluent programming style.
+        """
+
+        # Find the specified terminals
+        socket, connector = Processor._get_terminals(self, socket_name, subscriber, connector_name)
+
+        # Verify protocol compliance
+        if not Terminal.protocol_compliance(socket, connector):
+            raise TerminalProtocolException(socket, connector)
+
+        # Attach connector as output target for socket
+        socket.attach(connector)
+        connector.attach(socket)
+
+        return self # For fluent programming
 
     def detach(self, subscriber=None, socket_name=None, connector_name=None):
         """
         Detach a subscriber.
-        :param socket_name: If missing, detach from all sockets.
-        :param subscriber: If missing, detach all subscribers.
-        :param connector_name: If missing, detach all connections from subscriber. Ignored if missing subscriber.
+        :param str socket_name: If missing, detach from all sockets.
+        :param Processor subscriber: If missing, detach all subscribers.
+        :param str connector_name: If missing, detach all connections from subscriber. Ignored if missing subscriber.
         :return self: For fluent programming style.
         """
 
@@ -172,7 +195,6 @@ class Processor(object):
 
         return self # For fluent programming
 
-
     def connector_info(self, *args):
         "Return list of info for connectors named in *args, or all connectors."
         return [TerminalInfo(self.connectors[n]) for n in self.connectors if not args or n in args ]
@@ -183,18 +205,25 @@ class Processor(object):
 
     #endregion Connection management
 
+    #region Handlers for all processors types
+
+    def on_setup(self): pass
+
+    def on_close(self): pass
+
+    #endregion Handlers for all processor types
+
     #region Handlers for Generator/Monitor type Processor
 
     # self.is_generator = True
 
-    def startup_handler(self):
-        pass
-    def shutdown_handler(self):
-        pass
-    def abort_handler(self):
-        pass
-    def processing_tick_handler(self):
-        pass
+    def on_startup (self): pass
+
+    def on_shutdown(self): pass
+
+    def on_abort   (self): pass
+
+    def on_tick    (self): pass
 
     #endregion Handlers for Generator/Monitor type Processor
 
@@ -202,23 +231,25 @@ class Processor(object):
 
     def _run(self):
 
-        self.startup_handler()
+        self._runchan_count += 1
+
+        self.on_startup()
 
         while self.running:
             if self.sleep:
                 time.sleep(self.sleep)
 
             if self.stopping:
-                self.shutdown_handler()
-                self.production_stopped() # Will handle stopping subscribers
-                self.stopping = False
-                self.running = False
+                if self._runchan_count == 1: # Now it is only us left...
+                    self.on_shutdown()
+                    self.production_stopped() # Ready to close down
             elif not self.suspended:
-                self.processing_tick_handler()
+                self.on_tick()
 
         if self.aborted:
-            self.abort_handler()
-
+            self.on_abort()
+            self._close()
+            self._runchan_count -= 1 # If stopped normally, it was decreased in call to production_stopped()
 
     def start(self):
         "Start running (if not already so) and start accepting and/or generating new data. Cascading to all subscribers."
@@ -226,10 +257,28 @@ class Processor(object):
         if self.stopping:
             raise Exception("Processor '%s' is stopping, cannot restart yet.")
 
+        # Make sure we and all subscribers are properly initialized
+        self._setup()
         # Accept incoming from connectors and tell subscribers to accept incoming
         self._accept_incoming()
         # Now we can finally tell all parts to start running/processing without missing data...
         self._start_running()
+
+    def _setup(self):
+        if self._initialized:
+            return
+        self.on_setup()
+        self._initialized = True
+        # Tell all subscribers, cascading, to run setup
+        for subscriber in self._iter_subscribers():
+            subscriber._setup()
+
+    def _close(self):
+        if not self._initialized:
+            print "*** %s WAS NOT INITIALIZED BEFORE CALL TO _close()!" % self.name # DEBUG
+        self.on_close()
+        self._initialized = False
+        # Note: Do NOT tell subscribers to close. They will do this themselves after they have been stopped or aborted.
 
     def _accept_incoming(self):
 
@@ -272,10 +321,13 @@ class Processor(object):
         """
         Stop accepting new data, reading input and/or generating new data. Finish processing and write to output sockets.
         Cascade to subscribers once all data is processed.
+        :param bool cascading: Tell all subscribers to stop once this is done stopping.
         """
 
         if self.stopping or not self.running:
             return
+
+        print "*** STOPPING %s" % self.name # DEBUG
 
         # Do not generate any more data or fetch any more from remote sources
         self.accepting = False
@@ -288,9 +340,14 @@ class Processor(object):
     def production_stopped(self):
         self._runchan_count -= 1
         if self._runchan_count == 0:
+            # We are all done... no longer generating, and no longer receiving
+            self.stopping = False
+            self.running = False
+            self._close()
             # Now we can finally tell subscribers to stop
             for subscriber in self._iter_subscribers():
-                subscriber.stop()
+                if not subscriber.keepalive:  # Honour 'keepalive', i.e. do not propagate stop-signal to subscriber
+                    subscriber.stop()
 
     def abort(self):
         "Abort all input reading and data processing immediately. Stop accepting new data. Empty queues and stop running."
@@ -298,14 +355,17 @@ class Processor(object):
         if self.aborted or not self.running:
             return
 
+        # Abort connectors
+        for connector in self.connectors.itervalues():
+            connector.abort()
+
         # Abort monitoring remote source or generating output.
         self.aborted = True
         self.accepting = False
         self.running = False
-        # Abort connectors
-        for connector in self.connectors.itervalues():
-            connector.abort()
-        self._runchan_count = 0
+
+        if not self.is_generator:  # Otherwise handled in the _run() loop
+            self._close()
 
         # Cascade abort to subscribers
         for subscriber in self._iter_subscribers():
@@ -329,15 +389,20 @@ class Processor(object):
         for connector in self.connectors.itervalues():
             connector.resume()
 
+    def wait(self):
+        "Wait for this processor to finish."
+
+        while self.running:
+            time.sleep(0.1)  # wait 0.1 seconds
+
+        if self.thread:
+            self.thread.join()
+
     #endregion Operation management
 
     #region Send and receive data with external methods
 
-#region Send and receive data with external methods
-
-    #region Send and receive data with external methods
-
-    def send(self, document, connector_name=None):
+    def put(self, document, connector_name=None):
         connector = None
         if not connector_name and len(self.connectors) == 1:
             connector = self.connectors.itervalues().next()
@@ -349,7 +414,7 @@ class Processor(object):
             raise Exception("Connector %s.%s is not currently accepting input." % (self.name, connector.name))
         connector.receive(document)
 
-    def callback(self, method, socket_name=None):
+    def add_callback(self, method, socket_name=None):
         socket = None
         if not socket_name and len(self.sockets) == 1:
             socket = self.sockets.itervalues().next()

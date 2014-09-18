@@ -111,10 +111,6 @@ class TestConnections(unittest.TestCase, Connections):
         self.assertTrue(len(self.d.connectors["input_ext"].connections) == 0)
 
 
-
-
-#self.assertEqual(True, False)
-
 def main():
     unittest.main()
 
