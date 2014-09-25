@@ -1,45 +1,54 @@
+__author__ = 'Hans Terje Bakke'
+
+# TODO: Verify encoding working, especially when writing to stdout
+
 from ..Processor import Processor
 import sys, json
 
-class Config:
-    pass
 
 class FileWriter(Processor):
     """
     Write incoming documents to specified file or standard output.
     Documents of dict type are written as json documents, per line. Other types are written directly with
     their string representation.
+
+    Connectors:
+        input      (*)       : Incoming documents to write to file as string or json objects per line.
+
+    Config:
+        filename          = None    : If not set then 'stdout' is assumed.
+        append            = False   : Whether to append to existing file, rather than overwrite.
     """
     def __init__(self, name=None):
         super(FileWriter, self).__init__(name)
-        self.create_connector(self.incoming, "input", None, "Incoming documents to write to file as string or json objects per line.")
+        self.create_connector(self._incoming, "input", None, "Incoming documents to write to file as string or json objects per line.")
 
         self.config.filename = None
-        self.config.append = False # Whether to append to existing file, rather than overwrite
+        self.config.append   = False
 
-        self.file = None
+        self._file = None
 
-    def on_startup(self):
+    def on_open(self):
 
-        if self.file:
+        if self._file:
             print "*** FileWriter MULTIPLE STARTUP" # DEBUG
             return
 
         if not self.config.filename:
             # Assuming stdout
-            self.file = sys.stdout
+            self._file = sys.stdout
         else:
             # May raise exception:
-            self.file = open(self.config.filename, "a" if self.config.append else "w")
+            self._file = open(self.config.filename, "a" if self.config.append else "w")
 
     def on_close(self):
-        if self.file and self.file != sys.stdout:
-            self.file.close()
-        self.file = None
+        if self._file and self._file != sys.stdout:
+            self._file.close()
+        self._file = None
 
-    def incoming(self, document):
+    def _incoming(self, document):
         if document:
             if type(document) is dict:
-                print >> self.file, json.dumps(document)
+                print >> self._file, json.dumps(document)
             else:
-                print >> self.file, document
+                print >> self._file, document

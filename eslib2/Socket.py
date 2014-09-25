@@ -22,3 +22,9 @@ class Socket(Terminal):
         # Finally, notify all subscribing callbacks
         for callback in self.callbacks:
             callback(document)
+
+    @property
+    def has_output(self):
+        if self.connections or self.callbacks:
+            return True
+        return False

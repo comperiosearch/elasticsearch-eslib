@@ -5,7 +5,7 @@ Python library for document processing for elasticsearch.
 
 *** WORK IN PROGESS ***
 
-INTRO
+## INTRO
 
 A 'processor' processes incoming data and generates output.
 
@@ -22,7 +22,7 @@ and socket.
 A processor B is said to 'subscribe' to output from processor A if it has a connector connected a
 socket on A. In this case, A has the role of 'producer' (to B) and B has the role of 'subscriber' (to A).
 
-USAGE
+## USAGE
 
 From a Python script, we can create a processing graph as in this example:
 
@@ -57,7 +57,7 @@ One processor/connector can subscribe to data from many processors/sockets. One 
 different named connectors, expecting data in various formats (hinted by its 'protocol' tag.) And a processor/socket
 can have many processors/connectors subscribing to data it outputs.
 
-BEHIND THE SCENE
+## BEHIND THE SCENE
 
 Technically, a processor sends document data to its sockets. The sockets send documents to its connected connectors.
 A connector has a queue of incoming items, and a thread that pulls documents off the queue and sends it to
@@ -65,3 +65,37 @@ a processing method in the processor class. This method processes the data and s
 more of its sockets, which again send to connected connectors...
 
 A generator style processor has another thread that generates documents somehow, and sends it to its socket(s).
+
+
+## MEMERS FOR USING THE Processor (and derivates)
+
+    Read/write:
+        keepalive
+    Read only:
+        accepting
+        stopping
+        running
+        suspended
+        aborted
+    Methods:
+        __init__(name) # Constructor/init
+        subscribe(producer=None, socket_name=None, connector_name=None)
+        unsubscribe(producer=None, socket_name=None, connector_name=None)
+        attach(subscriber, socket_name=None, connector_name=None)
+        detach(subscriber, socket_name=None, connector_name=None)
+        connector_info(*args)  # returns list
+        socket_info(*args)     # returns list
+        start()
+        stop()
+        abort()
+        suspend()
+        resume()
+        wait()
+        put(document, connector_name=None)
+        add_callback(method, socket_name=None)
+    Methods for debugging:
+        DUMP
+        DUMP_connectors
+        DUMP_sockets
+        
+        

@@ -19,7 +19,7 @@ class Connector(Terminal):
         self.method = method
 
         # Execution control status
-        self.thread = threading.Thread(target=self._run)
+        self._thread = None
         self.accepting = False
         self.stopping = False
         self.running = False
@@ -93,7 +93,8 @@ class Connector(Terminal):
         self.suspended = False
         self.running = True
 
-        self.thread.start()
+        self._thread = threading.Thread(target=self._run)
+        self._thread.start()
 
     def accept_incoming(self):
         "Should be called for all connectors in the system before processes start running and processing!"
@@ -104,7 +105,9 @@ class Connector(Terminal):
     def stop(self):
         self.accepting = False
         self.stopping = True  # We must wait for items in the queue to be processed before we finally stop running
-        self.thread.join()  # NOTE: Are we sure we want to wait for this ??
+        if self._thread and self._thread.isAlive():
+            self._thread.join()  # NOTE: Are we sure we want to wait for this ??
+        self._thread = None
 
     def abort(self):
         self.aborted = True

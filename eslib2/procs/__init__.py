@@ -9,7 +9,10 @@ Document processing processors.
 
 from .ElasticsearchReader import ElasticsearchReader
 from .ElasticsearchWriter import ElasticsearchWriter
+from .FileReader          import FileReader
 from .FileWriter          import FileWriter
+from .RabbitmqMonitor     import RabbitmqMonitor
+from .RabbitmqWriter      import RabbitmqWriter
 #from .CSVReader           import CSVReader
 #from .SentimentProcessor  import SentimentProcessor
 #from .RemovePattern       import RemovePattern
@@ -17,11 +20,14 @@ from .FileWriter          import FileWriter
 #from .TweetAnalyzer       import TweetAnalyzer
 
 __all__ = (
-#    "CSVReader",
-#    "DocumentFilter"
     "ElasticsearchReader",
     "ElasticsearchWriter",
-    "FileWriter"
+    "FileReader",
+    "FileWriter",
+    "RabbitmqMonitor",
+    "RabbitmqWriter"
+#    "CSVReader",
+#    "DocumentFilter"
 #    "RemoveHTML",
 #    "RemovePattern",
 #    "SentimentProcessor",

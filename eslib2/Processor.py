@@ -12,12 +12,16 @@ from .TerminalInfo import TerminalInfo
 from .Connector import Connector
 from .Socket import Socket
 
+class Config:
+    pass
 
 class Processor(object):
     "Base class for workflow processing object."
 
     def __init__(self, name):
         self.sleep = 0.001
+
+        self.config = Config()
 
         self.name = name or self.__class__.__name__
 
@@ -38,11 +42,10 @@ class Processor(object):
             if not name == className: parts.append(name)
         fullPath = ".".join(parts)
         #print "FULL=[%s]" % fullPath
-        self._doclog = logging.getLogger("doclog.%s"  % fullPath)
+        self.doclog = logging.getLogger("doclog.%s"  % fullPath)
         self.log     = logging.getLogger("proclog.%s" % fullPath)
 
         # Execution control status, needed by generators and monitors
-        self.thread = threading.Thread(target=self._run)
         self.accepting = False
         self.stopping = False
         self.running = False
@@ -50,6 +53,7 @@ class Processor(object):
         self.aborted = False
         self.keepalive = False  # True means that this processor will not be stopped automatically when a producer stops.
 
+        self._thread = None
         self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
         self._initialized = False # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
 
@@ -207,7 +211,7 @@ class Processor(object):
 
     #region Handlers for all processors types
 
-    def on_setup(self): pass
+    def on_open(self): pass
 
     def on_close(self): pass
 
@@ -224,6 +228,10 @@ class Processor(object):
     def on_abort   (self): pass
 
     def on_tick    (self): pass
+
+    def on_suspend (self): pass
+
+    def on_resume  (self): pass
 
     #endregion Handlers for Generator/Monitor type Processor
 
@@ -247,7 +255,7 @@ class Processor(object):
                 self.on_tick()
 
         if self.aborted:
-            self.on_abort()
+            #self.on_abort()
             self._close()
             self._runchan_count -= 1 # If stopped normally, it was decreased in call to production_stopped()
 
@@ -267,7 +275,7 @@ class Processor(object):
     def _setup(self):
         if self._initialized:
             return
-        self.on_setup()
+        self.on_open()
         self._initialized = True
         # Tell all subscribers, cascading, to run setup
         for subscriber in self._iter_subscribers():
@@ -315,7 +323,8 @@ class Processor(object):
         self.suspended = False
         self.running = True
         if self.is_generator:
-            self.thread.start()
+            self._thread = threading.Thread(target=self._run)
+            self._thread.start()
 
     def stop(self):
         """
@@ -327,7 +336,7 @@ class Processor(object):
         if self.stopping or not self.running:
             return
 
-        print "*** STOPPING %s" % self.name # DEBUG
+        #print "*** STOPPING %s" % self.name # DEBUG
 
         # Do not generate any more data or fetch any more from remote sources
         self.accepting = False
@@ -363,6 +372,7 @@ class Processor(object):
         self.aborted = True
         self.accepting = False
         self.running = False
+        self.on_abort()
 
         if not self.is_generator:  # Otherwise handled in the _run() loop
             self._close()
@@ -376,6 +386,7 @@ class Processor(object):
 
         # Suspend monitoring remote source or generating output.
         self.suspended = True
+        self.on_suspend()
         # Suspend all connectors from polling items from its queue and requesting processing
         for connector in self.connectors.itervalues():
             connector.suspend()
@@ -385,6 +396,7 @@ class Processor(object):
 
         # Resume monitoring remote source or generating output.
         self.suspended = False
+        self.on_resume()
         # Resume all connectors
         for connector in self.connectors.itervalues():
             connector.resume()
@@ -395,8 +407,9 @@ class Processor(object):
         while self.running:
             time.sleep(0.1)  # wait 0.1 seconds
 
-        if self.thread:
-            self.thread.join()
+        if self._thread and self._thread.isAlive():
+            self._thread.join()
+        self._thread = None
 
     #endregion Operation management
 
@@ -404,7 +417,9 @@ class Processor(object):
 
     def put(self, document, connector_name=None):
         connector = None
-        if not connector_name and len(self.connectors) == 1:
+        if not self.connectors:
+            raise Exception("Processor '%s' has no connectors." % self.name)
+        elif not connector_name and len(self.connectors) == 1:
             connector = self.connectors.itervalues().next()
         else:
             if not connector_name in self.connectors:

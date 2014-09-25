@@ -1,3 +1,11 @@
+__author__ = 'Hans Terje Bakke'
+
+# TODO: 'config.hosts': WTF... what happens with the indexing result if there are multiple hosts?? Is only the first
+# TODO:  one answering really used?
+
+# TODO: Test update_fields with new documents, and see if all fields are created or only those listed.
+# TODO: Also verify that only mentioned fields are changed in existing documents.
+
 import elasticsearch
 import logging
 from Queue import Queue
@@ -6,29 +14,45 @@ import copy
 from ..Generator import Generator
 from time import sleep
 
-class Config:
-    pass
 
 class ElasticsearchWriter(Generator):
+    """
+    Write data to Elasticsearch.
+    It expects incoming data in Elasticsearch document format.
+    Index and document types can be overridden by the config.
+
+    NOTE: If the index/type does not already exist, Elasticsearch will generate a mapping based on the incoming data.
+
+    Connectors:
+        input      (esdoc)   : Incoming documents for writing to configured index.
+    Sockets:
+        output     (esdoc)   : Modified documents (attempted) written to Elasticsearch.
+
+    Config:
+        hosts             = None    : List of Elasticsearch hosts to write to.
+        index             = None    : Index override. If set, use this index instead of documents' '_index' (if any).
+        doctype           = False   : Document type override. If set, use this type instead of documents' '_type' (if any).
+        update_fields     = []      : If specified, only this list of fields will be updated in existing documents.
+        batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
+    """
 
     def __init__(self, name=None):
         super(ElasticsearchWriter, self).__init__(name)
-        self.create_connector(self.incoming, "input", "esdoc", "Incoming documents for writing to configured index.")
+        self.create_connector(self._incoming, "input", "esdoc", "Incoming documents for writing to configured index.")
         self.output = self.create_socket("output", "esdoc", "Modified documents (attempted) written to Elasticsearch.")
 
-        self.config = Config()
-        self.config.hosts = None
-        self.config.index = None
-        self.config.doctype = None
+        self.config.hosts         = None
+        self.config.index         = None
+        self.config.doctype       = None
         self.config.update_fields = []
-        self.config.batchsize = 1000
+        self.config.batchsize     = 1000
         # TODO: SHALL WE USE AN OPTIONAL ALTERNATIVE TIMESTAMP FIELD FOR PROCESSED/INDEXED TIME? (OR NOT?)
-        #self.config.timefield = "_timestamp"
+        #self.config.timefield    = "_timestamp"
 
         self._queue = Queue()
         self._queue_lock = Lock()
 
-    def incoming(self, document):
+    def _incoming(self, document):
         id = document.get("_id")
         index = self.config.index or document.get("_index")
         doctype = self.config.doctype or document.get("_type")
@@ -83,30 +107,29 @@ class ElasticsearchWriter(Generator):
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
         res = es.bulk(payload)
         for i, docop in enumerate(res["items"]):
-            resdoc = None
             if   "index"  in docop: resdoc = docop["index"]
+            if   "create" in docop: resdoc = docop["create"]
             elif "update" in docop: resdoc = docop["update"]
-            if doc:
-                # NOTE: *HOPE* this gives me what I want...:
+            if resdoc:
                 id      = resdoc["_id"]
                 version = resdoc["_version"]
                 index   = resdoc["_index"]
                 doctype = resdoc["_type"]
 
-                print "*** ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), doc["_id"]) # DEBUG
+                #print "*** ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), id) # DEBUG
 
                 # Only do the following cloning etc if there are actual subscribers:
-                if len(self.output.connections):
+                if self.output.has_output:
                     original_doc = docs[i]
                     doc = copy.copy(original_doc) # Shallow clone
                     doc.update({"_id"     : id     }) # Might have changed, in case of new document created, without id
                     doc.update({"_index"  : index  }) # Might have changed to self.config.index
                     doc.update({"_type"   : doctype}) # Might have changed to self.config.doctype
-                    doc.update({"_version": doctype}) # Might have changed, in case of update
+                    doc.update({"_version": version}) # Might have changed, in case of update
                     # Send to socket
                     self.output.send(doc)
             else:
-                # TODO: Perhaps send failed documents to another (error) socket
+                # TODO: Perhaps send failed documents to another (error) socket(?)
                 print "*** NO DOC %d" % i # DEBUG
 
     #region Generator

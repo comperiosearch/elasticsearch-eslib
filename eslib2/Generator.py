@@ -15,8 +15,11 @@ class Generator(Processor):
     # on_shutdown(self)
     # on_abort(self)
     # on_tick(self)
+    # on_suspend(self)
+    # on_resume(self)
 
     # If on_tick finishes on its own without external stop call, call self.stop() from there when done.
 
     def end_tick_reason(self):
+        "If 'aborted', 'stopping' or not 'running'. 'suspended' is not a reason to leave the tick; handle this yourself."
         return self.aborted or self.stopping or not self.running

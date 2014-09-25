@@ -1,21 +1,36 @@
+__author__ = 'Hans Terje Bakke'
+
 import elasticsearch
 from ..Generator import Generator
 from ..time import date2iso
 from time import sleep
 
-class Config:
-    pass
-
 class ElasticsearchReader(Generator):
+    """
+    Write data to Elasticsearch.
+    It expects incoming data in Elasticsearch document format.
+    Index and document types can be overridden by the config.
+
+    NOTE: If the index/type does not already exist, Elasticsearch will generate a mapping based on the incoming data.
+
+    Sockets:
+        output     (esdoc)   : Documents retrieved from Elasticsearch.
+
+    Config:
+        hosts             = None    : List of Elasticsearch hosts to write to.
+        index             = None    : Index override. If set, use this index instead of documents' '_index' (if any).
+        doctype           = False   : Document type override. If set, use this type instead of documents' '_type' (if any).
+        update_fields     = []      : If specified, only this list of fields will be updated in existing documents.
+        batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
+    """
 
     def __init__(self, name=None):
         super(ElasticsearchReader, self).__init__(name)
-        self.output = self.create_socket("output", "esdoc", "Retrieved documents from Elasticsearch.")
+        self.output = self.create_socket("output", "esdoc", "Documents retrieved from Elasticsearch.")
 
         self._es = None
         self._scroll_id = None
 
-        self.config = Config()
         self.config.hosts = None
         self.config.index = None
         self.config.doctype = None
@@ -31,7 +46,10 @@ class ElasticsearchReader(Generator):
     def _get_es_conn(self):
         return elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
 
-    def _release_scroll_contexts(self):
+    def _release_scroll_context(self):
+        # TODO: The following results in a NotFoundError with Elasticsearch, so return until this bug is researched and fixed
+        return
+
         if self._es and self._scroll_id:
             self._es.clear_scroll(self._scroll_id)
             self._scroll_id = None
