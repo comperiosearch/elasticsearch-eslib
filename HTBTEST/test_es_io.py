@@ -3,9 +3,9 @@
 
 #from __future__ import absolute_import
 
-from eslib2 import Processor
-from eslib2.procs import ElasticsearchReader
-from eslib2.procs import ElasticsearchWriter
+from eslib import Processor
+from eslib.procs import ElasticsearchReader
+from eslib.procs import ElasticsearchWriter
 import json
 
 def listener(document):

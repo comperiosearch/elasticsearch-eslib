@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from eslib2 import *
-from eslib2.procs import *
+from eslib import *
+from eslib.procs import *
 
 r = ElasticsearchReader()
 r.config.hosts = [ "eslab.comperio.no" ]

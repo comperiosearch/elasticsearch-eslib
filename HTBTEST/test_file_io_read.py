@@ -3,7 +3,7 @@
 
 #from __future__ import absolute_import
 
-from eslib2.procs import FileReader
+from eslib.procs import FileReader
 
 def callback(doc):
     print "-------\n", doc

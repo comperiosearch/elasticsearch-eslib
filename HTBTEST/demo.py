@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from eslib2.procs import *
-from eslib2 import *
+from eslib.procs import *
+from eslib import *
 
 def my_method(document):
     print document["_id"]

@@ -1,6 +1,6 @@
 import unittest, time, sys
 from connections import Connections
-from eslib2 import Processor, Generator, Controller
+from eslib import Processor, Generator, Controller
 
 
 class MyGenerator(Generator):

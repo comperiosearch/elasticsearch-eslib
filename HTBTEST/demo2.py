@@ -3,7 +3,7 @@
 
 #from __future__ import absolute_import
 
-from eslib2.procs import RabbitmqWriter
+from eslib.procs import RabbitmqWriter
 
 w = RabbitmqWriter()
 w.config.host = "nets.comperio.no"

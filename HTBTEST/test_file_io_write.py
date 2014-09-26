@@ -3,8 +3,8 @@
 
 #from __future__ import absolute_import
 
-from eslib2.procs import ElasticsearchReader
-from eslib2.procs import FileWriter
+from eslib.procs import ElasticsearchReader
+from eslib.procs import FileWriter
 
 r = ElasticsearchReader()
 r.config.index = "family"
