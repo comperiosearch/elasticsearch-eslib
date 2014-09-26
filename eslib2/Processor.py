@@ -263,7 +263,7 @@ class Processor(object):
         "Start running (if not already so) and start accepting and/or generating new data. Cascading to all subscribers."
 
         if self.stopping:
-            raise Exception("Processor '%s' is stopping, cannot restart yet.")
+            raise Exception("Processor '%s' is stopping, cannot restart yet." % self.name)
 
         # Make sure we and all subscribers are properly initialized
         self._setup()

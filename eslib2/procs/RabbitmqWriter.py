@@ -7,9 +7,10 @@ import pika, json
 
 class RabbitmqWriter(Processor, RabbitmqBase):
     """
-    Write data to Rabbit MQ.
-    Data in 'str' or 'unicode' types are written directly, everything else is written as a JSON string.
-    The 'type' registered with the metadata is then either 'str', 'unicode' or 'json'.
+    Write data to RabbitMQ.
+    Writes data with type 'str', 'unicode', 'int', or 'float'. Lists and dicts are written as 'json'.
+    Other types are cast to 'str'.
+    The 'type' registered with the metadata is then either 'str', 'unicode', 'int', 'float' or 'json'.
 
     Connectors:
         input      (*)       : Document to write to configured RabbitMQ.
@@ -22,6 +23,9 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         password          = guest      :
         virtual_host      = None       :
         queue             = "default"  :
+
+        max_reconnects    = 3          :
+        reconnect_timeout = 3          :
     """
 
     def __init__(self, name=None):
@@ -61,9 +65,4 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             msg_type = "str" #type(document).__name__
             self.doclog.debug("Writing document of unsupported type '%s' as type 'str'." % type(document).__name__)
 
-        properties = pika.BasicProperties(
-            delivery_mode = 2,  # make messages persistent
-            type = msg_type
-        )
-
-        self._channel.basic_publish(exchange="", routing_key=self.config.queue, body=data, properties=properties)
+        self._publish(msg_type, data)

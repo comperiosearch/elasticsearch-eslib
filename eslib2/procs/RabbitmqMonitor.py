@@ -1,16 +1,30 @@
 __author__ = 'Hans Terje Bakke'
 
-# NOTE: Currently using blocking connection and basic_consume.
-#       For a good example on asynchronous consumer using select and ioloop, see:
-#           http://pika.readthedocs.org/en/latest/examples/asynchronous_consumer_example.html
-
 from ..Generator import Generator
 from .RabbitmqBase import RabbitmqBase
-import json
+import pika
+import json, time
 
 class RabbitmqMonitor(Generator, RabbitmqBase):
     """
+    Monitor a queue in RabbitMQ.
+    Assumes data with type 'str', 'unicode', 'int', 'float' or 'json' from RabbitMQ.
+    Incoming documents are attempted deserialized into these types. Unknown types are passed as 'str'.
 
+    Sockets:
+        output     (*)       : Document received on monitored queue.
+
+    Config:
+        host              = localhost  :
+        port              = 5672       :
+        admin_port        = 15672      :
+        username          = guest      :
+        password          = guest      :
+        virtual_host      = None       :
+        queue             = "default"  :
+
+        max_reconnects    = 3          :
+        reconnect_timeout = 3          :
     """
 
     def __init__(self, name=None):
@@ -19,47 +33,75 @@ class RabbitmqMonitor(Generator, RabbitmqBase):
 
         self.output = self.create_socket("output", None, "Document received on monitored queue.")
 
+        self.config.max_reconnects    = 3
+        self.config.reconnect_timeout = 3
+
+        self._reconnecting = 0
+
     #region Processor stuff
 
     def on_open(self):
-        self.log.info("open")
         self._open_connection()
 
     def on_close(self):
-        self.log.info("close")
         self._close_connection()
 
     #endregion Processor stuff
 
     #region Generator stuff
 
+    def _start_consuming(self):
+        self._consumer_tag = self._channel.basic_consume(self._callback, queue=self.config.queue, no_ack=True)
+
+    def _stop_consuming(self):
+        if self._channel:
+            self._channel.basic_cancel(self._consumer_tag)
+
     def on_startup(self):
         self.total = 0
         self.count = 0
-        self._consumer_tag = self._channel.basic_consume(self._callback, queue=self.config.queue, no_ack=True)
-        self._channel.start_consuming()
 
     def on_shutdown(self):
-        self._channel.basic_cancel(self._consumer_tag)
-        self._channel.stop_consuming()
+        self._stop_consuming()
 
     def on_abort(self):
-        self._channel.basic_cancel(self._consumer_tag)
-        self._channel.stop_consuming()
+        self._stop_consuming()
 
     def on_tick(self):
-        pass
+        if self._reconnecting > 0:
+            self._reconnecting -= 1
+            # Try to reconnect
+            ok = False
+            try:
+                self._close_connection()
+                self._open_connection()
+                self.log.debug("Successfully reconnected to RabbitMQ.")
+                self.reconnecting = 0  # No longer attempting reconnects
+                self._start_consuming()
+            except pika.exceptions.AMQPConnectionError as e:
+                if self._reconnecting > 0:
+                    timeout = self.config.reconnect_timeout
+                    self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds." % timeout)
+                    time.sleep(timeout)
+                else:
+                    self.log.warning("Missing connection to RabbitMQ. Max retries exceeded. Aborting.")
+                    self.abort()  # We give up and abort
+            return
 
-    def on_suspend(self):
-        self._channel.stop_consuming()
-
-    def on_resume(self):
-        self._channel.start_consuming()
+        try:
+            self._channel.connection.process_data_events()
+        except Exception as e:
+            if self._reconnecting >= 0:
+                self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
+                self._reconnecting = self.config.max_reconnects  # Number of reconnect attempts; will start reconnecting on next tick
 
     def _callback(self, callback, method, properties, body):
         #print "*** RabbitmqMonitor received:"
         #print "***    Properties:", properties
         #print "***    Body: ", body
+
+        self.count += 1
+        self.total += 1
 
         if not self.output.has_output: # Don't bother deserializing, etc, in this case
             return

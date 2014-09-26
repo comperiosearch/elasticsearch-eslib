@@ -2,6 +2,7 @@ __author__ = 'Hans Terje Bakke'
 
 import pyrabbit.api as rabbit
 import pika
+import time
 
 class RabbitmqBase(object):
     def __init__(self):
@@ -15,6 +16,9 @@ class RabbitmqBase(object):
         self.config.password     = None
         self.config.virtual_host = None
         self.config.queue        = "default"
+
+        self.config.max_reconnects   = 3
+        self.config.reconnect_timeout = 3
 
         # Pika connection and channel
         self._connection = None
@@ -93,16 +97,69 @@ class RabbitmqBase(object):
             host=self.config.host,
             port=self.config.port,
             credentials=credentials,
-            virtual_host=self.config.virtual_host))
+            virtual_host=self.config.virtual_host,
+            heartbeat_interval=60))
         self._channel = self._connection.channel()
         # Make sure the queue exists
         self._channel.queue_declare(queue=self.config.queue, durable=True)
 
     def _close_connection(self):
         if self._connection:
-            self._channel.close()
+            try:
+                self._channel.close()
+            except:
+                pass
             self._channel = None
-            self._connection.close()
+            try:
+                self._connection.close()
+            except:
+                pass
             self._connection = None
+
+    def _reconnect(self, attempts, timeout):
+        attempts = 3
+        while attempts >= 0:
+            attempts -= 1
+            try:
+                self._open_connection()
+            except pika.exceptions.AMQPConnectionError as e:
+                if attempts > 0:
+                    self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds." % timeout)
+                    time.sleep(timeout)
+            else:
+                return True
+        return False
+
+    def _publish(self, msg_type, data):
+
+        while not self._connection.is_open and self.running and not self.aborted:
+            self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
+            try:
+                self._open_connection()
+                self.log.debug("Successfully reconnected to RabbitMQ.")
+            except pika.exceptions.AMQPConnectionError as e:
+                timeout = 3
+                self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds.", timeout)
+                time.sleep(timeout)
+
+        properties = pika.BasicProperties(
+            delivery_mode = 2,  # make messages persistent
+            type = msg_type
+        )
+
+        ok = False
+        try_again = True
+        while not ok and try_again:
+            try:
+                self._channel.basic_publish(exchange="", routing_key=self.config.queue, body=data, properties=properties)
+                ok = True
+            except pika.exceptions.ConnectionClosed as e:
+                if try_again:
+                    self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
+                    try_again = self._reconnect(3, 3)
+
+        if not ok:
+            self.log.warning("Missing connection to RabbitMQ. Max retries exceeded. Document lost. Aborting.")
+            self.abort()
 
     #endregion Pika connection management helpers
