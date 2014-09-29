@@ -1,6 +1,0 @@
-{"_score": 0.0, "_type": "person", "_id": "hans_terje", "_source": {"lname": "Bakke", "fname": "Hans Terje"}, "_index": "family"}
-{"_score": 0.0, "_type": "person", "_id": "eugenia", "_source": {"lname": "Bakke", "fname": "Eugenia"}, "_index": "family"}
-{"_score": 0.0, "_type": "person", "_id": "max", "_source": {"lname": "Bakke", "fname": "Max"}, "_index": "family"}
-{"_score": 0.0, "_type": "person", "_id": "isac", "_source": {"lname": "Bakke", "fname": "Isac"}, "_index": "family"}
-{"_score": 0.0, "_type": "person", "_id": "felix", "_source": {"lname": "Bakke", "fname": "Felix"}, "_index": "family"}
-{"_score": 0.0, "_type": "person", "_id": "balle", "_source": {"lname": "Kroken", "fname": "Balle"}, "_index": "family"}

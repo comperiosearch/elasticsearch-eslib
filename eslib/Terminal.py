@@ -10,6 +10,8 @@ class TerminalProtocolException(Exception):
 class Terminal(object):
     "Common abstract base class for connectors and sockets."
 
+    ANY_PROTOCOL = "any"
+
     def __init__(self, name, protocol):
         self.type        = None   # type:      Either 'Socket' or 'Connector'
         self.owner       = None   # Processor:
@@ -20,7 +22,7 @@ class Terminal(object):
         self.connections = []
 
         self.name = name or "unnamed"
-        self.protocol = protocol or "anything"
+        self.protocol = protocol or Terminal.ANY_PROTOCOL
 
     def attach(self, terminal):
         self.connections.append(terminal)
@@ -39,7 +41,7 @@ class Terminal(object):
 
     @staticmethod
     def protocol_compliance(socket, connector):
-        if connector.protocol == "anything":
+        if connector.protocol == Terminal.ANY_PROTOCOL or socket.protocol == Terminal.ANY_PROTOCOL:
             return True
         ss = socket.protocol.split()
         cc = connector.protocol.split()

@@ -13,7 +13,7 @@ from .FileReader          import FileReader
 from .FileWriter          import FileWriter
 from .RabbitmqMonitor     import RabbitmqMonitor
 from .RabbitmqWriter      import RabbitmqWriter
-#from .CSVReader           import CSVReader
+from .CsvConverter        import CsvConverter
 #from .SentimentProcessor  import SentimentProcessor
 #from .RemovePattern       import RemovePattern
 #from .TweetRemoveLinks    import TweetRemoveLinks
@@ -25,8 +25,8 @@ __all__ = (
     "FileReader",
     "FileWriter",
     "RabbitmqMonitor",
-    "RabbitmqWriter"
-#    "CSVReader",
+    "RabbitmqWriter",
+    "CsvConverter"
 #    "DocumentFilter"
 #    "RemoveHTML",
 #    "RemovePattern",

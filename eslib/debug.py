@@ -8,13 +8,13 @@ Module containing functions useful for debugging.
 """
 
 
-__all__ = ("byteSizeString", "getMemoryUsed")
+__all__ = ("byte_size_string", "get_memory_used")
 
 
 import resource
 
 
-def byteSizeString(bytes, decimals=1):
+def byte_size_string(bytes, decimals=1):
     kB = bytes / 1024.0
     MB = kB / 1024.0
     GB = MB / 1024.0
@@ -26,7 +26,6 @@ def byteSizeString(bytes, decimals=1):
     return s
 
 
-def getMemoryUsed():
+def get_memory_used():
     "Get current memory useage by this process."
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-

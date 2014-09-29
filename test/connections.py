@@ -1,5 +1,5 @@
 import unittest
-from eslib.Processor import Processor
+from eslib import Processor
 
 class Connections(object):
 

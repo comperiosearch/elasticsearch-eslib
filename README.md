@@ -67,7 +67,7 @@ more of its sockets, which again send to connected connectors...
 A generator style processor has another thread that generates documents somehow, and sends it to its socket(s).
 
 
-## MEMERS FOR USING THE Processor (and derivates)
+## MEMBERS FOR USING THE Processor (and derivates)
 
     Read/write:
         keepalive

@@ -8,13 +8,13 @@ Module containing time/date helpers.
 """
 
 
-__all__ = ("durationString", "date2iso", "ago2date")
+__all__ = ("duration_string", "date2iso", "ago2date")
 
 
 import re, datetime
 
 
-def durationString(timediff):
+def duration_string(timediff):
     """
     :type timediff: datetime.timedelta
     :rtype str:
@@ -51,15 +51,17 @@ def iso2date(isostr):
 
 _agoRegex = re.compile("^(?P<number>\d)+\s*(?P<unit>\w+)( ago)?$")
 
-def ago2date(agoStr):
+def ago2date(ago, from_date_utc=None):
     """
     Convert 'ago' style time specification string to a datetime object.
     Units are s=second, m=minute, h=hour, d=day, w=week, M=month, y=year
-    :rtype datetime.timedelta:
+    :param str ago                         : "Time ago" as a string.
+    :param datetime.datetime from_date_utc : Relative time to use instead of 'now'. In UTC.
+    :rtype datetime.timedelta              : Time difference.
     """
-    m = _agoRegex.match(agoStr)
+    m = _agoRegex.match(ago)
     if not m:
-        raise SyntaxError("illegal 'ago' string: %s" % agoStr)
+        raise SyntaxError("Illegal 'ago' string: %s" % ago)
     number = int(m.group("number"))
     unit = m.group("unit")
     delta = None
@@ -71,5 +73,5 @@ def ago2date(agoStr):
     elif unit == "M" or unit.startswith("month"): delta = datetime.timedelta(days= number*30)
     elif unit == "y" or unit.startswith("year") : delta = datetime.timedelta(days= number*365)
     else:
-        raise SyntaxError("illegal unit for 'ago' string in: %s" % agoStr)
-    return datetime.datetime.utcnow() - delta;
+        raise SyntaxError("Illegal unit for 'ago' string in: %s" % ago)
+    return (from_date_utc or datetime.datetime.utcnow()) - delta;

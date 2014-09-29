@@ -1,0 +1,11 @@
+* Proper logging...
+* Exception wrapping in calls from Connector(?)
+* Check encoding in file I/O from stdin/out
+* pip install / setup
+* get rid of old stuff
+
+* procs take config params as kwargs
+
+* cmdline keyboard interrupt chain... what happens(?)... make first break stop, second abort
+
+* Make README.md **REAL** markdown
