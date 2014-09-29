@@ -199,6 +199,12 @@ class Processor(object):
 
         return self # For fluent programming
 
+    @property
+    def has_output(self):
+        for socket in self.sockets.itervalues():
+            if socket.has_output: return True
+        return False
+
     def connector_info(self, *args):
         "Return list of info for connectors named in *args, or all connectors."
         return [TerminalInfo(self.connectors[n]) for n in self.connectors if not args or n in args ]
@@ -211,9 +217,11 @@ class Processor(object):
 
     #region Handlers for all processors types
 
-    def on_open(self): pass
+    def on_open    (self): pass
 
-    def on_close(self): pass
+    def on_abort   (self): pass
+
+    def on_close   (self): pass
 
     #endregion Handlers for all processor types
 
@@ -224,8 +232,6 @@ class Processor(object):
     def on_startup (self): pass
 
     def on_shutdown(self): pass
-
-    def on_abort   (self): pass
 
     def on_tick    (self): pass
 

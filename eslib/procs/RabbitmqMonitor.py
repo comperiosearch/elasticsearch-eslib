@@ -60,12 +60,19 @@ class RabbitmqMonitor(Generator, RabbitmqBase):
     def on_startup(self):
         self.total = 0
         self.count = 0
+        self._start_consuming()
 
     def on_shutdown(self):
         self._stop_consuming()
 
     def on_abort(self):
         self._stop_consuming()
+
+    def on_suspend(self):
+        self._stop_consuming()
+
+    def on_resume(self):
+        self._start_consuming()
 
     def on_tick(self):
         if self._reconnecting > 0:

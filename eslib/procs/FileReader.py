@@ -113,7 +113,7 @@ class FileReader(Generator):
             else:
                 for line in self._file:
                     self._handle_data(line)
-                    if self.end_tick_reason() or self.suspended:
+                    if self.end_tick_reason or self.suspended:
                         return
                 # If we get here, it means we're done reading this file. Close it and let next tick continue with next file.
                 self._close_file()

@@ -47,9 +47,6 @@ class ElasticsearchReader(Generator):
         return elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
 
     def _release_scroll_context(self):
-        # TODO: The following results in a NotFoundError with Elasticsearch, so return until this bug is researched and fixed
-        return
-
         if self._es and self._scroll_id:
             self._es.clear_scroll(self._scroll_id)
             self._scroll_id = None
@@ -102,14 +99,7 @@ class ElasticsearchReader(Generator):
     def on_startup(self):
         self.total = 0
         self.count = 0
-        self.scroll_id = None
-
-    def on_shutdown(self):
-        self.scroll_id = None
-
-    def on_abort(self):
-        self._release_scroll_context()
-        self._es = None
+        self._scroll_id = None
 
     # Serve this as one big tick yielding documents
     def on_tick(self):
@@ -119,7 +109,8 @@ class ElasticsearchReader(Generator):
         self._es = self._get_es_conn()
         self._scroll_id = None
 
-        if self.end_tick_reason():
+        if self.end_tick_reason:
+            self._es = None
             return
 
         res = self._es.search(
@@ -140,7 +131,9 @@ class ElasticsearchReader(Generator):
         #print "Total number of items to fetch: %d" % remaining
 
         while remaining > 0:
-            if self.end_tick_reason():
+            if self.end_tick_reason:
+                self._release_scroll_context()
+                self._es = None
                 return
             if self.suspended:
                 sleep(self.sleep)
@@ -151,13 +144,14 @@ class ElasticsearchReader(Generator):
                 remaining -= len(hits)
 
                 for hit in hits:
-                    if self.end_tick_reason():
+                    if self.end_tick_reason:
                         return
                     self.count += 1
                     if self.config.limit and self.count > self.config.limit:
-                        self._release_scroll_context()
+                        if (remaining > 0):
+                            self._release_scroll_context()
+                        self._es = None
                         self.stop()
-                        self.es = None
                         return
                     self.output.send(hit)
 

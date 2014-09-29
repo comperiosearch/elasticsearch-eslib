@@ -11,12 +11,13 @@ __version__ = "0.0.1"
 __author__ = "Hans Terje Bakke"
 
 
-from .Terminal import TerminalProtocolException, Terminal
+from .Terminal     import TerminalProtocolException, Terminal
 from .TerminalInfo import TerminalInfo
-from .Connector import Connector
-from .Socket import Socket
-from .Processor import Processor
-from .Generator import Generator
+from .Connector    import Connector
+from .Socket       import Socket
+from .Processor    import Processor
+from .Generator    import Generator
+from .Monitor      import Monitor
 #from .esdoc import *
 
 
@@ -27,7 +28,8 @@ __all__ = (
     "Connector",
     "Socket",
     "Processor",
-    "Generator"
+    "Generator",
+    "Monitor"
 )
 
 
