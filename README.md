@@ -12,7 +12,7 @@ meta fields, that may even be omitted in many cases, and that you can make whate
 
 ```json
 {
-    "_index"  : "(some kind of document cluster, like DB table, search index, etc.)"
+    "_index"  : "(some kind of document cluster, like DB table, search index, etc.)",
     "_type"   : "(document type in some data store)",
     "_id"     : "(document id)",
     "_source" : {

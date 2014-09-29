@@ -9,3 +9,6 @@
 * cmdline keyboard interrupt chain... what happens(?)... make first break stop, second abort
 
 * Make README.md **REAL** markdown
+  - inline code with backticks
+  - bold and italics
+  
