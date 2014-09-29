@@ -10,14 +10,16 @@ But this can easily be converted to something else. For example, a SolrWriter co
 and write it to Solr. The "esdoc" in this case is simply a JSON compatible Python dict type with the following
 meta fields, that may even be omitted in many cases, and that you can make whatever you want of:
 
-    {
-        "_index"  : "(some kind of document cluster, like DB table, search index, etc.)"
-        "_type"   : "(document type in some data store)",
-        "_id"     : "(document id)",
-        "_source" : {
-            (document fields and data go here...)
-        }
+```json
+{
+    "_index"  : "(some kind of document cluster, like DB table, search index, etc.)"
+    "_type"   : "(document type in some data store)",
+    "_id"     : "(document id)",
+    "_source" : {
+        (document fields and data go here...)
     }
+}
+```
 
 ## Introduction
 
@@ -50,7 +52,9 @@ b.subscribe(a)
     
 and execute it with
 
-    a.start()
+```python
+a.start()
+```
 
 In this simple example, the first processor is a generator, and the entire pipeline will finish when 'a'
 completes. The simple "b.subscribe(a)" is possible because there is only one connector in 'b' and only
@@ -61,13 +65,15 @@ in this example), will send a stop signal to its subscribers. This is not always
 Say we had 20 readers sending data to 1 writer. We would not like the writer to stop when the first reader
 completes. To avoid this, we can use
 
-    ...
-    b.keepalive = True
-    a.start()
-    time.sleep(10)  # The reader is still working in its own thread
-    b.put(mydoc)    # Writes to the only connector ("input", of protocol "esdoc")
-    a.wait()        # Wait for a to complete/stop
-    b.stop()        # ... then explicitly stop b
+```python
+...
+b.keepalive = True
+a.start()
+time.sleep(10)  # The reader is still working in its own thread
+b.put(mydoc)    # Writes to the only connector ("input", of protocol "esdoc")
+a.wait()        # Wait for a to complete/stop
+b.stop()        # ... then explicitly stop b
+```
 
 One processor/connector can subscribe to data from many processors/sockets. One processor can have many
 different named connectors, expecting data in various formats (hinted by its 'protocol' tag.) And a processor/socket
@@ -87,66 +93,74 @@ A generator style processor has another thread that generates documents somehow,
 Analogous with the processor.put(doc) command, you might also want to listen to output from a processor in your
 program. You can do this by adding a 'callback' for the socket. For example like this
 
-    output = []
-    processor.add_callback(lambda doc: output.append(doc), socket_name)
-    ...
-    processor.start()
-    processor.wait()
-    print output
+```python
+output = []
+processor.add_callback(lambda doc: output.append(doc), socket_name)
+...
+processor.start()
+processor.wait()
+print output
+```
 
 or instead of the lambda function, use a method that takes a document as an argument, e.g.:
 
-    def do_stuff(document):
-        print "I spy with my little eye, a document containing:", document
-    
-    ...
-    processor.add_callback(do_stuff)
-    ...
-    
+```python
+def do_stuff(document):
+    print "I spy with my little eye, a document containing:", document
+
+...
+processor.add_callback(do_stuff)
+...
+```
+
 ### Protocol compliance
 
 When sockets and connector are joined ("connected"), there is a check for protocol compliance. These are string
 tags using a dot-notation for specializations. A terminal is registered with 'any' if it doesn't care about the
 protocol. Explanation by some examples:
 
-    SOCKET PROTOCOL          CONNECTOR PROTOCOL        WILL MATCH?
-    ---------------          ------------------        -----------
-    seating.chair            seating.chair             yes (of course)
-    seating.chair.armchair   seating                   yes, connector accepts any seating
-    seating                  seating.chair.armchair    no, connector expects armchairs, specifically
-    any                      string                    yes (but, consumer: beware! it might be anything!)
-    string                   any                       yes, we accept anything
-    
+```text
+SOCKET PROTOCOL          CONNECTOR PROTOCOL        WILL MATCH?
+---------------          ------------------        -----------
+seating.chair            seating.chair             yes (of course)
+seating.chair.armchair   seating                   yes, connector accepts any seating
+seating                  seating.chair.armchair    no, connector expects armchairs, specifically
+any                      string                    yes (but, consumer: beware! it might be anything!)
+string                   any                       yes, we accept anything
+```
+
 ### Members for using the Processor (and derivates)
 
-    Read/write:
-        keepalive
-    Read only:
-        accepting
-        stopping
-        running
-        suspended
-        aborted
-    Methods:
-        __init__(name) # Constructor/init
-        subscribe(producer=None, socket_name=None, connector_name=None)
-        unsubscribe(producer=None, socket_name=None, connector_name=None)
-        attach(subscriber, socket_name=None, connector_name=None)
-        detach(subscriber, socket_name=None, connector_name=None)
-        connector_info(*args)  # returns list
-        socket_info(*args)     # returns list
-        start()
-        stop()
-        abort()
-        suspend()
-        resume()
-        wait()
-        put(document, connector_name=None)
-        add_callback(method, socket_name=None)
-    Methods for debugging:
-        DUMP
-        DUMP_connectors
-        DUMP_sockets
+```text
+Read/write:
+    keepalive
+Read only:
+    accepting
+    stopping
+    running
+    suspended
+    aborted
+Methods:
+    __init__(name) # Constructor/init
+    subscribe(producer=None, socket_name=None, connector_name=None)
+    unsubscribe(producer=None, socket_name=None, connector_name=None)
+    attach(subscriber, socket_name=None, connector_name=None)
+    detach(subscriber, socket_name=None, connector_name=None)
+    connector_info(*args)  # returns list
+    socket_info(*args)     # returns list
+    start()
+    stop()
+    abort()
+    suspend()
+    resume()
+    wait()
+    put(document, connector_name=None)
+    add_callback(method, socket_name=None)
+Methods for debugging:
+    DUMP
+    DUMP_connectors
+    DUMP_sockets
+```
         
 ## Writing your own Processor
 
@@ -169,14 +183,16 @@ the processor stop or abort itself, you should call "self.stop()" or "self.abort
 Let's start with a simple processor that receives input on a connector and writes its processed output to a socket.
 Let's make a processor that reverses and optionally swaps the casing of a string.
 
-    from eslib import Processor
+```python
+from eslib import Processor
 
-    class StringReverser(Processor):
+class StringReverser(Processor):
 
-        def __init__(self, name=None):
-            super(StringReverser, self).__init__(name)
-            
-            self.config.swapcase = False
+    def __init__(self, name=None):
+        super(StringReverser, self).__init__(name)
+        
+        self.config.swapcase = False
+```
         
 Notice the "swapcase" config variable. "config" is a predefined empty class that is instantiated. Simply for
 easier containment of config variables.
@@ -186,10 +202,12 @@ In this case we will set "swapcase" if we want to swap the casing of the string 
 We also create a connector for the input and two sockets for the output. One is a pure pass-through while the
 other provides the modified output:
 
-            self.create_connector(self._incoming, "input", "str")
-            self.create_socket("original", "str")
-            self.create_socket("modified", "str")
-            
+```python
+        self.create_connector(self._incoming, "input", "str")
+        self.create_socket("original", "str")
+        self.create_socket("modified", "str")
+```
+
 We use "str" as a protocol tag. This is not the same as a Python type; it is simply a hint. When connecting
 sockets and connectors there is check for protocol compliance. If you want to expect or spew out anything, simply
 specify None or omit the protocol specification.
@@ -197,9 +215,11 @@ specify None or omit the protocol specification.
 The following member methods are called when the processor starts or stops (including getting aborted),
 respectively:
 
-        def on_open(self):  pass  # Before threads are spun up.
-        def on_abort(self): pass  # After call to abort(), but before closing with on_close()
-        def on_close(self): pass  # Final call after stopping/aborting processor; always called
+```python
+    def on_open(self):  pass  # Before threads are spun up.
+    def on_abort(self): pass  # After call to abort(), but before closing with on_close()
+    def on_close(self): pass  # Final call after stopping/aborting processor; always called
+```
 
 This is typically used for opening and closing files, establishing remote connections, resetting counters, etc.
 
@@ -207,31 +227,36 @@ For this example, there is nothing special we want to do when starting and stopp
 processor in this case simply spins up the connector, that will deliver documents to our "_incoming(document)"
 method as soon as it can. So now on to this method:
 
-        def _incoming(self, document):
-            # TODO: You might want to check if the document is indeed a 'str' or 'unicode' here...
-            
-            s = document[::-1]  # Reverse the string of characters
-            if self.config.swapcase:
-                s = s.swapcase()
-            
-            # Write to the sockets:
-            self.sockets["original"].send(document)  # Incoming document, unmodified
-            self.sockets["modified"].send(s)
+```python
+    def _incoming(self, document):
+        # TODO: You might want to check if the document is indeed a 'str' or 'unicode' here...
+        
+        s = document[::-1]  # Reverse the string of characters
+        if self.config.swapcase:
+            s = s.swapcase()
+        
+        # Write to the sockets:
+        self.sockets["original"].send(document)  # Incoming document, unmodified
+        self.sockets["modified"].send(s)
+```
 
 Often, processing can be quite heavy stuff, and quite unnecessary to do a lot of work with producing output if
 there are no consumers. Therefore, you might want to first check if there is actually any consumers expecting
 output either for the entire processor or per socket, with
 
-            if not self.has_output:
-                return
-                
-            # or
+```python
+        if not self.has_output:
+            return
             
-            if self.sockets["modified"].has_output:
-                # calculate and send the stuff...
+        # or
+        
+        if self.sockets["modified"].has_output:
+            # calculate and send the stuff...
+```
 
 ### Useful members for implementing simple Processors
 
+```text
     Methods for you to implement:
         __init__(name=None)    # constructor; remember to call super(your_class, self).__init__(name)
         on_open()              # called before starting execution threads
@@ -253,6 +278,7 @@ output either for the entire processor or per socket, with
     Properties and methods on sockets:
         socket.has_output      # bool; indicating whether the socket has connections (subscribers)
         socket.send(document)  # sends document to connected subscribers for asynchronous processing
+```
 
 ### Processor lifespan
 
@@ -286,24 +312,26 @@ from a message queueing system such as RabbitMQ.
 
 ### Additional useful members for implementing Generators and Monitors
 
-    Read-only properties and variables:
-        accepting
-        stopping
-        running
-        suspended
-        aborted
-        end_tick_reason        # True if there is a reason to exit on_tick; either 'aborted', 'stopping' or
-                               #   not 'running'; but (obs!!) it does not consider 'suspended'
-    Variables for you to update (if you like..):
-        total                  # typically total number of docs to generate (total DB entries, for example)
-        count                  # typically number of docs generated so far (e.g. to see progress towards total)
-    Methods for you to implement:
-        on_startup()           # called at beginning of worker thread; on_open has already been called
-        on_shutdown()          # called when stopping, but before stopped; your chance to finish up
-        on_tick()              # called by worker thread; do all or parts of your stuff in here
-        on_suspend()
-        on_resume()
-        on_abort()             # see comment, below
+```text
+Read-only properties and variables:
+    accepting
+    stopping
+    running
+    suspended
+    aborted
+    end_tick_reason        # True if there is a reason to exit on_tick; either 'aborted', 'stopping' or
+                           #   not 'running'; but (obs!!) it does not consider 'suspended'
+Variables for you to update (if you like..):
+    total                  # typically total number of docs to generate (total DB entries, for example)
+    count                  # typically number of docs generated so far (e.g. to see progress towards total)
+Methods for you to implement:
+    on_startup()           # called at beginning of worker thread; on_open has already been called
+    on_shutdown()          # called when stopping, but before stopped; your chance to finish up
+    on_tick()              # called by worker thread; do all or parts of your stuff in here
+    on_suspend()
+    on_resume()
+    on_abort()             # see comment, below
+```
 
 I'll go through the typical of these event handlers one by one, including the on_open() and on_close() methods,
 in order of lifecycle chronological order.
@@ -387,19 +415,21 @@ Say you have a processor "p1" and "p2" that pass a string (here tagged with prot
 and you want to reverse that string with a processor in the middle, but you don't want to bother with making
 another class. This is how you do it:
 
-    p1 = ...
-    p2 = ...
+```python
+p1 = ...
+p2 = ...
 
-    def reverse(document):
-        socket = send(document[::-1]
+def reverse(document):
+    socket = send(document[::-1]
 
-    middle = Processor("ad-hoc")
-    middle.create_connector(reverse, "input", protocol="str")
-    socket = middle.create_socket("output", protocol="str")
-    
-    p1.attach(middle.attach(p2))
-    p1.start()
-    p2.wait()
+middle = Processor("ad-hoc")
+middle.create_connector(reverse, "input", protocol="str")
+socket = middle.create_socket("output", protocol="str")
+
+p1.attach(middle.attach(p2))
+p1.start()
+p2.wait()
+```
 
 ### A word on multiple inheritance
 
@@ -415,35 +445,37 @@ in the RabbitmqBase constructor. It feels a little "spaghettish", but it works j
 inheriting classes have called the Processor/Generator constructor first. In other words...:
 
 
-    class Config:
-        pass
+```python
+class Config:
+    pass
+
+class Processor(object):
+    def __init__(self, name):
+        self.config = Config()
+        ...
     
-    class Processor(object):
-        def __init__(self, name):
-            self.config = Config()
-            ...
-        
-    class Generator(Processor):
-        def __init__(self, name):
-            super(Generator, self).__init__(name)
-            ...
+class Generator(Processor):
+    def __init__(self, name):
+        super(Generator, self).__init__(name)
+        ...
 
-    class RabbitmqBase(object):
-        def __init__(self):
-            # NOTE: Assumes the existence of self.config from other inherited object (Processor or Generator)
-            self.config.host         = "localhost"
-            self.config.port         = 5672
-            self.config.admin_port   = 15672
-            ...
+class RabbitmqBase(object):
+    def __init__(self):
+        # NOTE: Assumes the existence of self.config from other inherited object (Processor or Generator)
+        self.config.host         = "localhost"
+        self.config.port         = 5672
+        self.config.admin_port   = 15672
+        ...
 
-    class RabbitmqMonitor(Generator, RabbitmqBase):
-        def __init__(self, name=None):
-            Generator.__init__(self, name)
-            RabbitmqBase.__init__(self)
-            ...
+class RabbitmqMonitor(Generator, RabbitmqBase):
+    def __init__(self, name=None):
+        Generator.__init__(self, name)
+        RabbitmqBase.__init__(self)
+        ...
 
-    class RabbitmqWriter(Processor, RabbitmqBase):
-        def __init__(self, name=None):
-            Processor.__init__(self, name)
-            RabbitmqBase.__init__(self)
-            ...
+class RabbitmqWriter(Processor, RabbitmqBase):
+    def __init__(self, name=None):
+        Processor.__init__(self, name)
+        RabbitmqBase.__init__(self)
+        ...
+```
