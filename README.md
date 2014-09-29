@@ -40,12 +40,14 @@ socket on A. In this case, A has the role of 'producer' (to B) and B has the rol
 
 From a Python script, we can create a processing graph as in this example:
 
-    a = ElasticsearchReader()
-    b = ElasticsearchWriter()
-    a.config.index = "employees"
-    b.config.index = "employees_copy"
-    b.subscribe(a)
-
+```python
+a = ElasticsearchReader()
+b = ElasticsearchWriter()
+a.config.index = "employees"
+b.config.index = "employees_copy"
+b.subscribe(a)
+```
+    
 and execute it with
 
     a.start()
