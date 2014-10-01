@@ -11,4 +11,3 @@
 * Make README.md **REAL** markdown
   - inline code with backticks
   - bold and italics
-  

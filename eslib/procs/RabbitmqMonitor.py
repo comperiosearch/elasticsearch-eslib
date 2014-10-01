@@ -1,11 +1,11 @@
 __author__ = 'Hans Terje Bakke'
 
-from ..Generator import Generator
+from ..Monitor import Monitor
 from .RabbitmqBase import RabbitmqBase
 import pika
 import json, time
 
-class RabbitmqMonitor(Generator, RabbitmqBase):
+class RabbitmqMonitor(Monitor, RabbitmqBase):
     """
     Monitor a queue in RabbitMQ.
     Assumes data with type 'str', 'unicode', 'int', 'float' or 'json' from RabbitMQ.
