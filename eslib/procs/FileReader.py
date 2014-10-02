@@ -32,7 +32,7 @@ class FileReader(Generator):
         super(FileReader, self).__init__(**kwargs)
         self.output = self.create_socket("output", None, "Documents read. Either entire file as one, or per line. Either raw string or dict.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             filename          = None,
             filenames         = [],
             document_per_file = False,

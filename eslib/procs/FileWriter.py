@@ -23,7 +23,7 @@ class FileWriter(Processor):
         super(FileWriter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", None, "Incoming documents to write to file as string or json objects per line.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             filename = None,
             append   = False
         )

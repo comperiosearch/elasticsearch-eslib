@@ -10,6 +10,7 @@ class MyGenerator(Generator):
         self.create_socket("output", "proto_str")
         self.stop_at = 0
         self.sleep_time = 0.2
+        self.stopping_delay = 0
 
     def on_startup(self):
         print "%s: starting" % self.name
@@ -32,7 +33,7 @@ class MyGenerator(Generator):
         print "SERIAL/STOP: %d/%d" % (self.serial_no, self.stop_at)
         if self.stop_at and self.serial_no == self.stop_at:
             self.stop()
-            #time.sleep(1)
+            time.sleep(self.stopping_delay)
 
 
 class MyInOut(Processor):
@@ -94,6 +95,7 @@ class TestExecution(unittest.TestCase, Connections):
         gen = MyGenerator(name="mygen")
         gen.add_callback(self.callback)
         gen.stop_at = 5
+        gen.stopping_delay = 1
         gen.start()
 
         time.sleep(0.1)
@@ -130,7 +132,7 @@ class TestExecution(unittest.TestCase, Connections):
 
         self.callback_count = 0
 
-        gen = MyGenerator("mygen")
+        gen = MyGenerator(name="mygen")
         gen.add_callback(self.callback)
         gen.start()
 
@@ -173,10 +175,10 @@ class TestExecution(unittest.TestCase, Connections):
         print document
 
     def test_sequence(self):
-        p1 = MyInOut("p1")
-        p2 = MyInOut("p2")
-        p3 = MyInOut("p3")
-        p4 = MyInOut("p4")
+        p1 = MyInOut(name="p1")
+        p2 = MyInOut(name="p2")
+        p3 = MyInOut(name="p3")
+        p4 = MyInOut(name="p4")
         p1.attach(p2.attach(p3.attach(p4)))
 
         self.seq = []
@@ -195,8 +197,8 @@ class TestExecution(unittest.TestCase, Connections):
 
     def test_no_keepalive(self):
 
-        g = MyGenerator("generator")
-        r = MyInOut("receiver")
+        g = MyGenerator(name="generator")
+        r = MyInOut(name="receiver")
         r.subscribe(g)
         g.stop_at = 5
 
@@ -208,8 +210,8 @@ class TestExecution(unittest.TestCase, Connections):
 
     def test_keepalive1(self):
 
-        g = MyGenerator("generator")
-        r = MyInOut("receiver")
+        g = MyGenerator(name="generator")
+        r = MyInOut(name="receiver")
         r.subscribe(g)
         g.stop_at = 5
         r.keepalive = True

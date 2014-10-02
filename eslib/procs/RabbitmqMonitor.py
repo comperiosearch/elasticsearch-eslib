@@ -32,7 +32,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
 
         self.output = self.create_socket("output", None, "Document received on monitored queue.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             max_reconnects    = 3,
             reconnect_timeout = 3
         )

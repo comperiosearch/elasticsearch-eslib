@@ -20,7 +20,7 @@ class Processor(Configurable):
         super(Processor, self).__init__(**kwargs)
         self.sleep = 0.001
 
-        self.config.set_if_missing(name=self.__class__.__name__)
+        self.config.set_default(name=self.__class__.__name__)
 
         self.is_generator = False
 

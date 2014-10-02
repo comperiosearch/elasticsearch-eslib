@@ -36,7 +36,7 @@ class CsvConverter(Processor):
         self.create_connector(self._incoming, "input", "csv", "Document in 'csv' format. First document is optionally column list.")
         self.output = self.create_socket("output", "esdoc", "Documents converted from 'csv' to 'esdoc' format.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             index           = None,
             doctype         = None,
             columns         = None,

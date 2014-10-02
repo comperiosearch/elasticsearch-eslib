@@ -28,7 +28,7 @@ class ElasticsearchReader(Generator):
         super(ElasticsearchReader, self).__init__(**kwargs)
         self.output = self.create_socket("output", "esdoc", "Documents retrieved from Elasticsearch.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             hosts      = None,
             index      = None,
             doctype    = None,

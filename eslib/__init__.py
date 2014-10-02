@@ -18,6 +18,7 @@ from .Socket       import Socket
 from .Processor    import Processor
 from .Generator    import Generator
 from .Monitor      import Monitor
+from .Controller   import Controller
 #from .esdoc import *
 
 
@@ -29,7 +30,8 @@ __all__ = (
     "Socket",
     "Processor",
     "Generator",
-    "Monitor"
+    "Monitor",
+    "Controller"
 )
 
 

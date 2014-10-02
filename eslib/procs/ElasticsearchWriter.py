@@ -41,7 +41,7 @@ class ElasticsearchWriter(Generator):
         self.create_connector(self._incoming, "input", "esdoc", "Incoming documents for writing to configured index.")
         self.output = self.create_socket("output", "esdoc", "Modified documents (attempted) written to Elasticsearch.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             hosts         = None,
             index         = None,
             doctype       = None,

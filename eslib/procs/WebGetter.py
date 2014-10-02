@@ -125,7 +125,7 @@ class WebGetter(Generator):
         self.create_connector(self._incoming, "input", "urlrequest", "Request for a URL with info about what/who is requesting it.")
         self.output = self.create_socket("output", "webpage", "Documents containing the web page content fetched from a requested URL.")
 
-        self.config.set_if_missing(
+        self.config.set_default(
             domains = {}
         )
 

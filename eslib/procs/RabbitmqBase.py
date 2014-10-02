@@ -9,7 +9,7 @@ class RabbitmqBase(Configurable):
     def __init__(self, **kwargs):
         super(RabbitmqBase, self).__init__(**kwargs)
 
-        self.config.set_if_missing(
+        self.config.set_default(
             host         = "localhost",
             port         = 5672,
             admin_port   = 15672,
