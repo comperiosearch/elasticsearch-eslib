@@ -31,20 +31,22 @@ class CsvConverter(Processor):
         type_field        = "_type"  : Name of field to map to meta field '_type'.
     """
 
-    def __init__(self, name=None):
-        super(CsvConverter, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(CsvConverter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", "csv", "Document in 'csv' format. First document is optionally column list.")
         self.output = self.create_socket("output", "esdoc", "Documents converted from 'csv' to 'esdoc' format.")
 
-        self.config.index           = None
-        self.config.doctype         = None
-        self.config.columns      = None
-        self.config.skip_first_line = False
-        self.config.delimiter       = ","
+        self.config.set_if_missing(
+            index           = None,
+            doctype         = None,
+            columns         = None,
+            skip_first_line = False,
+            delimiter       = ",",
 
-        self.config.id_field        = "_id"
-        self.config.index_field     = "_index"
-        self.config.type_field      = "_type"
+            id_field        = "_id",
+            index_field     = "_index",
+            type_field      = "_type"
+        )
 
         self._columns = []
         self._first_line_processed = False

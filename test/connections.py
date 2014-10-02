@@ -4,10 +4,10 @@ from eslib import Processor
 class Connections(object):
 
     def create_processors(self):
-        self.a = Processor("processor_a")
-        self.b = Processor("processor_b")
-        self.c = Processor("processor_c")
-        self.d = Processor("processor_d")
+        self.a = Processor(name="processor_a")
+        self.b = Processor(name="processor_b")
+        self.c = Processor(name="processor_c")
+        self.d = Processor(name="processor_d")
 
     def create_terminals(self):
         self.a.create_connector(None, "input") # Protocol anything

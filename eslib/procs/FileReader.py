@@ -28,19 +28,20 @@ class FileReader(Generator):
                                       'skip_comment_line' is True.
     """
 
-    def __init__(self, name=None):
-        super(FileReader, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(FileReader, self).__init__(**kwargs)
         self.output = self.create_socket("output", None, "Documents read. Either entire file as one, or per line. Either raw string or dict.")
 
-        self.config.filename          = None
-        self.config.filenames         = []
-        self.config.document_per_file = False
-        self.config.raw_lines         = True
-        self.config.strip_line        = True
-        self.config.skip_blank_line   = True
-        self.config.skip_comment_line = True
-        self.config.comment_prefix    = "#"
-
+        self.config.set_if_missing(
+            filename          = None,
+            filenames         = [],
+            document_per_file = False,
+            raw_lines         = True,
+            strip_line        = True,
+            skip_blank_line   = True,
+            skip_comment_line = True,
+            comment_prefix    = "#",
+        )
         self._filenames = []
         self._file = None
         self._filename_index = 0

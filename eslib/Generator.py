@@ -1,8 +1,8 @@
 from .Processor import Processor
 
 class Generator(Processor):
-    def __init__(self, name):
-        super(Generator, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(Generator, self).__init__(**kwargs)
         self.is_generator = True
 
         # Variables for keeping track of progress.

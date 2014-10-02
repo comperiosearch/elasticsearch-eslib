@@ -11,3 +11,27 @@
 * Make README.md **REAL** markdown
   - inline code with backticks
   - bold and italics
+
+
+
+r = ElasticReader(name="myesreader", index="bla", doctype="bla")
+    self.config.name = "myesreader"
+    self.config.index = "bla"
+    self.config.doctype="bla"
+
+    self.name=config.name
+
+
+r = EReader("myreader")
+
+r = EReader()
+
+r = EReader(name="hei", index="blei")
+
+config
+  .name
+  .index
+
+config = {name=...}
+
+r = EReader(**config)

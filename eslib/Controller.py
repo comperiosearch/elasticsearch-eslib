@@ -1,5 +1,3 @@
-from .Processor import Processor
-
 class Controller(object):
     def __init__(self, *args):
         self._items = args[:]

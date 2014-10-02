@@ -28,10 +28,8 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         reconnect_timeout = 3          :
     """
 
-    def __init__(self, name=None):
-        #super(RabbitmqWriter, self).__init__(name)
-        Processor.__init__(self, name)
-        RabbitmqBase.__init__(self)
+    def __init__(self, **kwargs):
+        super(RabbitmqWriter, self).__init__(kwargs)
 
         self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 

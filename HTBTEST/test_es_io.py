@@ -15,15 +15,17 @@ def listener(document):
 #def mymethod(document):
 #    print "Full name: %s %s" % (document["_source"]["fname"], document["_source"]["lname"])
 
-r = ElasticsearchReader()
-r.config.index = "family"
+r = ElasticsearchReader(index="family")
+
+print r.config.__dict__
+
+{index="family"}
 
 #p = Processor("ppp")
 #p.create_connector(mymethod, "myname")
 #p.subscribe(r)
 
-w = ElasticsearchWriter()
-w.config.index = "family_copy"
+w = ElasticsearchWriter(index="family_copy")
 #w.config.hosts = ["eslab.comperio.no"]
 
 w.subscribe(r)

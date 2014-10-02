@@ -1,21 +1,23 @@
 __author__ = 'Hans Terje Bakke'
 
+from ..Configurable import Configurable
 import pyrabbit.api as rabbit
 import pika
 import time
 
-class RabbitmqBase(object):
-    def __init__(self):
+class RabbitmqBase(Configurable):
+    def __init__(self, **kwargs):
+        super(RabbitmqBase, self).__init__(**kwargs)
 
-        # NOTE: Assumes the existence of self.config from other inherited object (Processor)
-
-        self.config.host         = "localhost"
-        self.config.port         = 5672
-        self.config.admin_port   = 15672
-        self.config.username     = None
-        self.config.password     = None
-        self.config.virtual_host = None
-        self.config.queue        = "default"
+        self.config.set_if_missing(
+            host         = "localhost",
+            port         = 5672,
+            admin_port   = 15672,
+            username     = None,
+            password     = None,
+            virtual_host = None,
+            queue        = "default"
+        )
 
         self.config.max_reconnects   = 3
         self.config.reconnect_timeout = 3

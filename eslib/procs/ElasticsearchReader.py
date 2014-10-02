@@ -24,24 +24,26 @@ class ElasticsearchReader(Generator):
         batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
     """
 
-    def __init__(self, name=None):
-        super(ElasticsearchReader, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(ElasticsearchReader, self).__init__(**kwargs)
         self.output = self.create_socket("output", "esdoc", "Documents retrieved from Elasticsearch.")
+
+        self.config.set_if_missing(
+            hosts      = None,
+            index      = None,
+            doctype    = None,
+            limit      = 0,
+            filters    = [],
+            since      = None,
+            before     = None,
+            timefield  = "_timestamp",
+            size       = 50, # Number of items to retrieve *per shard* per call to Elasticsearch
+            scroll_ttl = "10m", # Must be long enough to process one batch of results (and suspend..)
+            scan       = True # For efficiency; disable this when sorting
+        )
 
         self._es = None
         self._scroll_id = None
-
-        self.config.hosts = None
-        self.config.index = None
-        self.config.doctype = None
-        self.config.limit = 0
-        self.config.filters = []
-        self.config.since = None
-        self.config.before = None
-        self.config.timefield = "_timestamp"
-        self.config.size = 50 # Number of items to retrieve *per shard* per call to Elasticsearch
-        self.config.scroll_ttl = "10m" # Must be long enough to process one batch of results (and suspend..)
-        self.config.scan = True # For efficiency; disable this when sorting
 
     def _get_es_conn(self):
         return elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)

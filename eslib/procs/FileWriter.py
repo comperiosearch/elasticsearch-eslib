@@ -19,12 +19,14 @@ class FileWriter(Processor):
         filename          = None    : If not set then 'stdout' is assumed.
         append            = False   : Whether to append to existing file, rather than overwrite.
     """
-    def __init__(self, name=None):
-        super(FileWriter, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(FileWriter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", None, "Incoming documents to write to file as string or json objects per line.")
 
-        self.config.filename = None
-        self.config.append   = False
+        self.config.set_if_missing(
+            filename = None,
+            append   = False
+        )
 
         self._file = None
 

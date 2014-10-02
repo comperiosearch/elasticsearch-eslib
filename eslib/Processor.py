@@ -6,24 +6,21 @@ from __future__ import absolute_import
 
 import logging
 import threading, time
+from .Configurable import Configurable
 from .Terminal import Terminal
 from .Terminal import TerminalProtocolException
 from .TerminalInfo import TerminalInfo
 from .Connector import Connector
 from .Socket import Socket
 
-class Config:
-    pass
-
-class Processor(object):
+class Processor(Configurable):
     "Base class for workflow processing object."
 
-    def __init__(self, name):
+    def __init__(self, **kwargs):
+        super(Processor, self).__init__(**kwargs)
         self.sleep = 0.001
 
-        self.config = Config()
-
-        self.name = name or self.__class__.__name__
+        self.config.set_if_missing(name=self.__class__.__name__)
 
         self.is_generator = False
 
@@ -31,19 +28,7 @@ class Processor(object):
         self.sockets    = {}
         self.connectors = {}
 
-        # Set up logging
-        parts = []
-        if not self.__module__ == "__main__": parts.append(self.__module__)
-        className = self.__class__.__name__
-        parts.append(className)
-        if name:
-            if name.endswith(".py"):
-                name = name[:-3]
-            if not name == className: parts.append(name)
-        fullPath = ".".join(parts)
-        #print "FULL=[%s]" % fullPath
-        self.doclog = logging.getLogger("doclog.%s"  % fullPath)
-        self.log     = logging.getLogger("proclog.%s" % fullPath)
+        self._setup_logging()
 
         # Execution control status, needed by generators and monitors
         self.accepting = False
@@ -56,6 +41,28 @@ class Processor(object):
         self._thread = None
         self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
         self._initialized = False # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
+
+    @property
+    def name(self):
+        return self.config.name
+
+    def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
+        # Set up logging
+        parts = []
+        if not self.__module__ == "__main__": parts.append(self.__module__)
+        className = self.__class__.__name__
+        parts.append(className)
+
+        name = self.name
+        if name:
+            if name.endswith(".py"):
+                name = name[:-3]
+            if not name == className:
+                parts.append(name)
+        fullPath = ".".join(parts)
+        #print "FULL=[%s]" % fullPath
+        self.doclog = logging.getLogger("doclog.%s"  % fullPath)
+        self.log     = logging.getLogger("proclog.%s" % fullPath)
 
     def _iter_subscribers(self):
         for socket in self.sockets.itervalues():

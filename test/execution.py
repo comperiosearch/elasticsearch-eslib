@@ -4,8 +4,8 @@ from eslib import Processor, Generator, Controller
 
 
 class MyGenerator(Generator):
-    def __init__(self, name):
-        super(MyGenerator, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(MyGenerator, self).__init__(**kwargs)
         self.create_connector("input", "proto_str")
         self.create_socket("output", "proto_str")
         self.stop_at = 0
@@ -36,8 +36,8 @@ class MyGenerator(Generator):
 
 
 class MyInOut(Processor):
-    def __init__(self, name):
-        super(MyInOut, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(MyInOut, self).__init__(**kwargs)
         self.create_connector(self.proc_input, "input", "proto_str")
         self.create_socket("output", "proto_str")
         self.count = 0
@@ -58,10 +58,10 @@ class TestExecution(unittest.TestCase, Connections):
 
         self.callback_count = 0
 
-        p = MyInOut("myinout")
+        p = MyInOut(name="myinout")
         p.add_callback(self.callback)#, "output")
         p.start()
-        for i in range(10):
+        for i in xrange(10):
             #print "wait loop tick %d" % i
             #p.connectors["input"].receive("X%d" % i)
             p.put("X%d" % i)#, "input")
@@ -75,7 +75,7 @@ class TestExecution(unittest.TestCase, Connections):
 
         self.callback_count = 0
 
-        gen = MyGenerator("mygen")
+        gen = MyGenerator(name="mygen")
         gen.add_callback(self.callback)
         gen.start()
         for i in range(10):
@@ -91,7 +91,7 @@ class TestExecution(unittest.TestCase, Connections):
 
         self.callback_count = 0
 
-        gen = MyGenerator("mygen")
+        gen = MyGenerator(name="mygen")
         gen.add_callback(self.callback)
         gen.stop_at = 5
         gen.start()
@@ -225,9 +225,9 @@ class TestExecution(unittest.TestCase, Connections):
 
     def test_keepalive2(self):
 
-        g1 = MyGenerator("generator1")
-        g2 = MyGenerator("generator2")
-        g3 = MyGenerator("generator3")
+        g1 = MyGenerator(name="generator1")
+        g2 = MyGenerator(name="generator2")
+        g3 = MyGenerator(name="generator3")
         g1.stop_at = 1
         g2.stop_at = 2
         g3.stop_at = 3
@@ -235,25 +235,25 @@ class TestExecution(unittest.TestCase, Connections):
         g2.sleep_time = 2
         g3.sleep_time = 3
 
-        r1 = MyInOut("receiver_keep")
+        r1 = MyInOut(name="receiver_keep")
         r1.keepalive = True
         r1.subscribe(g1)
         r1.subscribe(g2)
         r1.subscribe(g3)
 
-        r2 = MyInOut("receiver_nokeep")
+        r2 = MyInOut(name="receiver_nokeep")
         r2.subscribe(g1)
         r2.subscribe(g2)
         r2.subscribe(g3)
 
-        f1 = MyInOut("finale1")
+        f1 = MyInOut(name="finale1")
         f1.subscribe(r1)
 
-        f12 = MyInOut("finale12")
+        f12 = MyInOut(name="finale12")
         f12.subscribe(r1)
         f12.subscribe(r2)
 
-        f2 = MyInOut("finale2")
+        f2 = MyInOut(name="finale2")
         f2.subscribe(r2)
 
         g1.start()

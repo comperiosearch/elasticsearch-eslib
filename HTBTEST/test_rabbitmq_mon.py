@@ -13,13 +13,13 @@ def callback(document):
     print "Received doc of type '%s'." % type(document)
     print document
 
-r = RabbitmqMonitor()
-r.config.host = "nets.comperio.no"
-r.config.username = "nets"
-r.config.password = "nets"
-r.config.virtual_host = "dev"
-r.config.queue = "default"
-
+r = RabbitmqMonitor(
+    host = "nets.comperio.no",
+    username = "nets",
+    password = "nets",
+    virtual_host = "dev",
+    queue = "default"
+)
 r.add_callback(callback)
 
 r.start()

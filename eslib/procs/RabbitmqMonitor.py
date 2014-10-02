@@ -27,14 +27,15 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         reconnect_timeout = 3          :
     """
 
-    def __init__(self, name=None):
-        Generator.__init__(self, name)
-        RabbitmqBase.__init__(self)
+    def __init__(self, **kwargs):
+        super(RabbitmqMonitor, self).__init__(**kwargs)
 
         self.output = self.create_socket("output", None, "Document received on monitored queue.")
 
-        self.config.max_reconnects    = 3
-        self.config.reconnect_timeout = 3
+        self.config.set_if_missing(
+            max_reconnects    = 3,
+            reconnect_timeout = 3
+        )
 
         self._reconnecting = 0
 

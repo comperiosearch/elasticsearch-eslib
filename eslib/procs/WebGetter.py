@@ -120,12 +120,14 @@ class WebGetter(Generator):
         domains           = {}       : A dict of domains to fetch urls from upon request.
     """
 
-    def __init__(self, name=None):
-        super(WebGetter, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(WebGetter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", "urlrequest", "Request for a URL with info about what/who is requesting it.")
         self.output = self.create_socket("output", "webpage", "Documents containing the web page content fetched from a requested URL.")
 
-        self.config.domains = {}
+        self.config.set_if_missing(
+            domains = {}
+        )
 
         self._domains = []
 

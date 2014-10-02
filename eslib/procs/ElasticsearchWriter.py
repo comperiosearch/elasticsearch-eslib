@@ -36,18 +36,20 @@ class ElasticsearchWriter(Generator):
         batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
     """
 
-    def __init__(self, name=None):
-        super(ElasticsearchWriter, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(ElasticsearchWriter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", "esdoc", "Incoming documents for writing to configured index.")
         self.output = self.create_socket("output", "esdoc", "Modified documents (attempted) written to Elasticsearch.")
 
-        self.config.hosts         = None
-        self.config.index         = None
-        self.config.doctype       = None
-        self.config.update_fields = []
-        self.config.batchsize     = 1000
-        # TODO: SHALL WE USE AN OPTIONAL ALTERNATIVE TIMESTAMP FIELD FOR PROCESSED/INDEXED TIME? (OR NOT?)
-        #self.config.timefield    = "_timestamp"
+        self.config.set_if_missing(
+            hosts         = None,
+            index         = None,
+            doctype       = None,
+            update_fields = [],
+            batchsize     = 1000
+            # TODO: SHALL WE USE AN OPTIONAL ALTERNATIVE TIMESTAMP FIELD FOR PROCESSED/INDEXED TIME? (OR NOT?)
+            #timefield    = "_timestamp"
+        )
 
         self._queue = Queue()
         self._queue_lock = Lock()
