@@ -1,11 +1,11 @@
 __author__ = 'Hans Terje Bakke'
 
+# TODO: READ AND HONOUR robots.txt FROM TARGET LIST
+
 from ..Generator import Generator
 from datetime import datetime, timedelta
 from threading import Lock
 import eslib.web
-
-# TODO: READ AND HONOUR robots.txt FROM TARGET LIST
 
 class Domain(object):
     def __init__(self, domain_id, url_prefix):
@@ -86,11 +86,6 @@ class Domain(object):
             if self.rate_number and len(self._flist) >= self.rate_number:
                 break  # We've reached our rate limit, so do not add any more items for now
             # Add the item if it is ready:
-#            print "*** --------- %s ----------" % info.url
-#            print "*** LAST  =", info.last_fetch_time
-#            print "*** TTL   =", self.ttl
-#            if info.last_fetch_time:
-#                print "*** SSINCE=", (now - info.last_fetch_time).seconds
             if not info.last_fetch_time or (now - info.last_fetch_time).seconds > self.ttl:
                 info.last_fetch_time = now  # We will get it now
                 info.fetch_count += 1
