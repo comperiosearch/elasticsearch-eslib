@@ -188,14 +188,17 @@ from eslib import Processor
 
 class StringReverser(Processor):
 
-    def __init__(self, name=None):
-        super(StringReverser, self).__init__(name)
+    def __init__(self, **kwargs):
+        super(StringReverser, self).__init__(**kwargs)
         
-        self.config.swapcase = False
+        self.config.set_default(swapcase = False)
 ```
         
-Notice the "swapcase" config variable. "config" is a predefined empty class that is instantiated. Simply for
-easier containment of config variables.
+Notice **kwargs, the "swapcase" config variable and the already instantiated config class. It is meant for
+containing config variables. The incoming keyword arguments are put into the config as attributes. We *must* set
+default values for all the config variables we want to use inside the processor, as this is also a way to define
+their existence, should they not come in as keyword arguments. Otherwise, we risk getting exceptions when try to
+use them.
 
 In this case we will set "swapcase" if we want to swap the casing of the string we are reversing.
 
@@ -422,60 +425,11 @@ p2 = ...
 def reverse(document):
     socket = send(document[::-1]
 
-middle = Processor("ad-hoc")
+middle = Processor(name="ad-hoc")
 middle.create_connector(reverse, "input", protocol="str")
 socket = middle.create_socket("output", protocol="str")
 
 p1.attach(middle.attach(p2))
 p1.start()
 p2.wait()
-```
-
-### A word on multiple inheritance
-
-Multiple inheritance in Python can be nice (and fun :-)). I often find it handy to pull out common code and use multiple
-inheritance when the two derived classes I have do not need to share the same base class, just parts of it.
-
-For example my RabbitmqMonitor is a 'Generator', while my RabbitmqWriter is a 'Processor'. Apart from that,
-they should share some common Rabbitmq code. So far all is well.
-
-But I also want to set the common config variables in the constructor for the common code (in RabbitmqBase).
-But the self.config is created in Processor, which RabbbitmqBase does not inherit, although I assume it exists
-in the RabbitmqBase constructor. It feels a little "spaghettish", but it works just fine as long as the
-inheriting classes have called the Processor/Generator constructor first. In other words...:
-
-
-```python
-class Config:
-    pass
-
-class Processor(object):
-    def __init__(self, name):
-        self.config = Config()
-        ...
-    
-class Generator(Processor):
-    def __init__(self, name):
-        super(Generator, self).__init__(name)
-        ...
-
-class RabbitmqBase(object):
-    def __init__(self):
-        # NOTE: Assumes the existence of self.config from other inherited object (Processor or Generator)
-        self.config.host         = "localhost"
-        self.config.port         = 5672
-        self.config.admin_port   = 15672
-        ...
-
-class RabbitmqMonitor(Generator, RabbitmqBase):
-    def __init__(self, name=None):
-        Generator.__init__(self, name)
-        RabbitmqBase.__init__(self)
-        ...
-
-class RabbitmqWriter(Processor, RabbitmqBase):
-    def __init__(self, name=None):
-        Processor.__init__(self, name)
-        RabbitmqBase.__init__(self)
-        ...
 ```
