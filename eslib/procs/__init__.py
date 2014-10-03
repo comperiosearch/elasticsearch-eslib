@@ -14,10 +14,7 @@ from .FileWriter          import FileWriter
 from .RabbitmqMonitor     import RabbitmqMonitor
 from .RabbitmqWriter      import RabbitmqWriter
 from .CsvConverter        import CsvConverter
-#from .SentimentProcessor  import SentimentProcessor
-#from .RemovePattern       import RemovePattern
-#from .TweetRemoveLinks    import TweetRemoveLinks
-#from .TweetAnalyzer       import TweetAnalyzer
+from .WebGetter           import WebGetter
 
 __all__ = (
     "ElasticsearchReader",
@@ -26,12 +23,12 @@ __all__ = (
     "FileWriter",
     "RabbitmqMonitor",
     "RabbitmqWriter",
-    "CsvConverter"
+    "CsvConverter",
+    "WebGetter"
 #    "DocumentFilter"
 #    "RemoveHTML",
 #    "RemovePattern",
 #    "SentimentProcessor",
-#    "Tweet2Web",
 #    "TweetAnalyzer",
 #    "TweetRemoveLinks"
 )
