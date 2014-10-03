@@ -45,13 +45,13 @@ class RabbitmqWriter(Processor, RabbitmqBase):
 
         data = None
         msg_type = None
-        if type(document) in [str, unicode]:
+        if type(document) in set([str, unicode]):
             data = document
             msg_type = type(document).__name__
-        elif type(document) in [int, float]:
+        elif type(document) in set([int, float]):
             data = str(document)
             msg_type = type(document).__name__
-        elif type(document) in [list, dict]:
+        elif type(document) in set([list, dict]):
             try:
                 data = json.dumps(document)
             except TypeError as e:
