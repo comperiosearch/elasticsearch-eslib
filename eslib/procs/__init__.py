@@ -15,7 +15,7 @@ from .RabbitmqMonitor     import RabbitmqMonitor
 from .RabbitmqWriter      import RabbitmqWriter
 from .CsvConverter        import CsvConverter
 from .WebGetter           import WebGetter
-from .neo4j_writer        import Neo4jWriter
+from .Neo4jWriter         import Neo4jWriter
 
 __all__ = (
     "ElasticsearchReader",
