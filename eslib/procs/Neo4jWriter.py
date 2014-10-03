@@ -1,6 +1,6 @@
 from ..Processor import Processor
 from ..neo4j import Neo4j
-from ..twitter import Twitter
+#from ..twitter import Twitter
 
 class Neo4jWriter(Processor):
     """
