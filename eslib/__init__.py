@@ -19,7 +19,7 @@ from .Processor    import Processor
 from .Generator    import Generator
 from .Monitor      import Monitor
 from .Controller   import Controller
-#from .esdoc import *
+from .Configurable import Configurable
 
 
 __all__ = (
@@ -31,7 +31,8 @@ __all__ = (
     "Processor",
     "Generator",
     "Monitor",
-    "Controller"
+    "Controller",
+    "Configurable",
 )
 
 
