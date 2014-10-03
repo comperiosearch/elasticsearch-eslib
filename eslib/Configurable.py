@@ -1,5 +1,6 @@
 class Config(object):
     def __init__(self, **config):
+        super(Config, self).__init__()
         if config is not None:
             self.__dict__ = config
             self.defaults = {}
