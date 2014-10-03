@@ -6,6 +6,8 @@ __author__ = 'Hans Terje Bakke'
 # TODO: Test update_fields with new documents, and see if all fields are created or only those listed.
 # TODO: Also verify that only mentioned fields are changed in existing documents.
 
+# TODO: Don't wait forever for a batch... submit if it's too long since the last batch
+
 import elasticsearch
 import logging
 from Queue import Queue

@@ -29,6 +29,9 @@ class Domain(object):
         self._lock = Lock()
         self._flist           = []    # List of recent fetches within our allowance (will never exceed rate_number)
 
+    def __str__(self):
+        return self.domain_id
+
     def add(self, url, what, who):
         """
         Note: URL has already been checked to comply with the url_prefix.
@@ -64,7 +67,7 @@ class Domain(object):
 
         now = datetime.utcnow()
         if self.deny_until_time and now < self.deny_until_time:
-            return  # Domain is not ready yet
+            return []  # Domain is not ready yet
 
         # Trim the list of recent fetches (flist) so that only those done within the allowance window (rate_per_seconds) remain
         ready = []
@@ -77,10 +80,18 @@ class Domain(object):
 
         # Pick as many as we can until we fill up our rate_number within the current rate_per_seconds.
         for info in self.url_infos.itervalues():
+            #print "*** trying:", info.url
+            if not info.pressure:
+                continue
             if self.rate_number and len(self._flist) >= self.rate_number:
                 break  # We've reached our rate limit, so do not add any more items for now
             # Add the item if it is ready:
-            if info.last_fetch_time and info.last_fetch_time + timedelta(seconds=self.ttl) > now:
+#            print "*** --------- %s ----------" % info.url
+#            print "*** LAST  =", info.last_fetch_time
+#            print "*** TTL   =", self.ttl
+#            if info.last_fetch_time:
+#                print "*** SSINCE=", (now - info.last_fetch_time).seconds
+            if not info.last_fetch_time or (now - info.last_fetch_time).seconds > self.ttl:
                 info.last_fetch_time = now  # We will get it now
                 info.fetch_count += 1
                 self.fetch_count += 1
@@ -114,6 +125,8 @@ class UrlInfo(object):
         self.pressure         = 0     # A kind of "pressure" on the URL; how many pending requests for this URL
         self.requested_by     = {}    # Of elements { what: [ who, ... ] }
 
+    def __str__(self):
+        return self.url
 
 class WebGetter(Generator):
     """
@@ -212,9 +225,9 @@ class WebGetter(Generator):
 
         # Create object
         domain = Domain(domain_id, url_prefix)
-        self.rate_number = domain_config.get("rate_number") or 0
-        self.rate_window = domain_config.get("rate_window") or 0
-        self.ttl         = domain_config.get("ttl")         or 0
+        domain.rate_number = domain_config.get("rate_number") or 0
+        domain.rate_window = domain_config.get("rate_window") or 0
+        domain.ttl         = domain_config.get("ttl")         or 0
 
         with self._lock:
             self._domains.append(domain)
@@ -258,7 +271,6 @@ class WebGetter(Generator):
     #endregion Utility methods and properties
 
     def on_open(self):
-        print "*** OPENING"
         self._domains = []
         for domain_config in self.config.domains:
             self.add_domain(domain_config)
@@ -277,9 +289,6 @@ class WebGetter(Generator):
         return False  # Incoming URL request was not in a monitored domain
 
     def _incoming(self, document):
-        print "*** INCOMING:", document
-
-
         if not type(document) is dict or not "url" in document:
             self.doclog.warning("Expected dict type document with at least a 'url' attribute.")
             return
@@ -291,10 +300,7 @@ class WebGetter(Generator):
 
         domain = self._find_matching_domain(url)
         if not domain:
-            print "*** NOT MATCHING: %s" % url
             return  # Incoming URL request was not in a monitored domain
-
-        print "*** MATCH for domain '%s':" % domain.domain_id, url
 
         what = document.get("what")
         who = document.get("who")
