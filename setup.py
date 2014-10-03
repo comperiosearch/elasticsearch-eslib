@@ -3,4 +3,5 @@
 # pika, pyrabbit
 # html.parser
 # requests
-# yaml (for prog logging init stuff)
+# pyyaml (for prog logging init stuff)
+# TwitterAPI
