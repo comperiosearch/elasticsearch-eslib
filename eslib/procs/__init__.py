@@ -16,6 +16,7 @@ from .RabbitmqWriter      import RabbitmqWriter
 from .CsvConverter        import CsvConverter
 from .WebGetter           import WebGetter
 from .Neo4jWriter         import Neo4jWriter
+from .Neo4jReader         import Neo4jReader
 
 __all__ = (
     "ElasticsearchReader",
@@ -26,7 +27,8 @@ __all__ = (
     "RabbitmqWriter",
     "CsvConverter",
     "WebGetter",
-    "Neo4jWriter"
+    "Neo4jWriter",
+    "Neo4jReader"
 #    "DocumentFilter"
 #    "RemoveHTML",
 #    "RemovePattern",
