@@ -44,7 +44,7 @@ class Neo4j(Configurable):
         print "Connected to Neo4j-server OK, version= {0}".format(version)
 
     @staticmethod
-    def _get_edge_query(from_id, rel_type, to_id):
+    def get_edge_query(from_id, rel_type, to_id):
         """
         Returns a merge cypher-query.
 
@@ -64,7 +64,7 @@ class Neo4j(Configurable):
                  "MERGE a-[:%s]->b "
                  "RETURN *") % (from_id, to_id, rel_type))
     @staticmethod
-    def _get_node_merge_query(user):
+    def get_node_merge_query(user):
         labels = "user"
         if user["level"] == 0:
             labels += ":seed"
@@ -79,7 +79,7 @@ class Neo4j(Configurable):
         return statement, props
 
 
-    def _get_node_query_if_properties(self, uid):
+    def get_node_query_if_properties(self, uid):
         """
         Return the query that fetches a node with the given id.
         Note: the id is the property id, not the neo4j id.
@@ -129,7 +129,7 @@ class Neo4j(Configurable):
 
         """
 
-        create_str = self._get_edge_query(from_id, rel_type, to_id)
+        create_str = self.get_edge_query(from_id, rel_type, to_id)
         create_rq = self._build_rq([create_str], "graph")
 
         # PERHAPS NOT COMMIT EVERY EDGE?

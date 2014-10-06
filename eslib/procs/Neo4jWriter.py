@@ -63,11 +63,11 @@ class Neo4jWriter(Generator):
             print("Document was not parsed")
             return
 
-        query = self.neo4j._get_edge_query(from_id, edge_type, to_id)
+        query = self.neo4j.get_edge_query(from_id, edge_type, to_id)
         self.edge_queue.append(query)
 
     def _incoming_user(self, document):
-        query, params = self.neo4j._get_node_merge_query(document)
+        query, params = self.neo4j.get_node_merge_query(document)
         self.user_queue.append((query, params))
 
     def on_tick(self):

@@ -42,7 +42,8 @@ class Neo4jReader(Generator):
         before appending the query to self._queue
 
         """
-        query = self.neo4j._get_node_query_if_properties(id_)
+
+        query = self.neo4j.get_node_query_if_properties(id_)
         self._queue.append((id_, query))
 
     def on_tick(self):
