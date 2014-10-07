@@ -4,7 +4,7 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
 import sys, json
-
+from ..time import json_serializer_isodate
 
 class FileWriter(Processor):
     """
@@ -51,6 +51,6 @@ class FileWriter(Processor):
     def _incoming(self, document):
         if document:
             if type(document) is dict:
-                print >> self._file, json.dumps(document)
+                print >> self._file, json.dumps(document, default=json_serializer_isodate)
             else:
                 print >> self._file, document

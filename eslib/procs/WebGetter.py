@@ -5,9 +5,13 @@ __author__ = 'Hans Terje Bakke'
 from ..Generator import Generator
 from datetime import datetime, timedelta
 from threading import Lock
-import eslib.web
+from .. import web, debug
+import logging
+import Queue
 
 class Domain(object):
+    ALLOW_PRESSURE_WHILE_NOT_EXPIRED = True
+
     def __init__(self, domain_id, url_prefix):
         # Config
         self.domain_id        = domain_id
@@ -45,22 +49,35 @@ class Domain(object):
             info = UrlInfo(self.domain_id, url)
             self.url_infos.update({url: info})
         info.total_count += 1
-        info.pressure    += 1
         self.total_count += 1
-        self.pressure    += 1
-        who_list = info.requested_by.get(what)
-        if who_list:
-            if not who in who_list:
-                who_list.append(who)
-        else:
-            info.requested_by.update({what: [ who ]})
+        # Only add pressure if greater than ttl
+        if Domain.ALLOW_PRESSURE_WHILE_NOT_EXPIRED or \
+                (not info.last_fetch_time or (datetime.utcnow() - info.last_fetch_time).seconds > self.ttl):
+            info.pressure    += 1
+            self.pressure    += 1
+
+        if what:
+            if not what in info.requested_by:
+                info.requested_by[what] = ([who] if who else [])
+                info._requested_by_changed = True
+            elif who:
+                who_list = info.requested_by.get(what)
+                if who_list:
+                    if not who in who_list:
+                        who_list.append(who)
+                        info._requested_by_changed = True
+                else:
+                    info.requested_by.update({what: [ who ]})
+                    info._requested_by_changed = True
 
         self._lock.release()
 
-    def get_ready(self):
+    def get_ready(self, stopping=False):
         """
         Will return all URLs that are ready to be fetched, and update their timing data,
         AS IF they were fetched just now.
+
+        :returns [(UrlInfo, bool)]  : A list tuples of UrlInfo and whether the ttl had expired.
         """
         if not self.pressure:
             return []
@@ -86,15 +103,20 @@ class Domain(object):
             if self.rate_number and len(self._flist) >= self.rate_number:
                 break  # We've reached our rate limit, so do not add any more items for now
             # Add the item if it is ready:
-            if not info.last_fetch_time or (now - info.last_fetch_time).seconds > self.ttl:
-                info.last_fetch_time = now  # We will get it now
-                info.fetch_count += 1
-                self.fetch_count += 1
+            ttl_expired =  (not info.last_fetch_time or (now - info.last_fetch_time).seconds > self.ttl)
+            ##print "GET#URL=%s, RB_CHANGED=%s, EXPIRED=%s" % (info.url, info._requested_by_changed, ttl_expired)
+            if ttl_expired or stopping:
                 self.pressure -= info.pressure
                 info.pressure = 0
-                ready.append(info)
-                if self.rate_number:
-                    self._flist.append(info)
+                if ttl_expired or (stopping and info._requested_by_changed):
+                    info._requested_by_changed = False
+                    if ttl_expired:
+                        info.last_fetch_time = now  # We will get it now
+                        info.fetch_count += 1
+                        self.fetch_count += 1
+                    ready.append((info, ttl_expired))
+                    if self.rate_number:
+                        self._flist.append(info)
 
         self._lock.release()
 
@@ -120,6 +142,8 @@ class UrlInfo(object):
         self.pressure         = 0     # A kind of "pressure" on the URL; how many pending requests for this URL
         self.requested_by     = {}    # Of elements { what: [ who, ... ] }
 
+        self._requested_by_changed = False
+
     def __str__(self):
         return self.url
 
@@ -133,40 +157,33 @@ class WebGetter(Generator):
         What web domain prefixes to monitor are given in the config variable 'domains', which is a dict type with
         the following entry format, of which only the url_prefix is required:
 
-        {
-            "domain_id"     : "(a nice name for this entry)",
-            "url_prefix"    : "(url prefix)",
-            "rate_number"   : (allowed number or requests...),
-            "rate_window"   : (...per this number of seconds),
-            "ttl"           : (time to live in seconds, before we can ask for this url again)
-        }
+            domain_id     # A nice name for this entry.
+            url_prefix    # URL prefix.
+            rate_number   # Allowed number or requests...
+            rate_window   # ...per this number of seconds.
+            ttl           # Time to live in seconds, before we can ask for this url again.
 
     Input:
 
         Potential URL requests are matched with url_prefixes and marked as pending if it is something configured
         to be fetched. The format of an input message of protocol "urlrequest" is:
 
-        {
-            "url"  : ""
-            "what" : "(e.g. twitter_mon)",
-            "who"  : "(e.g. some_user_id)"
-        }
+            url
+            what  # e.g. "twitter_mon"
+            who   # e.g. some user id
 
     Output:
 
-# TODO: should this be of 'esdoc' format instead?
-
         The protocol "webpage" is a dictionary with the following fields:
 
-        {
-            "domain_id"     : "",
-            "url_prefix"    : "",
-            "url"           : "",
-            "timestamp"     : "",
-            "requested_by": [ { "what": "(e.g. twitter_mon)" ["(who)", ...] }, ... ],
-# TODO: content type, etc
-            "content"       : ""
-        }
+            _id                str   # Using the URL as ID.
+            _timestamp         str   # When the content was fetched.
+            _source            dict of ...
+                domain         str
+                requested_by   list  # Of of dicts of format [ what : [ who, ...] }, ... ]
+                content        str
+                content_type   str
+                encoding       str
 
     The requested_by is the total unique list of requesters that we know about so far (since this processor
     was started).
@@ -197,8 +214,9 @@ class WebGetter(Generator):
 
         self._domains = []
         self._lock = Lock()
+        self._queue = None
 
-        self._web_getter = eslib.web.WebGetter(WebGetter.ALLOWED_SIZE, WebGetter.ALLOWED_CONTENT_TYPES)
+        self._web_getter = web.WebGetter(WebGetter.ALLOWED_SIZE, WebGetter.ALLOWED_CONTENT_TYPES)
 
 
     #region Utility methods and properties
@@ -265,14 +283,14 @@ class WebGetter(Generator):
 
     #endregion Utility methods and properties
 
-    def on_open(self):
-        self._domains = []
-        for domain_config in self.config.domains:
-            self.add_domain(domain_config)
+    #region Handle incoming
 
     def _domain_match(self, url, url_prefix):
         # TODO: Might want to make this smarter; with/with-out protocol prefix, user info, etc.
-        return url.startswith(url_prefix)
+        if url_prefix == "*":
+            return True
+        else:
+            return url.startswith(url_prefix)
 
     def _find_matching_domain(self, url):
         url = url.lower()
@@ -306,6 +324,80 @@ class WebGetter(Generator):
         self.total += 1
         self.count += 1
 
+    #endregion
+
+    #region Generator implementation
+    # Looping through the domains and fetching when required
+
+    def _get_ready(self):
+        ready = []
+        with self._lock:
+            for domain in self._domains:
+                ready_tuples = domain.get_ready(self.stopping)
+                ready.extend(ready_tuples)
+        return ready
+
+    def _fill_work_queue(self):
+        for ready_tuple in self._get_ready():
+            self._queue.put(ready_tuple)
+
+    def _process_queue_item(self):
+        info, ttl_expired = self._queue.get()
+        self._queue.task_done()
+
+        body = {}
+        if ttl_expired:  # Otherwise, do not fetch from web; only metadata like requested_by, etc
+            # Fetch
+            try:
+                body = self._web_getter.get(info.url)
+                if not body:
+                    self.doclog.error("No body for URL: %s" % info.url)
+                    return
+            except IOError as e:
+                self.doclog.warning(e.message)
+                return
+            except ValueError as e:
+                self.doclog.error(e.message)
+                return
+
+        # Then we have a document with fields 'content', 'content_type' and 'encoding', now make it more esdoc'ish
+        esdoc = {"_id" : info.url, "_timestamp" : datetime.utcnow(), "_source" : body}
+        # Add remaining stuff to the body/fields:
+        body.update({"domain": info.domain_id, "requested_by" : info.requested_by})
+
+        # TODO: Handle encoding here or leave that to the consumers?
+        if self.doclog.isEnabledFor(logging.DEBUG):
+            self.doclog.debug("Created doc with content size=%-8s for URL=%s" % \
+                (debug.byte_size_string(len(body.get("content") or 0), 1), info.url))
+
+        self.output.send(esdoc)
+
+
+    def on_open(self):
+        self._domains = []
+        for domain_config in self.config.domains:
+            self.add_domain(domain_config)
+        # This way we make sure we have an empty queue...
+        self._queue = Queue.Queue()
+
+    def on_shutdown(self):
+        while self.pressure:
+            if self._queue.empty():
+                self._fill_work_queue()
+            while self._queue.qsize():
+                self._process_queue_item()
+
+    def on_tick(self):
+        if self._queue.empty():
+            self._fill_work_queue()
+            return  # Next tick will process
+        else:
+            self._process_queue_item()
+
+    #endregion Generator implementation
+
+    #region Debugging
+
     def DUMP_domains(self, *args):
         for domain in self._domains[:]:
             if args and not domain.domain_id in args:
@@ -336,35 +428,4 @@ class WebGetter(Generator):
                     print "    pressure        : ", info.pressure
                     print "    requested_by    : ", info.requested_by
 
-
-
-# TODO: Generator implementation, looping through the domains and fetching when required
-
-    def on_abort(self): pass
-    def on_shutdown(self): pass
-    def on_suspend(self): pass
-    def on_resume(self): pass
-
-    def on_tick(self):
-        pass
-
-        # try:
-        #     webdoc = self.web_getter.get(url, self.index, self.doctype, created_at=created_at)
-        #     if not webdoc: continue
-        #     if self.debuglevel >= 0:
-        #         self.doclog(doc, "Created doc with content size=%-8s as /%s/%s/%s" % \
-        #             (eslib.debug.byteSizeString(len(webdoc["_source"]["content"]), 1), self.index, self.doctype, webdoc.get("_id")))
-        # except IOError as e:
-        #     self.doclog(doc, e.args[0], loglevel=logger.WARNING)
-        #     continue
-        # except ValueError as e:
-        #     self.doclog(doc, e.args[0], loglevel=logger.ERROR)
-        #     continue
-
-    def get_ready(self):
-        with self._lock:
-            for domain in self._domains:
-                dd = domain.get_ready()
-                print "%-10s : " % domain.domain_id, len(dd)
-
-
+    #endregion

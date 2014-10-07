@@ -22,10 +22,11 @@ class WebGetter(object):
         self.max_size = 1024*1024 # 1 MB
         if max_size > 0: self.max_size = max_size
 
-    def get(self, url, index=None, doctype=None, **kwargs):
+    def get(self, url):
         # Fetch web page
         try:
             res = requests.get(url, verify=False)
+            res.raise_for_status
         except:
             msg = "URL failed: %s" % url
             raise IOError(msg)
@@ -49,7 +50,7 @@ class WebGetter(object):
         # Extract vitals from web result
         id = url # res.url
         encoding = res.encoding
-        content = res.text # TODO: Convert to UTF-8 right away if pure text? Or how to tell Elasticsearch about encoding?
+        content = res.text
 
         # Repeat size check with actual content size
         if self.max_size > 0:
@@ -58,14 +59,5 @@ class WebGetter(object):
                 msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
                 raise ValueError(msg)
 
-        # Create ES document from web page
         body = {"content": content, "content_type": content_type, "encoding": encoding}
-        webdoc = eslib.createdoc(body, index, doctype, id)
-
-        # Additional fields...
-        created_at = datetime.datetime.utcnow()
-        if "created_at" in kwargs:
-            eslib.putfield(body, "created_at", kwargs["created_at"])
-        eslib.putfield(body, "created_at", eslib.time.date2iso(created_at))
-
-        return webdoc
+        return body
