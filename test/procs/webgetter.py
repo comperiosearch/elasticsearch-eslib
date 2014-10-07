@@ -218,10 +218,10 @@ class TestWebGetter(unittest.TestCase):
         g.put({"url":"http://www.comperio.no", "what":"twitter", "who":last_comperio_user})
 #        g.put({"url":"https://www.uninett.no", "what":"twitter", "who":"htb"})
 #        g.put({"url":"https://www.uninett.no/uninett-as", "what":"twitter", "who":"htb"})
-        g.put({"url":"http://blog.comperiosearch.com/", "what":"twitter", "who":"htb2"})
+#        g.put({"url":"http://blog.comperiosearch.com/", "what":"twitter", "who":"htb2"})
 
         #g.DUMP_domains()
-        time.sleep(5)
+        time.sleep(4)
         #g.DUMP_domains()
         print "STOPPING"
         self.is_stopping = True
