@@ -7,14 +7,14 @@ __author__ = 'Hans Terje Bakke'
 # TODO: Also verify that only mentioned fields are changed in existing documents.
 
 # TODO: Don't wait forever for a batch... submit if it's too long since the last batch
+# TODO: flush (for pushing a batch)
 
 import elasticsearch
-import logging
 from Queue import Queue
 from threading import Lock
 import copy
 from ..Generator import Generator
-from time import sleep
+from .. import esdoc_logmsg
 
 
 class ElasticsearchWriter(Generator):
@@ -62,9 +62,9 @@ class ElasticsearchWriter(Generator):
         doctype = self.config.doctype or document.get("_type")
 
         if not index:
-            self.doclog(document, "Missing '_index' field in input and no override.", loglevel=logging.ERROR)
+            self.doclog.error(esdoc_logmsg("Missing '_index' field in input and no override."))
         elif not doctype:
-            self.doclog(document, "Missing '_type' field in input and no override.", loglevel=logging.ERROR)
+            self.doclog(esdoc_logmsg("Missing '_type' field in input and no override."))
         else:
             # NOTE: This sends the original incoming 'document' as reference to _add()
             #       It only does a shallow copy of the original document and replace the meta data '_index' and '_type'

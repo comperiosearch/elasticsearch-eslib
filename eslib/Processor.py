@@ -61,7 +61,7 @@ class Processor(Configurable):
                 parts.append(name)
         fullPath = ".".join(parts)
         #print "FULL=[%s]" % fullPath
-        self.doclog = logging.getLogger("doclog.%s"  % fullPath)
+        self.doclog  = logging.getLogger("doclog.%s"  % fullPath)
         self.log     = logging.getLogger("proclog.%s" % fullPath)
 
     def _iter_subscribers(self):

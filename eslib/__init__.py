@@ -100,4 +100,14 @@ logging.Logger.verbose = _log_verbose
 logging.Logger.trace   = _log_trace
 logging.Logger.debugn  = _log_debug_n
 
+def esdoc_logmsg(self, doc, message):
+    """
+    :type doc: dict
+    :type message: str
+    """
+    id      = doc.get("_id")
+    index   = doc.get("_index")
+    doctype = doc.get("_type")
+    return "/%s/%s/%s: %s" % (index, doctype, id)
+
 #endregion Logging stuff
