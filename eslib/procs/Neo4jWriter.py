@@ -20,8 +20,8 @@ class Neo4jWriter(Generator):
 
     def __init__(self, **kwargs):
         super(Neo4jWriter, self).__init__(**kwargs)
-        self.create_connector(self._incoming_edge, "edge", "neo.edge")
-        self.create_connector(self._incoming_user, "user", "twitter.user")
+        self.create_connector(self._incoming_edge, "edge", "graph-edge")
+        self.create_connector(self._incoming_user, "user", "graph-user")
         # This could be better
         self.edge_queue = []
         self.last_edge_commit = time.time()

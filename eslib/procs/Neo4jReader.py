@@ -18,7 +18,7 @@ class Neo4jReader(Generator):
 
     def __init__(self, **kwargs):
         super(Neo4jReader, self).__init__(**kwargs)
-        self.create_connector(self._incoming_id, "id", "json")
+        self.create_connector(self._incoming_id, "id", "str")
         self.create_socket("ids", "str", "Outputs ids that lack properties")
         self.config.set_default(
             batchsize=20,

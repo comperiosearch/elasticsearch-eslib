@@ -68,3 +68,39 @@ Format
 ```csv
 "field","field,"field","..."
 ```
+
+
+## graph-edge
+The graph-edge protocol is simply a dictionary with three mandatory keys,
+that together represents an edge.
+
+Used by
+    Neo4jWriter.edge (connector)
+
+Format
+
+    from    str # The property-id of the source node
+    type    str # The type of the edge. Follows / mentions /retweets
+    to      str # The property-id of the receiving node
+
+Note that all fields are mandatory.
+
+## graph-user
+
+The graph-user protocol is a dictionary holding properties.
+
+Used by
+    
+    Neo4jWriter.user (connector)
+    TwitterUserGetter.user (socket)
+
+Format
+    
+    id              str              
+    location        str             #Optional
+    description     str             #Optional
+    screen_name     str             #Optional
+    lang            str             #Optional
+    name            str             #Optional
+    created_at      date.isoformat()#Optional
+    
