@@ -60,9 +60,12 @@ class Twitter(Configurable):
         self.limits = {"users": user_lim, "followers": flw_lim}
 
     def blew_rate_limit(self, protocol):
-        raw_rq = self.api.request("application/rate_limit_status",
-                                  {"resources": protocol}).text
-        resp = json.loads(text)
+        """
+
+        """
+        resp_text = self.api.request("application/rate_limit_status",
+                                     {"resources": protocol}).text
+        resp = json.loads(resp_text)
         if protocol == "users":
             wait_time = int(resp["resources"]["users"]["/users/lookup"]["remaining"])
         else:
