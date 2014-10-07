@@ -11,7 +11,6 @@ class Neo4j(Configurable):
 
     def __init__(self, **kwargs):
         super(Neo4j, self).__init__(**kwargs)
-
         self.config.set_default(host="localhost", port="7474")
         self._set_config()
         self.validate()
@@ -65,9 +64,17 @@ class Neo4j(Configurable):
                  "RETURN *") % (from_id, to_id, rel_type))
     @staticmethod
     def get_node_merge_query(user):
+        """
+        Merge a node in neo4j. Set the nodes properties
+        to 'user' regardless of what's in neo4j already.
+
+        Args:
+            user: twitter.user dictionary
+        Raises:
+            KeyError: if the user has no "id" field.
+
+        """
         labels = "user"
-        if user["level"] == 0:
-            labels += ":seed"
 
         statement = (("MERGE (n {id: {node_id}}) "
                      "ON MATCH SET n={props}, n :%s "
@@ -217,29 +224,3 @@ class Neo4j(Configurable):
                             headers=self.config.headers["get"])
         resp.raise_for_status()
         return resp.json()
-
-
-    # def parse_user(self, item):
-    #     """
-    #     This method tries to put a user into neo4j.
-    #
-    #     Args:
-    #         item: A dict representing a user.
-    #
-    #     """
-    #     node_id = item["id"]
-    #     labels = "user"
-    #     if item["level"] == 0:
-    #         labels += ":seed"
-    #     path = "/".join([self.path, "transaction", "commit"])
-    #     rq = self.get_cypher_dict()
-    #
-    #     statement = "MERGE (n {id: {node_id}}) ON MATCH SET n={props}, n :%s ON CREATE SET n={props}, n :%s RETURN (n)" %(labels, labels)
-    #     rq["statements"][0]["parameters"] = {"node_id": node_id,
-    #                                          "labels": labels,
-    #                                          "props": item
-    #                                          }
-    #     rq["statements"][0]["statement"] = statement
-    #     resp = requests.post(path,
-    #                          data=json.dumps(rq),
-    #                          headers=self.headers["put"])

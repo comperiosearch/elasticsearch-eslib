@@ -17,6 +17,7 @@ from .CsvConverter        import CsvConverter
 from .WebGetter           import WebGetter
 from .Neo4jWriter         import Neo4jWriter
 from .Neo4jReader         import Neo4jReader
+from .TwitterUserGetter   import TwitterUserGetter
 
 __all__ = (
     "ElasticsearchReader",
@@ -28,7 +29,8 @@ __all__ = (
     "CsvConverter",
     "WebGetter",
     "Neo4jWriter",
-    "Neo4jReader"
+    "Neo4jReader",
+    "TwitterUserGetter"
 #    "DocumentFilter"
 #    "RemoveHTML",
 #    "RemovePattern",
