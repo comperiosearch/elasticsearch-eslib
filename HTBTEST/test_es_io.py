@@ -17,10 +17,6 @@ def listener(document):
 
 r = ElasticsearchReader(index="family")
 
-print r.config.__dict__
-
-{index="family"}
-
 #p = Processor("ppp")
 #p.create_connector(mymethod, "myname")
 #p.subscribe(r)

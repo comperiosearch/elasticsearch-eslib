@@ -13,11 +13,13 @@ from .FileReader          import FileReader
 from .FileWriter          import FileWriter
 from .RabbitmqMonitor     import RabbitmqMonitor
 from .RabbitmqWriter      import RabbitmqWriter
+from .HttpMonitor         import HttpMonitor
+#from .TwitterMonitor      import TwitterMonitor
 from .CsvConverter        import CsvConverter
 from .WebGetter           import WebGetter
 from .Neo4jWriter         import Neo4jWriter
 from .Neo4jReader         import Neo4jReader
-from .TwitterUserGetter   import TwitterUserGetter
+#from .TwitterUserGetter   import TwitterUserGetter
 
 __all__ = (
     "ElasticsearchReader",
@@ -26,6 +28,8 @@ __all__ = (
     "FileWriter",
     "RabbitmqMonitor",
     "RabbitmqWriter",
+    "HttpMonitor",
+    "TwitterMonitor",
     "CsvConverter",
     "WebGetter",
     "Neo4jWriter",
