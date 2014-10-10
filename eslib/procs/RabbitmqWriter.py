@@ -2,7 +2,8 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
 from .RabbitmqBase import RabbitmqBase
-import pika, json
+from .. import time
+import json
 
 
 class RabbitmqWriter(Processor, RabbitmqBase):
@@ -53,7 +54,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             msg_type = type(document).__name__
         elif type(document) in set([list, dict]):
             try:
-                data = json.dumps(document)
+                data = json.dumps(document, default=time.json_serializer_isodate)
             except TypeError as e:
                 self.doclog.warning("JSON serialization failed: %s" % e.message)
                 return

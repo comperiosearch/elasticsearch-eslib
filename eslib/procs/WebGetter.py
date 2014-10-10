@@ -281,6 +281,23 @@ class WebGetter(Generator):
             num += domain.pressure
         return num
 
+    def fetch(self, url, what=None, who=None, domain_id=None):
+        "Fetch a URL and populate a document dict similar to what this processor would produce."
+        body = self._web_getter.get(url)
+        if not body:
+            raise Exception("No body for URL: %s" % url)
+            return
+        # Then we have a document with fields 'content', 'content_type' and 'encoding', now make it more esdoc'ish
+        esdoc = {"_id" : url, "_timestamp" : datetime.utcnow(), "_source" : body}
+        if domain_id:
+            body["domain"] = domain_id
+        if what:
+            who_list = []
+            body["requested_by"] = {what: who_list}
+            if who:
+                who_list.append(who)
+        return esdoc
+
     #endregion Utility methods and properties
 
     #region Handle incoming
