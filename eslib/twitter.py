@@ -7,7 +7,6 @@ import json
 import time
 
 
-
 class Twitter(Configurable):
     """Connects to twitter and retrieves information. Cares about rate limits"""
 
@@ -55,9 +54,19 @@ class Twitter(Configurable):
         flw_lim = flw_rq["resources"]["followers"]["/followers/ids"]["limit"]
         flw_lim = int(flw_lim)
 
+        raw_rq = self.api.request("application/rate_limit_status",
+            {"resources": "friends"}).text
+
+        fr_rq = json.loads(raw_rq)
+        fr_lim = int(fr_rq["resources"]["friends"]["/friends/ids"]["limit"])
+
+
         self.last_call = {"users": 0,
-                          "followers": 0}
-        self.limits = {"users": user_lim, "followers": flw_lim}
+                          "followers": 0,
+                          "friends": 0}
+        self.limits = {"users": user_lim,
+                       "followers": flw_lim,
+                       "friends": fr_lim}
 
     def blew_rate_limit(self, protocol):
         """
@@ -117,7 +126,7 @@ class Twitter(Configurable):
         return rq.text
         
 
-    def get_followers(self, uid=None, name=None):
+    def get_follows(self, uid=None, name=None, outgoing=False):
         """
         Returns a list of followers for a give uid.
 
@@ -129,23 +138,24 @@ class Twitter(Configurable):
             The ids of all the followers of the specified twitter user.
 
         """
-        if uid:
-            print("Getting followers of %i" % uid)
+        method = "followers"
+        if outgoing:
+            method = "friends"
         params = {"screen_name": name, "user_id": uid,
                   "count": "5000"}
         cursor = -1
         while cursor != 0:
-            self.sleep_for_necessary_time("followers")
+            self.sleep_for_necessary_time(method)
             params["cursor"] = cursor
-            rq = self.api.request("followers/ids", params)
+            rq = self.api.request("{0}/ids".format(method), params)
             res = json.loads(rq.text)
             try:
                 cursor = res["next_cursor"]
             except KeyError:
                 print res
                 cursor = 0
-            for id in res["ids"]:
-                yield id
+            for id_ in res["ids"]:
+                yield id_
 
     def raw_to_dict(self, raw_user):
         user = {}

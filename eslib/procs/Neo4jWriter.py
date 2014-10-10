@@ -11,11 +11,6 @@ class Neo4jWriter(Generator):
     This is a pipeline step which primary function is to push an edge
     between the author of a tweet to all the people mentioned in the tweet.
     
-    A secondary thing this Processor does, is make sure that the nodes involved
-    in the relationship (edge), has fully populated properties within neo4j.
-    The way this happens is that if the node in neo4j does not have properties,
-    the Process will ask Twitter for the properties for thate node.
-
     """
 
     def __init__(self, **kwargs):
