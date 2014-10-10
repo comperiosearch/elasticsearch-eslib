@@ -13,6 +13,7 @@ def callback(document):
     print "Received doc of type '%s'." % type(document)
     print document
 
+
 r = RabbitmqMonitor(
     host = "nets.comperio.no",
     username = "nets",
@@ -24,4 +25,7 @@ r.add_callback(callback)
 
 r.start()
 
-r.wait()  # Will never finish
+try:
+    r.wait()  # Will never finish
+except KeyboardInterrupt:
+    r.stop()

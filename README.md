@@ -351,8 +351,13 @@ etc, must be accounted for.
 
 This is called after the worker thread has started, but before we enter the run loop. This is
 another place for initialization logic. What you do here might as well have been placed in on_open(),
-but not vice versa. This is typically not the place to verify config variables. Do that in on_open(). 
-But this is a logical place to host the code that is the reverse of the "shutdown" code.
+but not vice versa. This is typically not the place to verify config variables or raise exceptions.
+Do that in on_open(). But this is a logical place to host the code that is the reverse of the
+"shutdown" code.
+
+This method is called at the beginning of the worker thread. No on_tick or other generator events
+will be called before it has completed. It is NOT GUARANTEED to have finished before
+connectors start delivering documents. on_open, however, is always called before connectors are started."
 
 #### on_tick()
 

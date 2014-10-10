@@ -279,6 +279,55 @@ class TestExecution(unittest.TestCase, Connections):
         self.assertTrue(r1.count == 6 and r2.count == 3, "Receivers should have produced 6, 3 items..")
         self.assertTrue(f1.count == 6 and f12.count == 6 and f2.count == 3, "Finales should have processed 6, 6, 3 items.")
 
+    def test_startup(self):
+        gen = SeqGen()
+        gen.start()
+        gen.put("Hello")
+        gen.stop()
+        gen.wait()
+
+        for s in gen.seq:
+            print s
+
+        self.assertTrue(len(gen.seq) == 5)
+        self.assertTrue(gen.seq[2] == "incoming/Hello")
+
+from threading import Lock
+
+class SeqGen(Generator):
+    def __init__(self, **kwargs):
+        super(SeqGen, self).__init__(**kwargs)
+        self.create_connector(self.incoming, "input")
+        self.seq = []
+        self.lock = Lock()
+
+    def on_open(self):
+        with self.lock:
+            self.seq.append("on_open")
+
+    def on_startup(self):
+        with self.lock:
+            time.sleep(1)
+            self.seq.append("on_startup")
+            time.sleep(1)
+
+    def on_shutdown(self):
+        time.sleep(1)
+        with self.lock:
+            self.seq.append("on_shutdown")
+        time.sleep(1)
+
+    def on_abort(self):
+        with self.lock:
+            self.seq.append("on_abort")
+
+    def on_close(self):
+        with self.lock:
+            self.seq.append("on_close")
+
+    def incoming(self, document):
+        with self.lock:
+            self.seq.append("incoming/%s" % document)
 
 if __name__ == '__main__':
     unittest.main()

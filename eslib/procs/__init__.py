@@ -14,7 +14,7 @@ from .FileWriter          import FileWriter
 from .RabbitmqMonitor     import RabbitmqMonitor
 from .RabbitmqWriter      import RabbitmqWriter
 from .HttpMonitor         import HttpMonitor
-#from .TwitterMonitor      import TwitterMonitor
+from .TwitterMonitor      import TwitterMonitor
 from .CsvConverter        import CsvConverter
 from .WebGetter           import WebGetter
 from .Neo4jWriter         import Neo4jWriter

@@ -168,9 +168,9 @@ class WebGetter(Generator):
         Potential URL requests are matched with url_prefixes and marked as pending if it is something configured
         to be fetched. The format of an input message of protocol "urlrequest" is:
 
-            url
-            what  # e.g. "twitter_mon"
-            who   # e.g. some user id
+            url                str
+            what               str   # e.g. "twitter_mon"
+            who                str   # e.g. some user id
 
     Output:
 

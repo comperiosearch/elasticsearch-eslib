@@ -1,0 +1,81 @@
+{
+  "id_str": "520149420122578944",
+  "text": "These clowns must hope that we never cum under attack from any force-r we capable of protecting ourselves?",
+  "truncated": false,
+  "lang": "en",
+  "created_at": "Thu Oct 09 09:51:00 +0000 2014",
+  "timestamp_ms": "1412848260328",
+  "source": "<a href=\"http://blackberry.com/twitter\" rel=\"nofollow\">Twitter for BlackBerry®</a>",
+
+  "in_reply_to_user_id_str": null,
+  "in_reply_to_screen_name": null,
+  "in_reply_to_status_id_str": null,
+
+  "geo": {
+    "coordinates": [
+      -34.07079,
+      18.57407
+    ],
+    "type": "Point"
+  },
+
+  "place": {
+    "country": "South Africa",
+    "country_code": "ZA"
+  },
+
+  "entities": {
+    "urls": [
+      {
+        "display_url": "eraliquida.com/?p=1010",
+        "expanded_url": "http://www.eraliquida.com/?p=1010",
+        "indices": [
+          7,
+          29
+        ],
+        "url": "http://t.co/2OdUzFv0Ev"
+      }
+    ],
+    "hashtags": [
+      {
+        "text": "偽2ch騒動",
+        "indices": [
+          100,
+          107
+        ]
+      },
+      {
+        "text": "偽2ch問題",
+        "indices": [
+          108,
+          115
+        ]
+      }
+    ],
+    "user_mentions": [
+      {
+        "name": "اقوى العروض وارخصها",
+        "screen_name": "rt_ld",
+        "id_str": "2649736855",
+        "indices": [
+          0,
+          6
+        ],
+        "id": 2649736855
+      }
+    ]
+  },
+
+  "user": {
+    "id_str": "2196916282",
+    "screen_name": "Mark_50598",
+    "name": "mark fester",
+    "lang": "en",
+    "description": null,
+    "created_at": "Tue Nov 26 14:21:35 +0000 2013",
+    "location": "",
+    "profile_image_url": "http://abs.twimg.com/sticky/default_profile_images/default_profile_1_normal.png",
+    "protected": false,
+    "geo_enabled": true
+  }
+}

@@ -236,7 +236,13 @@ class Processor(Configurable):
 
     # self.is_generator = True
 
-    def on_startup (self): pass
+    def on_startup (self):
+        """
+        This method is called at the beginning of the worker thread. No on_tick or other generator events
+        will be called before it has completed. It is NOT GUARANTEED to have finished before
+        connectors start delivering documents. on_open, however, is always called before connectors are started."
+        """
+        pass
 
     def on_shutdown(self): pass
 

@@ -80,7 +80,7 @@ Used by
 Format
 
     from    str # The property-id of the source node
-    type    str # The type of the edge. Follows / mentions /retweets
+    type    str # The type of the edge. ("follows", "author", "mention", "quote")
     to      str # The property-id of the receiving node
 
 Note that all fields are mandatory.

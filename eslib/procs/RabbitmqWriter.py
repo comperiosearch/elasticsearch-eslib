@@ -1,5 +1,8 @@
 __author__ = 'Hans Terje Bakke'
 
+# TODO: Use queue/exchange so that multiple monitors can connect and get the same data.
+# TODO:    Right now they consume (empty) the queue and contend for the same data.
+
 from ..Processor import Processor
 from .RabbitmqBase import RabbitmqBase
 from .. import time
@@ -30,7 +33,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
     """
 
     def __init__(self, **kwargs):
-        super(RabbitmqWriter, self).__init__(kwargs)
+        super(RabbitmqWriter, self).__init__(**kwargs)
 
         self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 
