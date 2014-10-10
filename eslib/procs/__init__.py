@@ -15,6 +15,7 @@ from .FileWriter            import FileWriter
 from .RabbitmqMonitor       import RabbitmqMonitor
 from .RabbitmqWriter        import RabbitmqWriter
 from .HttpMonitor           import HttpMonitor
+from .TwitterMonitor        import TwitterMonitor
 from .CsvConverter          import CsvConverter
 from .WebGetter             import WebGetter
 from .Neo4jWriter           import Neo4jWriter
@@ -38,10 +39,4 @@ __all__ = (
     "Neo4jReader",
     "TwitterUserGetter",
     "TwitterFollowerGetter"
-#    "DocumentFilter"
-#    "RemoveHTML",
-#    "RemovePattern",
-#    "SentimentProcessor",
-#    "TweetAnalyzer",
-#    "TweetRemoveLinks"
 )
