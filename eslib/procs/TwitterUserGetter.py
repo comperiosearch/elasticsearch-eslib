@@ -13,12 +13,13 @@ class TwitterUserGetter(Generator):
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, twitter=None, **kwargs):
         super(TwitterUserGetter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "ids", "str")
         self.create_socket("user", "graph-user", "Twitter users")
         self._queue = []
         self.last_call = time.time()
+        self.twitter = twitter
         self.config.set_default(
             batchsize=100,
             batchtime=7
@@ -26,12 +27,13 @@ class TwitterUserGetter(Generator):
 
     def on_startup(self):
         """ Instantiate twitter class. """
-        self.twitter = Twitter(
-            consumer_key=self.config.consumer_key,
-            consumer_secret=self.config.consumer_secret,
-            access_token=self.config.access_token,
-            access_token_secret=self.config.access_token_secret
-        )
+        if self.twitter is None:
+            self.twitter = Twitter(
+                consumer_key=self.config.consumer_key,
+                consumer_secret=self.config.consumer_secret,
+                access_token=self.config.access_token,
+                access_token_secret=self.config.access_token_secret
+            )
 
     def _incoming(self, doc):
         """
