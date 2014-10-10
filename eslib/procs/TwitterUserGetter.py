@@ -25,7 +25,7 @@ class TwitterUserGetter(Generator):
             batchtime=7
         )
 
-    def on_startup(self):
+    def on_open(self):
         """ Instantiate twitter class. """
         if self.twitter is None:
             self.twitter = Twitter(
