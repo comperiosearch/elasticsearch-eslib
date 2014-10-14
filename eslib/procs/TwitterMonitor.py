@@ -93,6 +93,8 @@ class TwitterMonitor(Monitor):
         self._connecting        = False
         self._connected         = False
         self._last_connect_attempt_ms = 0
+        self._may_iterate       = False  # Prevent it from entering blocking call
+        self._inside_blocking   = False
 
 
     def on_open(self):
@@ -163,7 +165,10 @@ class TwitterMonitor(Monitor):
             return
         # TODO: KILL THE TWITTER API CONNECTION IN A BETTER MANNER !!!
         if self._twitter_response:
-            self.log.info("Closing connection to Twitter stream.")
+            self.log.info("Shutting down Twitter stream.")
+            self._may_iterate = False  # Prevent it from entering blocking call
+            if self._inside_blocking:
+                time.sleep(1) # Give it 1 second to finish whatever chunks it is assembling and get out!
             self._twitter_response.response.raw._fp.close()  # WTF... hackish (HTB)
 
         super(TwitterMonitor, self).stop()
@@ -198,6 +203,8 @@ class TwitterMonitor(Monitor):
             self._connect_delay = 0
             self._connecting = False
             self._connected = True
+            self._may_iterate = True  # It may now enter blocking call
+            self._inside_blocking = False
 
     def _handle_communication_error(self, e=None, raise_instead_of_abort=False):
 
@@ -302,8 +309,10 @@ class TwitterMonitor(Monitor):
             return
 
         item = None
+        self._inside_blocking = True
         try:
-            item = self._twitter_iterator.next()  # OBS OBS OBS: BLOCKING !!!!!!!!
+            if self._may_iterate:
+                item = self._twitter_iterator.next()  # OBS OBS OBS: BLOCKING !!!!!!!!
         except StopIteration as e:
             if self.stopping:
                 pass  # This is caused by us closing the underlying connection in order to get the iterator to stop. (Weirdness.. wish we could have sent a 'stop' -- HTB)
@@ -311,8 +320,11 @@ class TwitterMonitor(Monitor):
                 self.log.error("StopIteration received without stopping. Aborting!")
                 self.abort()
         except Exception as e:
+            self._inside_blocking = False
             self._handle_communication_error(e)
             return  # If we need to reconnect, the next tick will handle that. If fatal (aborted), we are not getting back here.
+
+        self._inside_blocking = False
 
         if item and self.has_output:
             self._handle(item)
