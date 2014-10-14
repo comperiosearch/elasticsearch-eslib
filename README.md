@@ -404,6 +404,22 @@ processor truly considered to be finished, and the worker thread exits.
 
 The next and final event call will now be to on_close().
 
+__NOTE:__
+If your on_tick() method calls another blocking method to retrieve its data, e.g. from a Python generator
+loop, you might have to go in the back door and switch off the lights for that generator. You can do this by
+overriding the stop() method like in this (awful) example from TwitterMonitor:
+
+```python
+def stop(self):
+    if self.stopping or not self.running:
+        return
+    if self._twitter_response:
+        self.log.info("Closing connection to Twitter stream.")
+        self._twitter_response.response.raw._fp.close()  # *sigh*...
+
+    super(TwitterMonitor, self).stop()
+```
+
 #### on_abort()
 
 This is called after all processing is supposed to have stopped, after leaving the on_tick() method. But the

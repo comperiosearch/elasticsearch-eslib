@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import unittest, json
 from eslib.procs import TwitterMonitor
 
@@ -36,6 +38,7 @@ class TestTwitterMonitor(unittest.TestCase):
 
         # Test tweet
         self.assertTrue(tweet["_id"] == "520149420122578944")
+        self.assertTrue(tweet["_source"]["source"] == u"Twitter for BlackBerry®")
         self.assertTrue(tweet["_source"]["text"] == u'These clowns must hope that we never cum under attack from any force-r we capable of protecting ourselves?')
         self.assertTrue(str(tweet["_source"]["created_at"]) == "2014-10-09 09:51:00.328000")
         self.assertTrue("geo" in tweet["_source"])

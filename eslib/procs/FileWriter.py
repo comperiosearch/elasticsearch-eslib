@@ -54,3 +54,4 @@ class FileWriter(Processor):
                 print >> self._file, json.dumps(document, default=json_serializer_isodate)
             else:
                 print >> self._file, document
+            self._file.flush()

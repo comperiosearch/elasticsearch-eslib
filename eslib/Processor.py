@@ -391,6 +391,7 @@ class Processor(Configurable):
         self.aborted = True
         self.accepting = False
         self.running = False
+        self.stopping = False  # We will stop immediately
         self.on_abort()
 
         if not self.is_generator:  # Otherwise handled in the _run() loop

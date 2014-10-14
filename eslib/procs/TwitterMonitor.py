@@ -2,8 +2,9 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Monitor import Monitor
 import TwitterAPI
-import datetime
+import datetime, time
 from xml.etree import ElementTree as XML
+from requests.exceptions import ConnectionError
 import dateutil, dateutil.parser
 
 
@@ -57,9 +58,11 @@ class TwitterMonitor(Monitor):
         https://dev.twitter.com/streaming/reference/post/statuses/filter
     """
 
-    RELATION_AUTHOR  = "author"
-    RELATION_RETWEET = "quote"
-    RELATION_MENTION = "mention"
+    RELATION_AUTHOR       = "author"
+    RELATION_RETWEET      = "quote"
+    RELATION_MENTION      = "mention"
+    MAX_CONNECT_ATTEMPTS  = 10
+
 
     def __init__(self, **kwargs):
         super(TwitterMonitor, self).__init__(**kwargs)
@@ -85,6 +88,11 @@ class TwitterMonitor(Monitor):
         self._twitter_api       = None
         self._twitter_response  = None
         self._twitter_iterator  = None
+        self._connect_delay     = 0
+        self._connect_attempts  = 0
+        self._connecting        = False
+        self._connected         = False
+        self._last_connect_attempt_ms = 0
 
 
     def on_open(self):
@@ -121,41 +129,190 @@ class TwitterMonitor(Monitor):
         if self.config.locations:
             self._twitter_filter["locations"] = ",".join(self.config.locations)
 
-        # TODO: Perhaps move this to on_startup(), later
+
+        # Initialize Twitter API with credentials
         self._twitter_api = TwitterAPI.TwitterAPI(
             self.config.consumer_key,
             self.config.consumer_secret,
             self.config.access_token,
             self.config.access_token_secret)
-        self._twitter_response = self._twitter_api.request("statuses/filter", self._twitter_filter)
-        self._twitter_iterator = self._twitter_response.get_iterator()
+
+        self._connected = False
+        self._connecting = True
+        self._last_connect_attempt_ms = 0
+        self._connect_attempts = 0
+        self._connect_delay = 0
+
+        # Try a request once, which includes connecting. Some validation should cast an exception.
+        # Upon connection problems will try a reconnect in the run loop, later.
+        self._connect(raise_instead_of_abort=True)
 
     def on_close(self):
-        pass  # TODO
-
-    def on_startup(self):
-        pass  # TODO
+        pass
 
     def on_shutdown(self):
-        pass  # TODO
+        pass
 
-    def on_abort(self):
-        pass  # TODO
+    def stop(self):
+        # Note: I hate overriding this method, but since the _twitter_iterator.next() call blocks
+        #       we need to make it stop blocking. What we do here will cause a StopIteration exception
+        #       that will pass control back to on_tick() and we can return from that method with state
+        #       'stopping'.
 
-    def on_suspend(self):
-        pass  # TODO
+        if self.stopping or not self.running:
+            return
+        # TODO: KILL THE TWITTER API CONNECTION IN A BETTER MANNER !!!
+        if self._twitter_response:
+            self.log.info("Closing connection to Twitter stream.")
+            self._twitter_response.response.raw._fp.close()  # WTF... hackish (HTB)
 
-    def on_resume(self):
-        pass  # TODO
+        super(TwitterMonitor, self).stop()
+
+
+    def _connect(self, raise_instead_of_abort=False):
+
+        # First check if we are supposed to connect and we have waited long enough
+        if not self._connecting:
+            return  # Not connecting
+        now_ms = time.time() * 1000
+        if self._last_connect_attempt_ms and (now_ms - self._last_connect_attempt_ms) < self._connect_delay:
+            return  # Not time yet
+
+        self._last_connect_attempt_ms = time.time() * 1000
+        self._connect_attempts += 1
+        exception = None
+        self._twitter_response = None
+        self._connected = False
+        try:
+            self._twitter_response = self._twitter_api.request("statuses/filter", self._twitter_filter)
+        except Exception as e:
+            exception = e
+
+        if exception or self._twitter_response.status_code != 200:
+            self._handle_communication_error(exception, raise_instead_of_abort=True)
+        else:
+            self.log.info("Successfully connected to Twitter stream.")
+            self._twitter_iterator = self._twitter_response.get_iterator()
+            self._last_connect_attempt_ms = 0
+            self._connect_attempts = 0
+            self._connect_delay = 0
+            self._connecting = False
+            self._connected = True
+
+    def _handle_communication_error(self, e=None, raise_instead_of_abort=False):
+
+        do_abort = False
+        code = self._twitter_response.status_code if self._twitter_response else 0
+
+        # Service denial
+        if isinstance(e, ConnectionError):
+            # As suggested by Twitter:
+            #   Back off linearly for TCP/IP level network errors. These problems
+            #   are generally temporary and tend to clear quickly. Increase the
+            #   delay in reconnects by 250ms each attempt, up to 16 seconds.
+            self._connected = False
+            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+                self._connecting = False
+                self.log.error("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.abort()
+                return
+            else:
+                self._connecting = True
+                if self._connect_delay < 16000:
+                    self._connect_delay += 250
+                self.log.debug("Connection error, exception: %s" % e.message)
+                self.log.error("Connection error -- Trying to reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay))
+                return  # Run loop will try to reconnect
+        elif code == 420:  # TODO
+            # As suggested by Twitter;
+            #   Back off exponentially for HTTP 420 errors. Start with a 1 minute
+            #   wait and double each attempt. Note that every HTTP 420 received
+            #   increases the time you must wait until rate limiting will no longer
+            #   will be in effect for your account.
+            self._connected = False
+            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+                self._connecting = False
+                self.log.error("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.abort()
+                return
+            else:
+                self._connecting = True
+                if self._connect_delay < 320000:
+                    self._connect_delay += 5000
+                self.log.error("'420: Rate Limited' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay/1000.0))
+                return  # Run loop will try to reconnect
+        elif code == 503:  # TODO
+            # As suggested by Twitter;
+            #   Back off exponentially for HTTP errors for which reconnecting would
+            #   be appropriate. Start with a 5 second wait, doubling each attempt,
+            #   up to 320 seconds.
+            self._connected = False
+            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+                self._connecting = False
+                self.log.error("'416: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.abort()
+                return
+            else:
+                self._connecting = True
+                if self._connect_delay < 320000:
+                    self._connect_delay += 5000
+                self.log.error("'416: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay/1000.0))
+                return  # Run loop will try to reconnect
+
+        # Authorization and validation errors:
+        elif code == 401:
+            msg = "'401: Unauthorized' -- Authentication error. Aborting!"
+            do_abort = True
+        elif code == 403:
+            msg = "'403: Forbidden' -- Trying to use unauthorized endpoint. Aborting!"
+            do_abort = True
+        elif code == 404:
+            msg = "'404: Unknown' -- Requested resource does not exist. Aborting!"
+        elif code == 406:
+            msg = "'406: Not Acceptable' -- Illegal 'track' phrase length, invalid 'locations' bounding box, or invalid user id for 'follow'. Aborting!"
+            do_abort = True
+        elif code == 413:
+            msg = "'413: Too Long' -- Number of 'track' phrases, 'locations' entries or 'follow' IDs exceeded allowance. Aborting!"
+            do_abort = True
+        elif code == 416:
+            msg = "'416: Range Unacceptable' -- (Should not be possible to cause by this processor.) Aborting!"
+            do_abort = True
+
+        # Unknown errors:
+        else:
+            exstr = ", %s: %s" % (e.__class__.__name__, e.message if e else None) if e else ""
+            msg = "Unknown problem reading from Twitter. Aborting! status_code=%d%s" % (code, exstr)
+            do_abort = True
+
+        if do_abort:
+            if raise_instead_of_abort:
+                self._connected = False
+                raise Exception(msg)
+            else:
+                self.log.critical(msg)
+                self.abort()
 
     def on_tick(self):
+
+        if self._connecting:
+            self._connect()  # Will check for delay, etc
+            return  # Next tick will do work if we are now connected
+
+        if self.suspended:
+            return
 
         item = None
         try:
             item = self._twitter_iterator.next()  # OBS OBS OBS: BLOCKING !!!!!!!!
+        except StopIteration as e:
+            if self.stopping:
+                pass  # This is caused by us closing the underlying connection in order to get the iterator to stop. (Weirdness.. wish we could have sent a 'stop' -- HTB)
+            else:
+                self.log.error("StopIteration received without stopping. Aborting!")
+                self.abort()
         except Exception as e:
-            self.log.error("Problem reading from Twitter: %s" + e.message)
-            self.abort()
+            self._handle_communication_error(e)
+            return  # If we need to reconnect, the next tick will handle that. If fatal (aborted), we are not getting back here.
 
         if item and self.has_output:
             self._handle(item)
@@ -256,12 +413,11 @@ class TwitterMonitor(Monitor):
         ts["created_at"] = self._get_datetime(source, "created_at", "timestamp_ms") or now
 
         source_source = source.get("source")
-        if False: #source_source:
+        if source_source:
             try:
-                ts["source"] = XML.fromstring(source_source).text
+                ts["source"] = XML.fromstring(source_source.encode("utf8")).text
             except Exception as e:
-                print "*** PARSER ERROR: ", source_source
-                print e
+                pass  # Otherwise just ignore this
 
         self._setfield(source, ts, "geo")
 
