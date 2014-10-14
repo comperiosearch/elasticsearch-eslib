@@ -14,6 +14,10 @@ class TwitterFollowerGetter(Generator):
         self.twitter = twitter
         self.create_connector(self._incoming, "ids", "str")
         self.create_socket("ids", "str", "ids of related nodes")
+        self.create_socket("edges", "graph-edge")
+        self.config.set_default(
+            outgoing=True
+        )
 
     def on_open(self):
         if self.twitter is None:
@@ -25,6 +29,18 @@ class TwitterFollowerGetter(Generator):
             )
 
     def _incoming(self, document):
-        users = self.twitter.get_follows(uid=document, outgoing=True)
+        users = self.twitter.get_follows(uid=document,
+                                         outgoing=self.config.outgoing)
         for id_ in users:
             self.sockets["ids"].send(id_)
+            if self.config.outgoing:
+                edge = {"from": document,
+                        "type": "follows",
+                        "to": id_
+                        }
+            else:
+                edge = {"from": id_,
+                        "type": "follows",
+                        "to": document
+                        }
+            self.sockets["edges"].send(edge)

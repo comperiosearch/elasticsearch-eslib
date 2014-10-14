@@ -26,6 +26,7 @@ class Neo4jReader(Generator):
         )
         self._queue = []
         self.last_get = time.time()
+        self.has_properties = set([])
 
     #TODO: Could place this in Neo4jBase
     def on_open(self):
@@ -45,9 +46,9 @@ class Neo4jReader(Generator):
         before appending the query to self._queue
 
         """
-
-        query = self.neo4j.get_node_query_if_properties(id_)
-        self._queue.append((id_, query))
+        if id_ not in self.has_properties:
+            query = self.neo4j.get_node_query_if_properties(id_)
+            self._queue.append((id_, query))
 
     def on_tick(self):
         """
@@ -91,3 +92,5 @@ class Neo4jReader(Generator):
         for uid, result in izip(ids, resp.json()["results"]):
             if not result["data"]:
                 self.sockets["ids"].send(uid)
+            else:
+                self.has_properties.add(uid)
