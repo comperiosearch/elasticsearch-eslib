@@ -49,6 +49,9 @@ class HttpMonitor(Monitor):
     """
     Monitor incoming documents on a HTTP endpoint.
 
+    For messages received via HTTP GET it uses the the path from URL path after host address as a 'str' type input.
+    For messages received via HTTP POST it expects the content body to be JSON.
+
     Sockets:
         output     (*)       : Document received on the HTTP endpoint.
 

@@ -9,7 +9,7 @@ def callback(doc):
     print "-------\n", doc
 
 r = FileReader()
-r.config.filenames = ["a.txt", "b.txt", "c.txt"]
+r.config.filenames = ["files/a.txt", "files/b.txt", "files/c.txt"]
 r.config.document_per_file = True
 r.config.comment_prefix = "rem"
 r.config.raw_lines = False
