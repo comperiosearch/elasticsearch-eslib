@@ -19,7 +19,6 @@ class TestTwitterMonitor(unittest.TestCase):
 
         m = TwitterMonitor()
         raw, tweet, users, links = m._decode(j)
-        x = 0
 
         # Test links
         self.assertTrue(len(links) == 1)
@@ -53,6 +52,7 @@ class TestTwitterMonitor(unittest.TestCase):
         self.assertTrue(str(tweet["_source"]["user"]["created_at"]) == "2013-11-26 14:21:35+00:00")
 
         # Entities
+        # // TODO
 
 def main():
     unittest.main()

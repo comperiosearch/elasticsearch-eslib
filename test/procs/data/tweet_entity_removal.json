@@ -1,0 +1,58 @@
+{
+  "_timestamp": "2014-10-14T14:26:29Z",
+  "_source": {
+    "id": "522030691567931393",
+    "geo": {
+      "coordinates": [
+        40.757023,
+        -74.001698
+      ],
+      "type": "Point"
+    },
+    "lang": "en",
+    "entities": {
+      "urls": [
+        {
+          "indices": [
+            70,
+            92
+          ],
+          "url": "http://instagram.com/p/uIt8BfP5Qp/"
+        }
+      ],
+      "hashtags": [],
+      "user_mentions": [
+        {
+          "name": "Stella Chuu",
+          "screen_name": "StellaChuuuuu",
+          "indices": [
+            20,
+            34
+          ],
+          "id": "285369968"
+        }
+      ]
+    },
+    "truncated": false,
+    "text": "Me &amp; the lovely @stellachuuuuu @ Jacob K Javits Convention Center http://t.co/x6BUjNY0jv",
+    "created_at": "2014-10-14T14:26:30Z",
+    "source": "Instagram",
+    "place": {
+      "country_code": "US",
+      "country": "United States"
+    },
+    "user": {
+      "name": "JJ Dillon",
+      "id": "35273719",
+      "lang": "en",
+      "description": "i love beautiful women. like to party & have fun. very cool, calm, laid back person. i love video games, anime, movies, xbox 360, comic books, pop culture",
+      "created_at": "2009-04-25T18:20:07Z",
+      "profile_image_url": "http://pbs.twimg.com/profile_images/506599782908178432/c6pyAlfv_normal.jpeg",
+      "screen_name": "JJDillon430",
+      "location": "New York",
+      "geo_enabled": true,
+      "protected": false
+    }
+  },
+  "_id": "522030691567931393"
+}

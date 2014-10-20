@@ -22,6 +22,8 @@ from .Neo4jWriter           import Neo4jWriter
 from .Neo4jReader           import Neo4jReader
 from .TwitterUserGetter     import TwitterUserGetter
 from .TwitterFollowerGetter import TwitterFollowerGetter
+from .TweetEntityRemover    import TweetEntityRemover
+from .PatternRemover        import PatternRemover
 
 
 __all__ = (
@@ -38,5 +40,7 @@ __all__ = (
     "Neo4jWriter",
     "Neo4jReader",
     "TwitterUserGetter",
-    "TwitterFollowerGetter"
+    "TwitterFollowerGetter",
+    "TweetEntityRemover",
+    "PatternRemover"
 )
