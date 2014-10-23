@@ -17,6 +17,10 @@ class TwitterUserGetter(Generator):
         ids        (str)         : Incoming IDs to get data for.
     Sockets:
         user       (graph-user)  : Twitter users.
+
+    Config:
+        batchsize  = 100      : How many users to gather up before making a call to Twitter.
+        batchtime  = 7.0      : How many seconds to wait before we send a batch if it is not full.
     """
 
     def __init__(self, twitter=None, **kwargs):

@@ -8,23 +8,23 @@ class TwitterFollowerGetter(Generator):
     ahead and retrieves the followers or friends of this user,
     and outputs the ids.
 
-    # TODO: Document argument 'twitter' and how to configure this.
+    # TODO: Document argument 'twitter' and how to configure this. 'outgoing'
 
     Connectors:
         ids        (str)         : Incoming IDs to get data for.
     Sockets:
         ids        (str)         : IDs of related nodes.
+
+    Config:
+        outgoing   = True        : # TODO: Document this
     """
     def __init__(self, twitter=None, **kwargs):
         super(TwitterFollowerGetter, self).__init__(**kwargs)
         self.twitter = twitter
         self.create_connector(self._incoming, "ids", "str")
         self.create_socket("ids", "str", "IDs of related nodes.")
-        self.create_socket("ids", "str", "ids of related nodes")
         self.create_socket("edges", "graph-edge")
-        self.config.set_default(
-            outgoing=True
-        )
+        self.config.set_default(outgoing=True)
 
     def on_open(self):
         if self.twitter is None:
@@ -36,18 +36,19 @@ class TwitterFollowerGetter(Generator):
             )
 
     def _incoming(self, document):
-        users = self.twitter.get_follows(uid=document,
-                                         outgoing=self.config.outgoing)
+        users = self.twitter.get_follows(uid=document, outgoing=self.config.outgoing)
         for id_ in users:
             self.sockets["ids"].send(id_)
             if self.config.outgoing:
-                edge = {"from": document,
-                        "type": "follows",
-                        "to": id_
-                        }
+                edge = {
+                    "from": document,
+                    "type": "follows",
+                    "to": id_
+                   }
             else:
-                edge = {"from": id_,
-                        "type": "follows",
-                        "to": document
-                        }
+                edge = {
+                    "from": id_,
+                    "type": "follows",
+                    "to": document
+                    }
             self.sockets["edges"].send(edge)
