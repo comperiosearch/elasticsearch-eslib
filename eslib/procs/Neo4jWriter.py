@@ -11,6 +11,13 @@ class Neo4jWriter(Generator):
     This is a pipeline step which primary function is to push an edge
     between the author of a tweet to all the people mentioned in the tweet.
     
+    Connectors:
+        edge       (graph-edge)   : Edge object to write.
+        user       (graph-user)   : User object to write.
+
+    Config:
+        batchsize  = 20           : How many IDs to gather up before making a call to Neo4j.
+        batchtime  = 5.0          : How many seconds to wait before we send a batch if it is not full.
     """
 
     def __init__(self, **kwargs):

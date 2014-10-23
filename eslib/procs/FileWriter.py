@@ -21,7 +21,7 @@ class FileWriter(Processor):
     """
     def __init__(self, **kwargs):
         super(FileWriter, self).__init__(**kwargs)
-        self.create_connector(self._incoming, "input", None, "Incoming documents to write to file as string or json objects per line.")
+        self.create_connector(self._incoming, "input", None, "Incoming documents to write to file as string or JSON objects per line.")
 
         self.config.set_default(
             filename = None,

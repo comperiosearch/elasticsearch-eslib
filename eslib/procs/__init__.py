@@ -24,7 +24,9 @@ from .TwitterUserGetter     import TwitterUserGetter
 from .TwitterFollowerGetter import TwitterFollowerGetter
 from .TweetEntityRemover    import TweetEntityRemover
 from .PatternRemover        import PatternRemover
-
+from .HtmlRemover           import HtmlRemover
+from .BlacklistFilter       import BlacklistFilter
+from .Throttle              import Throttle
 
 __all__ = (
     "ElasticsearchReader",
@@ -42,5 +44,8 @@ __all__ = (
     "TwitterUserGetter",
     "TwitterFollowerGetter",
     "TweetEntityRemover",
-    "PatternRemover"
+    "PatternRemover",
+    "HtmlRemover",
+    "BlacklistFilter",
+    "Throttle"
 )

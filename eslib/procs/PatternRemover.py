@@ -8,17 +8,11 @@ class PatternRemover(Processor):
     """
     Remove text using a regex pattern.
 
-    Protocols:
-
-        esdoc.tweet:
-
-            # TODO
-
     Connectors:
-        input      (esdoc)             : Incoming ocument in 'esdoc' dict format.
+        input      (esdoc)   (default) : Incoming document in 'esdoc' dict format.
         str        (str)               : Incoming document of type 'str' or 'unicode'.
     Sockets:
-        output     (esdoc)             : Output of documents that arrived on 'input' connector.
+        output     (esdoc)   (default) : Output of documents that arrived on 'input' connector.
         str        (str)               : Output of documents that arrived on 'str' connector.
 
     Config:
@@ -36,9 +30,9 @@ class PatternRemover(Processor):
     def __init__(self, **kwargs):
         super(PatternRemover, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.")
+        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
         self.create_connector(self._incoming_str  , "str"  , "str"  , "Incoming document of type 'str' or 'unicode'.")
-        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.")
+        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.", is_default=True)
         self.output_str   = self.create_socket("str"    , "str"     , "Outgoing, cleaned, 'str'.")
 
         self.config.set_default(

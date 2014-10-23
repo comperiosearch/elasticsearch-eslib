@@ -13,14 +13,17 @@ __all__ = ("createdoc", "getfield", "putfield")
 
 def getfield(doc, fieldpath, default=None):
     "Get value for 'fieldpath' if it exits, otherwise return the default."
-    if not doc or not fieldpath: return default
+    if not doc or not fieldpath:
+        return default
     fp = fieldpath.split(".")
     d = doc
     for f in fp[:-1]:
-        if not d or not f in d or not type(d[f]) is dict: return default
+        if not d or not f in d or not type(d[f]) is dict:
+            return default
         d = d[f]
-    if not d: return default
-    return d.get(fp[-1])
+    if not d:
+        return default
+    return d.get(fp[-1]) or default
 
 
 def putfield(doc, fieldpath, value):

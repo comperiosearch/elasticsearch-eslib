@@ -10,7 +10,10 @@ class FileReader(Generator):
     """
     Read documents from specified files or standard input.
     Reads entire file as one document, or per line, according to config.
-    Documents starting with '{' are considered JSON documents and converted to 'dict', unless otherwise configured.
+
+    Previous behaviour, removed:
+        Documents starting with '{' are considered JSON documents and converted to 'dict', unless otherwise configured.
+    All are now considered JSON documents and converted to 'dict', unless 'raw_lines' are set in the config.
 
     Sockets:
         output     (*)       : Documents read. Either entire file as one, or per line. Either raw string or dict.
@@ -19,8 +22,7 @@ class FileReader(Generator):
         filename          = None    : Appended to filenames, for simplicity.
         filenames         = None    : If not set then 'stdin' is assumed. Can take a list of files.
         document_pre_file = False   : Read each file as one string to be treated as one document.
-        raw_lines         = False   : If the line starts with a '{' it is generally expected to be of JSON/dict format.
-                                      Setting this to True treats the line as a string.
+        raw_lines         = False   : Setting this to True treats the line as a string instead of JSON.
         strip_line        = True    : Whether to remove leading and trailing spaces on a line.
         skip_blank_line   = True    : Whether to skip empty lines (after stripping).
         skip_comment_line = True    : Whether to skip comment lines
@@ -36,7 +38,7 @@ class FileReader(Generator):
             filename          = None,
             filenames         = [],
             document_per_file = False,
-            raw_lines         = True,
+            raw_lines         = False,
             strip_line        = True,
             skip_blank_line   = True,
             skip_comment_line = True,
@@ -97,7 +99,7 @@ class FileReader(Generator):
             return
         if self.config.skip_blank_line and not data:
             return
-        if not self.config.raw_lines and data.startswith("{"):
+        if not self.config.raw_lines:# and data.startswith("{"):
             # NOTE: May raise ValueError:
             data = json.loads(data)
         self.output.send(data)

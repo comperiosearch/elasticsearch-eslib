@@ -67,7 +67,7 @@ class TwitterMonitor(Monitor):
     def __init__(self, **kwargs):
         super(TwitterMonitor, self).__init__(**kwargs)
 
-        self.output_tweet  = self.create_socket("tweet" , "esdoc.tweet"  , "Tweet.")
+        self.output_tweet  = self.create_socket("tweet" , "esdoc.tweet"  , "Tweet.", is_default=True)
         self.output_raw    = self.create_socket("raw"   , None           , "Tweet in raw format, exactly as returned by the TwitterAPI.")
         self.output_text   = self.create_socket("text"  , "str"          , "Only the text from the tweet.")
         self.output_link   = self.create_socket("link"  , "urlrequest"   , "Link from the tweet, for potential follow-up.")

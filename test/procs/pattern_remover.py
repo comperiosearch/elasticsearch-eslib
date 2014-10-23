@@ -9,7 +9,7 @@ LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(
 #logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
-class TestTweetEntityRemoval(unittest.TestCase):
+class TestPatternRemover(unittest.TestCase):
 
     def test_str(self):
         dirty = "Oh my fucking god…"

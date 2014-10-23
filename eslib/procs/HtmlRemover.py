@@ -2,23 +2,17 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
 from .. import esdoc
-import re
+from eslib.text import remove_html
 
-class PatternRemover(Processor):
+class HtmlRemover(Processor):
     """
-    Remove text using a regex pattern.
-
-    Protocols:
-
-        esdoc.tweet:
-
-            # TODO
+    Remove HTML tags and unescape HTML escapings.
 
     Connectors:
-        input      (esdoc)             : Incoming ocument in 'esdoc' dict format.
+        input      (esdoc)   (default) : Incoming document in 'esdoc' dict format.
         str        (str)               : Incoming document of type 'str' or 'unicode'.
     Sockets:
-        output     (esdoc)             : Output of documents that arrived on 'input' connector.
+        output     (esdoc)   (default)  : Output of documents that arrived on 'input' connector.
         str        (str)               : Output of documents that arrived on 'str' connector.
 
     Config:
@@ -26,28 +20,21 @@ class PatternRemover(Processor):
         target_field        = None     : Defaults to 'source_field', replacing the input field.
         field_map           = {}       : A dict of fields to use as { source : target }.
                                          If specified, this *replaces* the source_field and target_field pair!
-        pattern             = None     : Pattern to apply. (All 'patterns' are also applied, if specified.)
-        patterns            = []       : List of patterns to apply. ('pattern' will be applied first, if it exists.)
-        regex_options       = DOTALL|IGNORECASE|MULTILINE|UNICODE
-                                       : Options for *all* regex patterns.
         strip               = True     : Remove boundary spaces and double spaces, commonly left after a removal.
     """
 
     def __init__(self, **kwargs):
-        super(PatternRemover, self).__init__(**kwargs)
+        super(HtmlRemover, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.")
+        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
         self.create_connector(self._incoming_str  , "str"  , "str"  , "Incoming document of type 'str' or 'unicode'.")
-        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.")
+        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.", is_default=True)
         self.output_str   = self.create_socket("str"    , "str"     , "Outgoing, cleaned, 'str'.")
 
         self.config.set_default(
             source_field    = "text",
             target_field    = None,
             field_map       = {},
-            pattern         = None,
-            patterns        = [],
-            regex_options   = re.DOTALL|re.IGNORECASE|re.MULTILINE|re.UNICODE,
             strip           = True
         )
 
@@ -55,24 +42,6 @@ class PatternRemover(Processor):
         self._field_map = {}
 
     def on_open(self):
-        """
-        :raises ValueError, if failed to parse a pattern as regex
-        """
-
-        # Create list of regexes
-        patterns = []
-        if self.config.pattern:
-            patterns = [self.config.pattern]
-        if self.config.patterns:
-            patterns.extend(self.config.patterns)
-        self._regexes = []
-        for pattern in patterns:
-            try:
-                regex = re.compile(r"(%s)" % pattern, self.config.regex_options)
-                self._regexes.append(regex)
-            except Exception as e:
-                raise ValueError("Error parsing pattern: %s\nPattern was: %s" % (e.message, pattern))
-
         # Create field map
         self._field_map = self.config.field_map or {}
         if not self._field_map:
@@ -82,15 +51,14 @@ class PatternRemover(Processor):
 
 
     def _clean_text(self, text):
-        for regex in self._regexes:
-            text = regex.sub("", text)
-            if self.config.strip:
-                text = text.strip().replace("  ", " ")
+        text = remove_html(text)
+        if self.config.strip:
+            text = text.strip().replace("  ", " ")
         return text
 
     def _clean(self, doc):
 
-        if not doc or not self._regexes:
+        if not doc:
             return doc
 
         # This makes this method work also for 'str' and 'unicode' type documents; not only for the expected 'esdoc' protocol (a 'dict').
