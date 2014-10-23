@@ -77,6 +77,8 @@ class Twitter(Configurable):
         resp = json.loads(resp_text)
         if protocol == "users":
             wait_time = int(resp["resources"]["users"]["/users/lookup"]["remaining"])
+        elif protocol == "friends":
+            wait_time = int(resp["resources"]["friends"]["/friends/ids"]["remaining"])
         else:
             wait_time = int(resp["resources"]["followers"]["/followers/ids"]["remaining"])
         print("waiting for {0} seconds".format(wait_time))
@@ -109,7 +111,6 @@ class Twitter(Configurable):
         This method returns a generator.
 
         """
-        users = []
         while names or uids:
             self.sleep_for_necessary_time("users")
             name_slice, names = self.split_list(names, 100)
@@ -120,7 +121,7 @@ class Twitter(Configurable):
                 yield item
 
     def get_user(self, uid=None, name=None):
-        """Get a single user from Twitter and retun its json formatted text"""
+        """Get a single user from Twitter and return its json formatted text"""
         self.sleep_for_necessary_time("users")
         rq = self.api.request("users/show", {"screen_name": name, "user_id": uid})
         return rq.text
@@ -152,8 +153,16 @@ class Twitter(Configurable):
             try:
                 cursor = res["next_cursor"]
             except KeyError:
-                print res
                 cursor = 0
+            if "ids" not in res:
+                # Should log that something went wrong
+                if "code" in res and res["code"] == 88:
+                    self.blew_rate_limit(method)
+                    cursor = -1
+                else:
+                    print "id was not in response"
+                    print res
+                    return
             for id_ in res["ids"]:
                 yield id_
 
