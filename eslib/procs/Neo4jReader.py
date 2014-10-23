@@ -27,7 +27,7 @@ class Neo4jReader(Generator):
     def __init__(self, **kwargs):
         super(Neo4jReader, self).__init__(**kwargs)
         self.create_connector(self._incoming_id, "id", "str", "Incoming IDs to check.")
-        self.create_socket("ids", "str", "Outputs IDs that lack properties.")
+        self._output = self.create_socket("ids", "str", "Outputs IDs that lack properties.")
         self.config.set_default(
             batchsize=20,
             batchtime=5.0
@@ -44,7 +44,6 @@ class Neo4jReader(Generator):
         Raises:
             - ConnectionError if neo4j can't contact its server
             - Exception if twitter can't authenticate properly
-
         """
         self.neo4j = Neo4j(host=self.config.host, port=self.config.port)
 
@@ -52,7 +51,6 @@ class Neo4jReader(Generator):
         """
         Takes an incoming id, gets the correct query string from self.neo4j,
         before appending the query to self._queue
-
         """
         if id_ not in self.has_properties:
             query = self.neo4j.get_node_query_if_properties(id_)
@@ -62,7 +60,6 @@ class Neo4jReader(Generator):
         """
         Commit items in queue if queue exceeds batchsize or it's been long
         since last commit.
-
         """
         now = time.time()
 
@@ -76,13 +73,13 @@ class Neo4jReader(Generator):
             self.get()
 
     def get(self):
+        num_elem = len(self._queue)
         ids, queries = [list(t)
                         for t in
-                        izip(*self._queue[:self.config.batchsize])]
-
+                        izip(*self._queue[:num_elem])]
         rq = self.neo4j._build_rq(queries)
         resp = self.neo4j.commit(rq)
-        self._queue = self._queue[self.config.batchsize:]
+        self._queue = self._queue[num_elem:]
         self.last_get = time.time()
         self.write_uids(ids, resp)
 
@@ -94,11 +91,9 @@ class Neo4jReader(Generator):
             ids: The ids that corresponds to a query
             resp: a requests-module response object with neo4j-nodes in 'graph'-
                   format.
-
         """
-
         for uid, result in izip(ids, resp.json()["results"]):
             if not result["data"]:
-                self.sockets["ids"].send(uid)
+                self._output.send(uid)
             else:
                 self.has_properties.add(uid)

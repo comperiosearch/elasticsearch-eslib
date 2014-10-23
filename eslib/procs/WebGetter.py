@@ -174,7 +174,7 @@ class WebGetter(Generator):
 
     Output:
 
-        The protocol "webpage" is a dictionary with the following fields:
+        The protocol "esdoc.webpage" is a dictionary with the following fields:
 
             _id                str   # Using the URL as ID.
             _timestamp         str   # When the content was fetched.
@@ -194,7 +194,7 @@ class WebGetter(Generator):
     Connectors:
         input      (urlrequest)      : Request for a URL with info about what/who is requesting it.
     Sockets:
-        output     (webpage)         : Documents containing the web page content fetched from a requested URL.
+        output     (esdoc.webpage)   : Documents containing the web page content fetched from a requested URL.
 
     Config:
         domains           = {}       : A dict of domains to fetch urls from upon request.
@@ -206,7 +206,7 @@ class WebGetter(Generator):
     def __init__(self, **kwargs):
         super(WebGetter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", "urlrequest", "Request for a URL with info about what/who is requesting it.")
-        self.output = self.create_socket("output", "webpage", "Documents containing the web page content fetched from a requested URL.")
+        self.output = self.create_socket("output", "esdoc.webpage", "Documents containing the web page content fetched from a requested URL.")
 
         self.config.set_default(
             domains = {}

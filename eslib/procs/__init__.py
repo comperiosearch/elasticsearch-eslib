@@ -45,7 +45,7 @@ __all__ = (
     "Neo4jReader",
     "TwitterUserGetter",
     "TwitterFollowerGetter",
-    "ParseEdgeToIds"
+    "ParseEdgeToIds",
     "TwitterFollowerGetter",
     "TweetEntityRemover",
     "PatternRemover",

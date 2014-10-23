@@ -26,7 +26,7 @@ class TwitterUserGetter(Generator):
     def __init__(self, twitter=None, **kwargs):
         super(TwitterUserGetter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "ids", "str")
-        self.create_socket("user", "graph-user", "Twitter users.")
+        self._output = self.create_socket("user", "graph-user", "Twitter users.")
         self._queue = []
         self.last_call = time.time()
         self.twitter = twitter
@@ -50,7 +50,6 @@ class TwitterUserGetter(Generator):
         Put str(doc) into the queue.
 
         :param doc: the id of a twitter user
-
         """
         self._queue.append(str(doc))
 
@@ -58,7 +57,6 @@ class TwitterUserGetter(Generator):
         """
         Commit items in queue if queue exceeds batchsize or it's been long
         since last commit.
-
         """
         if ((len(self._queue) >= self.config.batchsize) or
             (time.time() - self.last_call > self.config.batchtime and self._queue)):
@@ -72,11 +70,10 @@ class TwitterUserGetter(Generator):
     def get(self):
         """
         Gets users from twitter and outputs to a socket.
-
         """
         resp = self.twitter.get_users(uids=self._queue[:self.config.batchsize])
         self._queue = self._queue[self.config.batchsize:]
         for raw_user in resp:
             #TODO: Some kind of check here?
             user = self.twitter.raw_to_dict(raw_user)
-            self.sockets["users"].send(user)
+            self._output.send(user)

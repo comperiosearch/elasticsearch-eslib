@@ -11,6 +11,7 @@ class ParseEdgeToIds(Processor):
         self.create_socket("edges", "graph-edge", "All the edges")
 
     def _incoming(self, document):
+
         if document["type"] == "author":
             self.sockets["ids"].send(document["from"])
         else:

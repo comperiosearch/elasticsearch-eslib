@@ -97,19 +97,21 @@ class Neo4jWriter(Generator):
             self.user_send()
 
     def edge_send(self):
-        rq = self.neo4j._build_rq(self.edge_queue[:self.config.batchsize])
+        num_edges = len(self.edge_queue)
+        rq = self.neo4j._build_rq(self.edge_queue[:num_edges])
         self.neo4j.commit(rq)
-        self.edge_queue = self.edge_queue[self.config.batchsize:]
+        self.edge_queue = self.edge_queue[num_edges:]
         self.last_edge_commit = time.time()
 
     def user_send(self):
+        num_users = len(self.user_queue)
         users, params = [list(t)
                          for t in
-                         izip(*self.user_queue[:self.config.batchsize])]
+                         izip(*self.user_queue[:num_users])]
 
         rq = self.neo4j._build_rq(users, params)
         self.neo4j.commit(rq)
-        self.user_queue = self.user_queue[self.config.batchsize:]
+        self.user_queue = self.user_queue[num_users:]
         self.last_user_commit = time.time()
 
     # def parse(self, document):

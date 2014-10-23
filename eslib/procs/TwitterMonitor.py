@@ -37,11 +37,11 @@ class TwitterMonitor(Monitor):
             who        str : e.g. some user id
 
     Sockets:
-        tweet      (esdoc.tweet)       : Tweet
-        raw        (*)                 : The tweet reported in raw format, exactly as returned by the TwitterAPI.
-        text       (str)               : Only the text from the tweet.
-        link       (urlrequest)        : Link from the tweet, for potential follow-up.
-        user       (graph-edge)        : Info about author, mentioned or retweeted users from the tweet.
+        tweet  (esdoc.tweet) (default) : Tweet
+        raw    (*)                     : The tweet reported in raw format, exactly as returned by the TwitterAPI.
+        text   (str)                   : Only the text from the tweet.
+        link   (urlrequest)            : Link from the tweet, for potential follow-up.
+        user   (graph-edge)            : Info about author, mentioned or retweeted users from the tweet.
 
     Config:
         consumer_key        = None     : Part of twitter dev credentials.
