@@ -12,7 +12,7 @@ __all__ = ("remove_parts", "remove_html")
 
 
 import re
-from html.parser import HTMLParser
+from HTMLParser import HTMLParser
 
 import sys
 
@@ -29,7 +29,7 @@ def remove_parts(text, sections):
     s.append(text[:c[0][0]])
     for i in range(1, len(c)):
         s.append(text[c[i-1][1]:c[i][0]])
-        s.append(text[c[-1][1]:])
+    s.append(text[c[-1][1]:])
     cleaned = "".join(s)
     return cleaned
 

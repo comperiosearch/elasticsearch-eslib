@@ -19,7 +19,7 @@ requires = [
     'elasticsearch',
     'argparse',
     'pika', 'pyrabbit',   # for Rabbitmq
-    'html.parser',
+    'HTMLParser',
     'requests',
     'TwitterAPI',
     'PyYAML',             # for prog logging init stuff

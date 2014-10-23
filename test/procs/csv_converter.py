@@ -13,7 +13,7 @@ class TestCsvConverter(unittest.TestCase):
 
     def _setup(self, filename):
 
-        r = FileReader()
+        r = FileReader(raw_lines=True)
         r.config.filename = filename
 
         c = CsvConverter()

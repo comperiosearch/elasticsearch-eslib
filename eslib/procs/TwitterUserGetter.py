@@ -11,12 +11,18 @@ class TwitterUserGetter(Generator):
     Receives uids on its connector and sends twitter user objects
     to its socket.
 
+    # TODO: Document argument 'twitter' and how to configure this.
+
+    Connectors:
+        ids        (str)         : Incoming IDs to get data for.
+    Sockets:
+        user       (graph-user)  : Twitter users.
     """
 
     def __init__(self, twitter=None, **kwargs):
         super(TwitterUserGetter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "ids", "str")
-        self.create_socket("users", "graph-user", "Twitter users")
+        self.create_socket("user", "graph-user", "Twitter users.")
         self._queue = []
         self.last_call = time.time()
         self.twitter = twitter

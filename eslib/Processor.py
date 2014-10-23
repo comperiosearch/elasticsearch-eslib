@@ -27,6 +27,8 @@ class Processor(Configurable):
         # Terminals
         self.sockets    = {}
         self.connectors = {}
+        self.default_connector = None
+        self.default_socket    = None
 
         self._setup_logging()
 
@@ -71,22 +73,26 @@ class Processor(Configurable):
 
     #region Terminal creation
 
-    def create_connector(self, method, name=None, protocol=None, description=None):
+    def create_connector(self, method, name=None, protocol=None, description=None, is_default=False):
         terminal = Connector(name, protocol, method)
         if terminal.name in self.connectors:
             raise Exception("Connector name '%s' already exists for processor '%s'." % (terminal.name, self.name))
         terminal.owner = self
         terminal.description = description
         self.connectors.update({terminal.name: terminal})
+        if is_default:
+            self.default_connector = terminal
         return terminal
 
-    def create_socket(self, name=None, protocol=None, description=None):
+    def create_socket(self, name=None, protocol=None, description=None, is_default=False):
         terminal = Socket(name, protocol)
         if terminal.name in self.sockets:
             raise Exception("Socket name '%s' already exists for processor '%s'." % (terminal.name, self.name))
         terminal.owner = self
         terminal.description = description
         self.sockets.update({terminal.name: terminal})
+        if is_default:
+            self.default_socket = terminal
         return terminal
 
     #endregion Terminal creation
@@ -107,7 +113,11 @@ class Processor(Configurable):
 
         if not connector_name:
             if len(subscriber.connectors) > 1:
-                raise Exception("Processor '%s' has more than one connector, requires connector_name to be specified.", subscriber.name)
+                default = subscriber.default_connector
+                if default:
+                    connector = default
+                else:
+                    raise Exception("Processor '%s' has more than one connector and no default set, requires connector_name to be specified." % subscriber.name)
             else:
                 connector = subscriber.connectors.itervalues().next()
         else:
@@ -118,7 +128,11 @@ class Processor(Configurable):
         socket = None
         if not socket_name:
             if len(producer.sockets) > 1:
-                raise Exception("More than one socket for '%s', requires socket_name to be specified." % producer.name)
+                default = producer.default_socket
+                if default:
+                    socket = default
+                else:
+                    raise Exception("More than one socket for '%s' and no default, requires socket_name to be specified." % producer.name)
             else:
                 socket = producer.sockets.itervalues().next()
         else:

@@ -3,7 +3,7 @@
 
 class TerminalProtocolException(Exception):
     def __init__(self, socket, connector):
-        msg = "Socket: %s.%s(%s), Connector: %s.%s.%s(%s)" % (socket.owner.name, socket.name, socket.protocol, connector.owner.name, connector.name, connector.name, connector.protocol)
+        msg = "Socket: %s.%s(%s), Connector: %s.%s(%s)" % (socket.owner.name, socket.name, socket.protocol, connector.owner.name, connector.name, connector.protocol)
         super(Exception, self).__init__(self, msg)
 
 
@@ -43,6 +43,9 @@ class Terminal(object):
     def protocol_compliance(socket, connector):
         if connector.protocol == Terminal.ANY_PROTOCOL or socket.protocol == Terminal.ANY_PROTOCOL:
             return True
-        ss = socket.protocol.split()
-        cc = connector.protocol.split()
+        ss = socket.protocol.split(".")
+        cc = connector.protocol.split(".")
+        #print "SS=", ss[:len(cc)]
+        #print "CC=", cc[:len(cc)]
+        #print "%s == %s" % (ss[:len(cc)], cc[:len(cc)])
         return ss[:len(cc)] == cc[:len(cc)]

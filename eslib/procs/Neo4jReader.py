@@ -14,15 +14,23 @@ class Neo4jReader(Generator):
     It takes an id and determines whether or not it has its properties set.
     If it lacks properties, it will be outputted by the 'ids' socket.
 
+    Connectors:
+        id         (str)      : Incoming IDs to check.
+    Sockets:
+        ids        (str)      : Outputs IDs that lack properties.
+
+    Config:
+        batchsize  = 20       : How many IDs to gather up before making a call to Neo4j.
+        batchtime  = 5.0      : How many seconds to wait before we send a batch if it is not full.
     """
 
     def __init__(self, **kwargs):
         super(Neo4jReader, self).__init__(**kwargs)
-        self.create_connector(self._incoming_id, "id", "str")
-        self.create_socket("ids", "str", "Outputs ids that lack properties")
+        self.create_connector(self._incoming_id, "id", "str", "Incoming IDs to check.")
+        self.create_socket("ids", "str", "Outputs IDs that lack properties.")
         self.config.set_default(
             batchsize=20,
-            batchtime=5
+            batchtime=5.0
         )
         self._queue = []
         self.last_get = time.time()
