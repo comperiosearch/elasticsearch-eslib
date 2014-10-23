@@ -46,12 +46,13 @@ class _MLStripper(HTMLParser):
         return ''.join(self.fed)
 
 
-_regex_whitespace = re.compile(r'\s+')
-_regex_scripts    = re.compile(r"""<script\s*(type=((".*?")|('.*?')))?>.*?</script>""", re.MULTILINE|re.DOTALL)
-_regex_style      = re.compile(r"""(<style\s*(type=((".*?")|('.*?')))?>.*?</style>)""", re.MULTILINE|re.DOTALL)
+_regex_whitespace = re.compile(r'\s+', re.UNICODE)
+_regex_scripts    = re.compile(r"""<script\s*(type=((".*?")|('.*?')))?>.*?</script>""", re.MULTILINE|re.DOTALL|re.UNICODE)
+_regex_style      = re.compile(r"""(<style\s*(type=((".*?")|('.*?')))?>.*?</style>)""", re.MULTILINE|re.DOTALL|re.UNICODE)
 
 def remove_html(text):
-    if not text or not type(text) is str: return text
+    if not text or not type(text) in [str, unicode]:
+        return text
 
     text = re.sub(_regex_scripts, " ", text)
     text = re.sub(_regex_style  , " ", text)
