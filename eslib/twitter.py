@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 from eslib import Configurable
-from TwitterAPI import TwitterAPI
+from TwitterAPI import TwitterAPI, TwitterResponse
 from dateutil.parser import parse
 
-import json
+import requests
 import time
 
 
@@ -31,7 +31,10 @@ class Twitter(Configurable):
 
         self.config.set_default(
             user_fields={"id", "location", "description", "screen_name",
-                         "lang", "name", "created_at"}
+                         "lang", "name", "created_at"},
+            batchsize=100,
+            max_reconnect_wait=30*60,  # 30 minutes
+            start_reconnect_wait=2  # 2 seconds
         )
 
     def set_rate_limits(self):
@@ -42,24 +45,26 @@ class Twitter(Configurable):
 
         """
 
-        raw_rq = self.api.request("application/rate_limit_status", 
-                                  {"resources": "users"}).text
-        user_rq = json.loads(raw_rq)
-        user_lim = int(user_rq["resources"]["users"]["/users/lookup"]["limit"])
+        resp = self.api.request("application/rate_limit_status",
+                                  {"resources": "users"})
+        resp.response.raise_for_status()
+        user_resp = resp.response.json()
+        user_lim = int(user_resp["resources"]["users"]["/users/lookup"]["limit"])
         
-        raw_rq = self.api.request("application/rate_limit_status", 
-                                  {"resources": "followers"}).text
+        resp = self.api.request("application/rate_limit_status",
+                                {"resources": "followers"})
 
-        flw_rq = json.loads(raw_rq)
-        flw_lim = flw_rq["resources"]["followers"]["/followers/ids"]["limit"]
-        flw_lim = int(flw_lim)
+        resp.response.raise_for_status()
+        flw_resp = resp.response.json()
+        flw_lim = int(
+            flw_resp["resources"]["followers"]["/followers/ids"]["limit"]
+        )
 
-        raw_rq = self.api.request("application/rate_limit_status",
-            {"resources": "friends"}).text
-
-        fr_rq = json.loads(raw_rq)
-        fr_lim = int(fr_rq["resources"]["friends"]["/friends/ids"]["limit"])
-
+        resp = self.api.request("application/rate_limit_status",
+            {"resources": "friends"})
+        resp.response.raise_for_status()
+        fr_resp = resp.response.json()
+        fr_lim = int(fr_resp["resources"]["friends"]["/friends/ids"]["limit"])
 
         self.last_call = {"users": 0,
                           "followers": 0,
@@ -69,21 +74,19 @@ class Twitter(Configurable):
                        "friends": fr_lim}
 
     def blew_rate_limit(self, protocol):
-        """
 
-        """
-        resp_text = self.api.request("application/rate_limit_status",
-                                     {"resources": protocol}).text
-        resp = json.loads(resp_text)
+        raw = self.api.request("application/rate_limit_status",
+                                     {"resources": protocol})
+        resp = raw.response.json()
         if protocol == "users":
             wait_time = int(resp["resources"]["users"]["/users/lookup"]["remaining"])
         elif protocol == "friends":
             wait_time = int(resp["resources"]["friends"]["/friends/ids"]["remaining"])
         else:
             wait_time = int(resp["resources"]["followers"]["/followers/ids"]["remaining"])
+        #TODO: This should be log
         print("waiting for {0} seconds".format(wait_time))
         time.sleep(wait_time)
-
 
     def sleep_for_necessary_time(self, protocol):
         """
@@ -111,13 +114,22 @@ class Twitter(Configurable):
         This method returns a generator.
 
         """
+        protocol = "users/lookup"
         while names or uids:
             self.sleep_for_necessary_time("users")
-            name_slice, names = self.split_list(names, 100)
-            uids_slice, uids = self.split_list(uids, 100)
+            name_slice, names = self.split_list(names, self.config.batchsize)
+            uids_slice, uids = self.split_list(uids, self.config.batchsize)
             params = {"screen_name": name_slice, "user_id": uids_slice}
-            rq = self.api.request("users/lookup", params)
-            for item in rq.get_iterator():
+            resp = None
+            try:
+                resp = self.api.request(protocol, params)
+                resp.response.raise_for_status()
+            except requests.exceptions.ConnectionError as ce:
+                resp = self._handle_error(protocol, params, exception=ce)
+            except requests.exceptions.HTTPError:
+                resp = self._handle_error(protocol, params, resp=resp)
+
+            for item in resp.get_iterator():
                 yield item
 
     def get_user(self, uid=None, name=None):
@@ -125,48 +137,132 @@ class Twitter(Configurable):
         self.sleep_for_necessary_time("users")
         rq = self.api.request("users/show", {"screen_name": name, "user_id": uid})
         return rq.text
-        
+
+    def _handle_error(self, protocol, params, resp=None, exception=None):
+        """
+        If the response does not have a 200 code, we handle the error here, and
+        eventually return the expected response.
+
+
+        :param TwitterAPI.TwitterResponse resp:
+            the response corresponding to a non-200 http code.
+
+        :param str protocol: A string representing the api protocol. e.g.
+                         "users/lookup"
+        :param dict params: A dictionary holding the params for the queries
+        :raise requests.Exceptions.HTTPError: if bad request
+        :return TwitterResponse: A twitterResponse object.
+
+        """
+
+        if exception is not None:
+            return self._retry(protocol, params) or resp
+        elif resp is not None:
+            #Response should exist here
+            code = resp.response.status_code
+            if code == 304:
+                # Not modified
+                pass
+            elif code == 401:
+                # Unauthorized
+                # Our credentials don't work. Did we just get banned?
+                resp.response.raise_for_status()
+            elif code == 400:
+                # Bad Request
+                resp.response.raise_for_status()
+            elif code in {403, 404, 410}:
+                # Forbidden, Not Found, Gone
+                # Return the same response
+                pass
+            elif code == 429:
+                # Too Many Requests
+                # Here we ignore the fact that we may have been rate_limited again.
+                self.blew_rate_limit(protocol.split("/")[0])
+                resp = self.api.request(protocol, params)
+            elif code in {500, 502, 503, 504}:
+                # Internal errors at Twitter. Try again.
+                resp = self._retry(protocol, params, resp) or resp
+            else:
+                #TODO: Log that we don't enter any of the above cases
+                pass
+            return resp
+        else:
+            print "We should never be here"
+            return TwitterResponse(None, None)
+
+
+    def _retry(self, protocol, params, resp=None):
+        """
+        Retry until we get a nice response.
+
+        :param str protocol: A string represeting the api protocol.
+        :param dict params: A dictionary holding the params for the query
+        :param TwitterResponse resp: Optional. May be None.
+        :raise: Exception: if we couldn't establish a connection.
+        :return TwitterResponse:
+
+        """
+        wait = self.config.start_reconnect_wait
+        while resp is None or resp.response.status_code in {500, 502, 503, 504}:
+            if wait > self.config.max_reconnect_wait:
+                raise Exception("To many reconnect attempts")
+            time.sleep(wait)
+            try:
+                resp = self.api.request(protocol, params)
+            except requests.exceptions.ConnectionError:
+                resp = None
+            wait *= 2
+        return resp
 
     def get_follows(self, uid=None, name=None, outgoing=False):
         """
-        Returns a list of followers for a give uid.
+        Yields the followers or friends for a given uid.
 
-        Args:
-            uid: the user id for the twitter user. Defaults to None
-            name: the screen name of the twitter user. Defaults to None.
-
-        Yields:
-            The ids of all the followers of the specified twitter user.
+        :param str uid: the user id for the twitter user. Defaults to None
+        :param str name: the screen name of the twitter user. Defaults to None.
+        :param str outgoing: Determines whether to get friends or followers
+        :yield str ids: yields the ids of the followers or friends.
 
         """
-        method = "followers"
-        if outgoing:
-            method = "friends"
-        params = {"screen_name": name, "user_id": uid,
+        method = "friends" if outgoing else "followers"
+        protocol = "{0}/ids".format(method)
+        params = {"screen_name": name,
+                  "user_id": uid,
                   "count": "5000"}
+
         cursor = -1
         while cursor != 0:
             self.sleep_for_necessary_time(method)
             params["cursor"] = cursor
-            rq = self.api.request("{0}/ids".format(method), params)
-            res = json.loads(rq.text)
+            resp = None
+            try:
+                resp = self.api.request(protocol, params)
+                resp.response.raise_for_status()
+            except requests.exceptions.ConnectionError as ce:
+                resp = self._handle_error(protocol, params, exception=ce)
+            except requests.exceptions.HTTPError:
+                resp = self._handle_error(protocol, params, resp=resp)
+
+            res = resp.response.json()
             try:
                 cursor = res["next_cursor"]
             except KeyError:
                 cursor = 0
             if "ids" not in res:
                 # Should log that something went wrong
-                if "code" in res and res["code"] == 88:
-                    self.blew_rate_limit(method)
-                    cursor = -1
-                else:
-                    print "id was not in response"
-                    print res
-                    return
+                return
             for id_ in res["ids"]:
                 yield id_
 
     def raw_to_dict(self, raw_user):
+        """
+        Get the relevant fields of raw_user. The field names resides in
+        self.config.user_fields.
+
+        :param raw_user: the dict holding the response from twitter
+        :return user: the dict holding the relevant field of the response
+
+        """
         user = {}
         for field in self.config.user_fields:
             if field in raw_user:

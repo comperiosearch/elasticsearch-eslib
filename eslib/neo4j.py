@@ -11,7 +11,12 @@ class Neo4j(Configurable):
 
     def __init__(self, **kwargs):
         super(Neo4j, self).__init__(**kwargs)
-        self.config.set_default(host="localhost", port="7474")
+        self.config.set_default(
+            host="localhost",
+            port="7474",
+            start_reconnect_wait=2,
+            max_reconnect_wait=30*60
+        )
         self._set_config()
         self.validate()
 
@@ -62,6 +67,7 @@ class Neo4j(Configurable):
                  "MERGE (b:user {id: %s}) "
                  "MERGE a-[:%s]->b "
                  "RETURN *") % (from_id, to_id, rel_type))
+
     @staticmethod
     def get_node_merge_query(user):
         """
@@ -107,45 +113,17 @@ class Neo4j(Configurable):
         """
         Write a rq to neo4j.
 
-        Raises:
-            Error from requests if something went wrong
-
         """
 
         path = "{0}/transaction/commit".format(self.config.data_path)
-        resp = requests.post(path,
-                             data=json.dumps(create_rq),
-                             headers=self.config.headers["put"])
+        header = self.config.headers["put"]
+        try:
+            resp = requests.post(path,
+                                 data=json.dumps(create_rq),
+                                 headers=header)
+        except requests.exceptions.ConnectionError:
+            resp = self._handle_error(path, create_rq, header)
 
-        resp.raise_for_status()
-        return resp
-
-
-
-    def write_edge(self, from_id, rel_type, to_id):
-        """
-        Puts an edge into neo4j.
-
-        Args:
-            from_id: The source node of the edge
-            rel_type: The relationship type. A mentioned is denoted "mentioned"
-            to_id: The mentioned node.
-
-        Raises:
-            Will raise error from requests if something went wrong
-
-        """
-
-        create_str = self.get_edge_query(from_id, rel_type, to_id)
-        create_rq = self._build_rq([create_str], "graph")
-
-        # PERHAPS NOT COMMIT EVERY EDGE?
-        path = "{0}/transaction/commit".format(self.config.data_path)
-        resp = requests.post(path,
-                             data=json.dumps(create_rq),
-                             headers=self.config.headers["put"])
-
-        resp.raise_for_status()
         return resp
 
     @staticmethod
@@ -224,3 +202,30 @@ class Neo4j(Configurable):
                             headers=self.config.headers["get"])
         resp.raise_for_status()
         return resp.json()
+
+    def _handle_error(self, path, requests, headers, get=True):
+        """
+        We call this whenever we get a connection error from requests.
+
+        :param str path: the rest endpoint we're trying to reach
+        :param dict requests: the dict holding the neo4j transactions
+        :param str headers: the header corresponding to the correct http method
+        :param boolean get: if true do a get call, else do a post
+        :raise Exception: if to many reconnect attempts
+        :return request.model.Response: return the response
+
+        """
+        call = requests.get if get else requests.post
+        resp = None
+        dump = json.dumps(requests)
+        wait = self.config.start_reconnect_wait
+        while resp is None:
+            if wait >self.config.max_reconnect_wait:
+                raise Exception("To many reconnect attempts")
+            time.sleep(wait)
+            try:
+                resp = call(path, dump, headers=headers)
+            except requests.exceptions.ConnectionError:
+                resp = None
+            wait *= 2
+        return resp
