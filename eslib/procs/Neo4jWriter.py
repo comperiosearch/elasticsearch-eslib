@@ -18,6 +18,9 @@ class Neo4jWriter(Generator):
     Config:
         batchsize  = 20           : How many IDs to gather up before making a call to Neo4j.
         batchtime  = 5.0          : How many seconds to wait before we send a batch if it is not full.
+        host       = localhost: The host we should connect to
+        port       = 7474     : The default neo4j port
+
     """
 
     def __init__(self, **kwargs):
@@ -31,7 +34,9 @@ class Neo4jWriter(Generator):
         self.last_user_commit = time.time()
         self.config.set_default(
             batchsize=20,
-            batchtime=5
+            batchtime=5,
+            host="localhost",
+            port="7474"
         )
 
     def on_open(self):
