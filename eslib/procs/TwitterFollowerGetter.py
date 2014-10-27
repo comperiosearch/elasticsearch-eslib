@@ -38,17 +38,17 @@ class TwitterFollowerGetter(Generator):
     def _incoming(self, document):
         users = self.twitter.get_follows(uid=document, outgoing=self.config.outgoing)
         for id_ in users:
+            edge = {"from": None, "type": "follows", "to": None}
             self.sockets["ids"].send(id_)
             if self.config.outgoing:
-                edge = {
-                    "from": document,
-                    "type": "follows",
-                    "to": id_
-                   }
+                edge["from"] = document
+                edge["to"] = id_
             else:
-                edge = {
-                    "from": id_,
-                    "type": "follows",
-                    "to": document
-                    }
-            self.sockets["edges"].send(edge)
+                edge["from"] = id_
+                edge["to"] = document
+
+            if all(edge.itervalues()):
+                self.sockets["edges"].send(edge)
+            else:
+                # Log something useful
+                continue
