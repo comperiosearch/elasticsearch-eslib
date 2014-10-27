@@ -42,23 +42,26 @@ class Twitter(Configurable):
 
         """
 
-        raw_rq = self.api.request("application/rate_limit_status", 
-                                  {"resources": "users"}).text
-        user_rq = json.loads(raw_rq)
-        user_lim = int(user_rq["resources"]["users"]["/users/lookup"]["limit"])
+        resp = self.api.request("application/rate_limit_status",
+                                  {"resources": "users"})
+        resp.response.raise_for_status()
+        user_resp = resp.response.json()
+        user_lim = int(user_resp["resources"]["users"]["/users/lookup"]["limit"])
         
-        raw_rq = self.api.request("application/rate_limit_status", 
-                                  {"resources": "followers"}).text
+        resp = self.api.request("application/rate_limit_status",
+                                {"resources": "followers"})
 
-        flw_rq = json.loads(raw_rq)
-        flw_lim = flw_rq["resources"]["followers"]["/followers/ids"]["limit"]
-        flw_lim = int(flw_lim)
+        resp.response.raise_for_status()
+        flw_resp = resp.response.json()
+        flw_lim = int(
+            flw_resp["resources"]["followers"]["/followers/ids"]["limit"]
+        )
 
-        raw_rq = self.api.request("application/rate_limit_status",
-            {"resources": "friends"}).text
-
-        fr_rq = json.loads(raw_rq)
-        fr_lim = int(fr_rq["resources"]["friends"]["/friends/ids"]["limit"])
+        resp = self.api.request("application/rate_limit_status",
+            {"resources": "friends"})
+        resp.response.raise_for_status()
+        fr_resp = resp.response.json()
+        fr_lim = int(fr_resp["resources"]["friends"]["/friends/ids"]["limit"])
 
 
         self.last_call = {"users": 0,
