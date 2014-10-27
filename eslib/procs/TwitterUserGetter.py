@@ -71,8 +71,9 @@ class TwitterUserGetter(Generator):
         """
         Gets users from twitter and outputs to a socket.
         """
-        resp = self.twitter.get_users(uids=self._queue[:self.config.batchsize])
-        self._queue = self._queue[self.config.batchsize:]
+        num = len(self._queue)
+        resp = self.twitter.get_users(uids=self._queue[:num])
+        self._queue = self._queue[num:]
         for raw_user in resp:
             #TODO: Some kind of check here?
             user = self.twitter.raw_to_dict(raw_user)
