@@ -7,13 +7,22 @@ from ..Generator import Generator
 
 class CLIReader(Generator):
     """
-    The purpose of this processor is to
+    The CLIReader is a Generator that will periodically call a command line utility
+
+    Sockets:
+        stdout     (str)   (default)   : Output from the command line utility's stdout
+        stderr     (str)               : Output from the command line utility's stderr
+    Config:
+        cmd             = None   : The command to run
+        interval        = 10     : The waiting period in seconds between each time the command is run
+
     """
 
 
     def __init__(self, **kwargs):
         super(CLIReader, self).__init__(**kwargs)
-        self._output = self.create_socket("ids", "str", "ids of documents")
+        self._stdout = self.create_socket("stdout", "str", "The output to stdout from the command line utility")
+        self._stderr = self.create_socket("stderr", "str", "The output to stderr from the command line utility")
         self.config.set_default(
             interval = 10
         )
@@ -28,8 +37,11 @@ class CLIReader(Generator):
         since last commit.
         """
         if not self.last_get or (time.time() - self.last_get  > self.config.interval):
-            p = subprocess.Popen(self.cmd, shell=False, stdout=subprocess.PIPE)
+            p = subprocess.Popen(self.config.cmd, shell=False, stdout=subprocess.PIPE)
             p.wait()
             (output, err) = p.communicate()
-            self._output.send(output)
+            if output:
+                self._stdout.send(output)
+            if err:
+                self._stderr.send(err)
             self.last_get = time.time()
