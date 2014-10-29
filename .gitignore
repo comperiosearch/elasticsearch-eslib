@@ -2,6 +2,9 @@
 *.swp
 
 
+# Folders
+tmp/
+
 # C extensions
 *.so
 
