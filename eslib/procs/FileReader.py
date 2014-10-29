@@ -1,10 +1,11 @@
 __author__ = 'Hans Terje Bakke'
 
 from ..Generator import Generator
+from select import select
+import codecs
 import sys, os, os.path, errno
 import json
 
-# TODO: VERIFY ENCODING WORKING OK, ESPECIALLY WHEN READING FROM STDIN
 
 class FileReader(Generator):
     """
@@ -105,6 +106,29 @@ class FileReader(Generator):
         self.output.send(data)
 
 
+    def _read_as_much_as_possible(self):
+        while True:
+            # Read as much as we can
+            r,w,e = select([self._file], [], [self._file], 0)
+            if e:
+                # I have never seen this happen...
+                self._close_file()
+                break
+            if r:
+                line = self._file.readline()
+                line = codecs.decode(line, self._file.encoding or "UTF-8", "replace")
+                if line:
+                    self._handle_data(line)
+                    # In case we should leave the loop while there is still input available:
+                    if self.end_tick_reason or self.suspend:
+                        break
+                if not line:
+                    # We've reached the end of input
+                    self._close_file()
+                    break
+            else:
+                break
+
     def on_tick(self):
 
         if self._file:
@@ -114,12 +138,7 @@ class FileReader(Generator):
                 self._handle_data(all)
                 self._close_file()
             else:
-                for line in self._file:
-                    self._handle_data(line)
-                    if self.end_tick_reason or self.suspended:
-                        return
-                # If we get here, it means we're done reading this file. Close it and let next tick continue with next file.
-                self._close_file()
+                self._read_as_much_as_possible()
         elif self._filename_index >= len(self._filenames):
             # We're done!
             self.stop()
