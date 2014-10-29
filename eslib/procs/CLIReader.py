@@ -4,7 +4,6 @@ import subprocess
 
 from ..Generator import Generator
 
-
 class CLIReader(Generator):
     """
     The CLIReader is a Generator that will periodically call a command line utility
@@ -18,7 +17,6 @@ class CLIReader(Generator):
 
     """
 
-
     def __init__(self, **kwargs):
         super(CLIReader, self).__init__(**kwargs)
         self._stdout = self.create_socket("stdout", "str", "The output to stdout from the command line utility")
@@ -26,10 +24,7 @@ class CLIReader(Generator):
         self.config.set_default(
             interval = 10
         )
-        self._queue = []
         self.last_get = None
-
-        self.has_properties = set([])
 
     def on_tick(self):
         """
