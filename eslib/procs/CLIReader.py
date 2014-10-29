@@ -19,7 +19,7 @@ class CLIReader(Generator):
 
     def __init__(self, **kwargs):
         super(CLIReader, self).__init__(**kwargs)
-        self._stdout = self.create_socket("stdout", "str", "The output to stdout from the command line utility")
+        self._stdout = self.create_socket("stdout", "str", "The output to stdout from the command line utility", is_default=True)
         self._stderr = self.create_socket("stderr", "str", "The output to stderr from the command line utility")
         self.config.set_default(
             interval = 10
