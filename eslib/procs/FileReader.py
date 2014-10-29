@@ -7,6 +7,10 @@ import sys, os, os.path, errno
 import json
 
 
+# TODO: Windows does not support file descriptors in select()
+#       Alternative method to _read_as_much_as_possible() needed for Windows.
+
+
 class FileReader(Generator):
     """
     Read documents from specified files or standard input.
@@ -127,6 +131,16 @@ class FileReader(Generator):
                     self._close_file()
                     break
             else:
+                break
+
+    # Candidate for Windows:
+    def _read_as_much_as_possible_Windows(self):
+        for line in self._file:
+            line = self._file.readline()
+            line = codecs.decode(line, self._file.encoding or "UTF-8", "replace")
+            self._handle_data(line)
+            # In case we should leave the loop while there is still input available:
+            if self.end_tick_reason or self.suspend:
                 break
 
     def on_tick(self):
