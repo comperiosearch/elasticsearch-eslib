@@ -3,8 +3,9 @@ __author__ = 'Hans Terje Bakke'
 # TODO: Verify encoding working, especially when writing to stdout
 
 from ..Processor import Processor
-import sys, json
-from ..time import json_serializer_isodate
+import sys
+from ..esdoc import tojson
+
 
 class FileWriter(Processor):
     """
@@ -51,7 +52,7 @@ class FileWriter(Processor):
     def _incoming(self, document):
         if document:
             if type(document) is dict:
-                print >> self._file, json.dumps(document, default=json_serializer_isodate)
+                print >> self._file, tojson(document)
             else:
                 print >> self._file, document
             self._file.flush()

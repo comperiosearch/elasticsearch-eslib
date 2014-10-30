@@ -5,8 +5,7 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
 from .RabbitmqBase import RabbitmqBase
-from .. import time
-import json
+from ..esdoc import tojson
 
 
 class RabbitmqWriter(Processor, RabbitmqBase):
@@ -57,7 +56,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             msg_type = type(document).__name__
         elif type(document) in set([list, dict]):
             try:
-                data = json.dumps(document, default=time.json_serializer_isodate)
+                data = tojson(document)
             except TypeError as e:
                 self.doclog.warning("JSON serialization failed: %s" % e.message)
                 return

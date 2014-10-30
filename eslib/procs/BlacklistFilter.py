@@ -30,11 +30,11 @@ class BlacklistFilter(Processor):
     def __init__(self, **kwargs):
         super(BlacklistFilter, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
-        self.create_connector(self._incoming_str  , "str"  , "str"  , "Incoming document of type 'str' or 'unicode'.")
-        self.output_esdoc   = self.create_socket("output" , "esdoc"   , "Documents that passed the blacklist filtering, 'esdoc'.", is_default=True)
+        m = self.create_connector(self._incoming_esdoc, "input", "esdoc"  , "Incoming 'esdoc'.", is_default=True)
+        self.create_connector(self._incoming_str  , "str"  , "str"    , "Incoming document of type 'str' or 'unicode'.")
+        self.output_esdoc   = self.create_socket("output" , "esdoc"   , "Documents that passed the blacklist filtering, 'esdoc'.", is_default=True, mimic=m)
         self.output_str     = self.create_socket("str"    , "str"     , "Documents that passed the blacklist filtering, 'str'.")
-        self.output_dropped = self.create_socket("dropped", "*"       , "Documents that did not pass the blacklist filtering.")
+        self.output_dropped = self.create_socket("dropped", None      , "Documents that did not pass the blacklist filtering.")
 
         self.config.set_default(
             field     = None,

@@ -75,12 +75,3 @@ def ago2date(ago, from_date_utc=None):
     else:
         raise SyntaxError("Illegal unit for 'ago' string in: %s" % ago)
     return (from_date_utc or datetime.datetime.utcnow()) - delta;
-
-def json_serializer_isodate(obj):
-    """Default JSON serializer."""
-    s = None
-    if isinstance(obj, datetime.datetime):
-        if obj.utcoffset() is not None:
-            obj = obj - obj.utcoffset()
-        s = date2iso(obj)
-    return s

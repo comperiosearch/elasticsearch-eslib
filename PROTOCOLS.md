@@ -14,6 +14,10 @@ Used by
     ElasticsearchWriter.input (connector)
     ElasticsearchWriter.output (socket)
     CsvConverter.output (socket)
+    HtmlRemover.input (connector)
+    HtmlRemover.output (soclet)
+    PatternRemover.input (connector)
+    PatternRemover.output (socket)
 
 Format
 
@@ -27,20 +31,7 @@ Format
 
 All fields are optional, depending on the case
 
-
-## urlrequest
-
-Used by
-
-    WebGetter.input (connector)
-
-Format
-
-    url             str  #
-    what            str  # Source requesting the url, e.g. "twitter_mon"
-    who             str  # Who requested it, e.g. some user id from the source
-
-## webpage
+### esdoc.webpage
 
 Used by
 
@@ -56,6 +47,18 @@ Format
         content        str
         content_type   str
         encoding       str
+
+## urlrequest
+
+Used by
+
+    WebGetter.input (connector)
+
+Format
+
+    url             str  #
+    what            str  # Source requesting the url, e.g. "twitter_mon"
+    who             str  # Who requested it, e.g. some user id from the source
 
 ## csv
 

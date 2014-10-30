@@ -8,7 +8,24 @@ Module containing operations on "Elasticsearch type" documents (really just a di
 """
 
 
-__all__ = ("createdoc", "getfield", "putfield")
+__all__ = ("tojson", "createdoc", "getfield", "putfield")
+
+
+from datetime import datetime
+from .time import date2iso
+import json
+
+def _json_serializer_isodate(obj):
+    """Default JSON serializer."""
+    s = None
+    if isinstance(obj, datetime):
+        if obj.utcoffset() is not None:
+            obj = obj - obj.utcoffset()
+        s = date2iso(obj)
+    return s
+
+def tojson(doc):
+    return json.dumps(doc, default=_json_serializer_isodate)
 
 
 def getfield(doc, fieldpath, default=None):

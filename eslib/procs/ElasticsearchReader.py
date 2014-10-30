@@ -7,14 +7,10 @@ from time import sleep
 
 class ElasticsearchReader(Generator):
     """
-    Write data to Elasticsearch.
-    It expects incoming data in Elasticsearch document format.
-    Index and document types can be overridden by the config.
-
-    NOTE: If the index/type does not already exist, Elasticsearch will generate a mapping based on the incoming data.
+    Reads data from Elasticsearch.
 
     Sockets:
-        output     (esdoc)   : Documents retrieved from Elasticsearch.
+        output            (esdoc)   : Documents retrieved from Elasticsearch.
 
     Config:
         hosts             = None    : List of Elasticsearch hosts to write to.

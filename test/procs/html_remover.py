@@ -10,7 +10,7 @@ LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(
 
 class TestHtmlRemover(unittest.TestCase):
 
-    def test_all(self):
+    def test_str(self):
         dirty = '<a href="http://blabla.com/bla">Lady &amp; Landstrykeren</a>'
 
         p = HtmlRemover()
@@ -19,6 +19,16 @@ class TestHtmlRemover(unittest.TestCase):
         print "C=", cleaned
 
         self.assertTrue(cleaned == "Lady & Landstrykeren")
+
+    def test_unicode(self):
+        dirty = u'<a href="http://blabla.com/bla">Lady &amp; Landstrykeren</a>'
+
+        p = HtmlRemover()
+        cleaned = p._clean(dirty)
+        print "D=", dirty
+        print "C=", cleaned
+
+        self.assertTrue(cleaned == u"Lady & Landstrykeren")
 
 def main():
     unittest.main()
