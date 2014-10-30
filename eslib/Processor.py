@@ -74,6 +74,17 @@ class Processor(Configurable):
     #region Terminal creation
 
     def create_connector(self, method, name=None, protocol=None, description=None, is_default=False):
+        """
+        Create a connector (input) for this processor.
+
+        :param        method      : Method that will be called for processing incoming items.
+        :param str    name        : Name of the connector.
+        :param str    protocol    : Protocol that must comply to the protocol of sockets it will connect to.
+        :param str    description : Description text for the connector.
+        :param bool   is_default  : Whether this should be registered as the default connector that can be addressed
+                                    without a name. Only one can exist for a set of connectors for a processor.
+        :return Connector : Returns the new connector.
+        """
         terminal = Connector(name, protocol, method)
         if terminal.name in self.connectors:
             raise Exception("Connector name '%s' already exists for processor '%s'." % (terminal.name, self.name))
@@ -84,8 +95,19 @@ class Processor(Configurable):
             self.default_connector = terminal
         return terminal
 
-    def create_socket(self, name=None, protocol=None, description=None, is_default=False):
-        terminal = Socket(name, protocol)
+    def create_socket(self, name=None, protocol=None, description=None, is_default=False, mimic=None):
+        """
+        Create a socket (output) for this processor.
+
+        :param str    name        : Name of the socket.
+        :param str    protocol    : Protocol that connecting connectors must comply with.
+        :param str    description : Description text for the socket.
+        :param bool   is_default  : Whether this should be registered as the default socket that can be addressed
+                                    without a name. Only one can exist for a set of sockets for a processor.
+        :param Connector mimic    : A connector whose connections' (if any) protocol to mimic.
+        :return Socket : Returns the new socket.
+        """
+        terminal = Socket(name, protocol, mimic)
         if terminal.name in self.sockets:
             raise Exception("Socket name '%s' already exists for processor '%s'." % (terminal.name, self.name))
         terminal.owner = self

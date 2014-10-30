@@ -115,12 +115,14 @@ class FileReader(Generator):
             # Read as much as we can
             r,w,e = select([self._file], [], [self._file], 0)
             if e:
-                # I have never seen this happen...
-                self._close_file()
-                break
+                pass
+                # Hm... this happens on every normal file...
+                #self._close_file()
+                #break
             if r:
                 line = self._file.readline()
                 line = codecs.decode(line, self._file.encoding or "UTF-8", "replace")
+
                 if line:
                     self._handle_data(line)
                     # In case we should leave the loop while there is still input available:
@@ -136,12 +138,12 @@ class FileReader(Generator):
     # Candidate for Windows:
     def _read_as_much_as_possible_Windows(self):
         for line in self._file:
-            line = self._file.readline()
             line = codecs.decode(line, self._file.encoding or "UTF-8", "replace")
             self._handle_data(line)
             # In case we should leave the loop while there is still input available:
             if self.end_tick_reason or self.suspend:
-                break
+                return
+        self._close_file()
 
     def on_tick(self):
 

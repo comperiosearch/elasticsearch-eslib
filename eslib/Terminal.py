@@ -24,6 +24,9 @@ class Terminal(object):
         self.name = name or "unnamed"
         self.protocol = protocol or Terminal.ANY_PROTOCOL
 
+    def __str__(self):
+        return "%s|%s" % (self.name, self.protocol)
+
     def attach(self, terminal):
         self.connections.append(terminal)
 
@@ -43,7 +46,9 @@ class Terminal(object):
     def protocol_compliance(socket, connector):
         if connector.protocol == Terminal.ANY_PROTOCOL or socket.protocol == Terminal.ANY_PROTOCOL:
             return True
-        ss = socket.protocol.split(".")
+        # In case the socket is set to mimic the protocol of one of its connectors, we check for that
+        # instead of the directly registered protocol.
+        ss = socket.mimiced_protocol.split(".")
         cc = connector.protocol.split(".")
         #print "SS=", ss[:len(cc)]
         #print "CC=", cc[:len(cc)]

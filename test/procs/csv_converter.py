@@ -38,6 +38,14 @@ class TestCsvConverter(unittest.TestCase):
         self.assertTrue(output[1]["_id"] == "2")
         self.assertTrue(len(output[1]["_source"]) == 2)
 
+
+    def test_read(self):
+        r = FileReader(raw_lines=True)
+        r.config.filename = "data/csv_with_header.csv"
+        w = FileWriter()  # Write to stdout
+        w.subscribe(r)
+        r.start()
+
     def test_first_line_is_columns(self):
         r, c, w, output = self._setup( "data/csv_with_header.csv")
         r.start()

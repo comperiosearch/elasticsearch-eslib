@@ -12,9 +12,9 @@ LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(
 class TestPatternRemover(unittest.TestCase):
 
     def test_str(self):
-        dirty = "Oh my fucking god…"
+        dirty = u"Oh my fucking god…"
 
-        p = PatternRemover(patterns=["my", "\S+…"])
+        p = PatternRemover(patterns=["my", u"\S+…"])
         p.on_open()  # Force generation of internal regexes
         cleaned = p._clean(dirty)
         print "D=", dirty
@@ -23,7 +23,7 @@ class TestPatternRemover(unittest.TestCase):
         self.assertTrue(cleaned == "Oh fucking")
 
     def test_field(self):
-        dirty_text = "Oh my fucking god…"
+        dirty_text = u"Oh my fucking god…"
 
         dirty = {
             "_id": "somedoc",
@@ -32,7 +32,7 @@ class TestPatternRemover(unittest.TestCase):
             }
         }
 
-        p = PatternRemover(patterns=["my", "\S+…"], target_field="cleaned")
+        p = PatternRemover(patterns=["my", u"\S+…"], target_field="cleaned")
         p.on_open()  # Force generation of internal regexes
         cleaned = p._clean(dirty)
         print "D=", esdoc.getfield(cleaned, "_source.text")

@@ -24,6 +24,7 @@ from .Neo4jReader           import Neo4jReader
 from .TwitterUserGetter     import TwitterUserGetter
 from .TwitterFollowerGetter import TwitterFollowerGetter
 from .TweetEntityRemover    import TweetEntityRemover
+from .TweetExtractor        import TweetExtractor
 from .PatternRemover        import PatternRemover
 from .HtmlRemover           import HtmlRemover
 from .BlacklistFilter       import BlacklistFilter
@@ -48,8 +49,8 @@ __all__ = (
     "TwitterUserGetter",
     "TwitterFollowerGetter",
     "ParseEdgeToIds",
-    "TwitterFollowerGetter",
     "TweetEntityRemover",
+    "TweetExtractor",
     "PatternRemover",
     "HtmlRemover",
     "BlacklistFilter",

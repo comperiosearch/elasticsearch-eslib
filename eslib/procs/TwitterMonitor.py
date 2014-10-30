@@ -37,32 +37,25 @@ class TwitterMonitor(Monitor):
             who        str : e.g. some user id
 
     Sockets:
-        tweet  (esdoc.tweet) (default) : Tweet
-        raw    (*)                     : The tweet reported in raw format, exactly as returned by the TwitterAPI.
-        text   (str)                   : Only the text from the tweet.
-        link   (urlrequest)            : Link from the tweet, for potential follow-up.
-        user   (graph-edge)            : Info about author, mentioned or retweeted users from the tweet.
+        tweet  (esdoc.tweet) (default)    : Tweet
+        raw    (*)                        : The tweet reported in raw format, exactly as returned by the TwitterAPI.
+        text   (str)                      : Only the text from the tweet.
 
     Config:
-        consumer_key        = None     : Part of twitter dev credentials.
-        consumer_secret     = None     : Part of twitter dev credentials.
-        access_token        = None     : Part of twitter dev credentials.
-        access_token_secret = None     : Part of twitter dev credentials.
-        track               = []       : List of phrases to track. Must be 1-60 bytes long. Case insensitive. Exact matching not supported.
-        follow              = []       : List of users to track.
-        locations           = []       : List of locations to track. "longitude,latitude"
-        ignore_retweets     = True     : Do not report tweets from retweets if set. User relation "quote" will still be reported.
+        consumer_key           = None     : Part of twitter dev credentials.
+        consumer_secret        = None     : Part of twitter dev credentials.
+        access_token           = None     : Part of twitter dev credentials.
+        access_token_secret    = None     : Part of twitter dev credentials.
+        track                  = []       : List of phrases to track. Must be 1-60 bytes long. Case insensitive. Exact matching not supported.
+        follow                 = []       : List of users to track.
+        locations              = []       : List of locations to track. "longitude,latitude"
+        drop_retweets          = False    : Do not report tweets from retweets if set. User relation "quote" will still be reported.
+        max_reconnect_attempts = 10    : Maximum number of attempts to try a reconnect to Twitter.
 
     For more information about what you can listen to and how it is matched, see:
 
         https://dev.twitter.com/streaming/reference/post/statuses/filter
     """
-
-    RELATION_AUTHOR       = "author"
-    RELATION_RETWEET      = "quote"
-    RELATION_MENTION      = "mention"
-    MAX_CONNECT_ATTEMPTS  = 10
-
 
     def __init__(self, **kwargs):
         super(TwitterMonitor, self).__init__(**kwargs)
@@ -70,31 +63,30 @@ class TwitterMonitor(Monitor):
         self.output_tweet  = self.create_socket("tweet" , "esdoc.tweet"  , "Tweet.", is_default=True)
         self.output_raw    = self.create_socket("raw"   , None           , "Tweet in raw format, exactly as returned by the TwitterAPI.")
         self.output_text   = self.create_socket("text"  , "str"          , "Only the text from the tweet.")
-        self.output_link   = self.create_socket("link"  , "urlrequest"   , "Link from the tweet, for potential follow-up.")
-        self.output_user   = self.create_socket("user"  , "graph-edge"   , "Info about author, mentioned or retweeted users from the tweet.")
 
         self.config.set_default(
-            consumer_key        = None,
-            consumer_secret     = None,
-            access_token        = None,
-            access_token_secret = None,
-            track               = [],
-            follow              = [],
-            locations           = [],
-            ignore_retweets     = True
+            consumer_key           = None,
+            consumer_secret        = None,
+            access_token           = None,
+            access_token_secret    = None,
+            track                  = [],
+            follow                 = [],
+            locations              = [],
+            drop_retweets          = False,
+            max_reconnect_attempts = 10
         )
 
-        self._twitter_filter    = {}
-        self._twitter_api       = None
-        self._twitter_response  = None
-        self._twitter_iterator  = None
-        self._connect_delay     = 0
-        self._connect_attempts  = 0
-        self._connecting        = False
-        self._connected         = False
+        self._twitter_filter          = {}
+        self._twitter_api             = None
+        self._twitter_response        = None
+        self._twitter_iterator        = None
+        self._connect_delay           = 0
+        self._connect_attempts        = 0
+        self._connecting              = False
+        self._connected               = False
         self._last_connect_attempt_ms = 0
-        self._may_iterate       = False  # Prevent it from entering blocking call
-        self._inside_blocking   = False
+        self._may_iterate             = False  # Prevent it from entering blocking call
+        self._inside_blocking         = False
 
 
     def on_open(self):
@@ -149,11 +141,6 @@ class TwitterMonitor(Monitor):
         # Upon connection problems will try a reconnect in the run loop, later.
         self._connect(raise_instead_of_abort=True)
 
-    def on_close(self):
-        pass
-
-    def on_shutdown(self):
-        pass
 
     def stop(self):
         # Note: I hate overriding this method, but since the _twitter_iterator.next() call blocks
@@ -218,9 +205,9 @@ class TwitterMonitor(Monitor):
             #   are generally temporary and tend to clear quickly. Increase the
             #   delay in reconnects by 250ms each attempt, up to 16 seconds.
             self._connected = False
-            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+            if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.log.error("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
@@ -228,7 +215,7 @@ class TwitterMonitor(Monitor):
                 if self._connect_delay < 16000:
                     self._connect_delay += 250
                 self.log.debug("Connection error, exception: %s" % e.message)
-                self.log.error("Connection error -- Trying to reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay))
+                self.log.error("Connection error -- Trying to reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay))
                 return  # Run loop will try to reconnect
         elif code == 420:  # TODO
             # As suggested by Twitter;
@@ -237,16 +224,16 @@ class TwitterMonitor(Monitor):
             #   increases the time you must wait until rate limiting will no longer
             #   will be in effect for your account.
             self._connected = False
-            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+            if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.log.error("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
                 self._connecting = True
                 if self._connect_delay < 320000:
                     self._connect_delay += 5000
-                self.log.error("'420: Rate Limited' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay/1000.0))
+                self.log.error("'420: Rate Limited' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
                 return  # Run loop will try to reconnect
         elif code == 503:  # TODO
             # As suggested by Twitter;
@@ -254,16 +241,16 @@ class TwitterMonitor(Monitor):
             #   be appropriate. Start with a 5 second wait, doubling each attempt,
             #   up to 320 seconds.
             self._connected = False
-            if self._connect_attempts >= self.MAX_CONNECT_ATTEMPTS:
+            if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'416: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.MAX_CONNECT_ATTEMPTS)
+                self.log.error("'416: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
                 self._connecting = True
                 if self._connect_delay < 320000:
                     self._connect_delay += 5000
-                self.log.error("'416: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.MAX_CONNECT_ATTEMPTS, self._connect_delay/1000.0))
+                self.log.error("'416: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
                 return  # Run loop will try to reconnect
 
         # Authorization and validation errors:
@@ -330,7 +317,7 @@ class TwitterMonitor(Monitor):
             self._handle(item)
 
     def _handle(self, twitter_item):
-        raw, tweet, users, links = self._decode(twitter_item)
+        raw, tweet = self._decode(twitter_item)
         if tweet:
             # Counters are for tweets:
             self.total += 1
@@ -339,10 +326,6 @@ class TwitterMonitor(Monitor):
             self.output_text.send(tweet["_source"]["text"])
         if raw:
             self.output_raw.send(raw)
-        for user in users:
-            self.output_user.send(user)
-        for link in links:
-            self.output_link.send(link)
 
     def _setfield(self, source, target, source_field, target_field=None, default=False, defaultValue=None, value_converter=None):
         if source_field in source and source[source_field] != None:
@@ -370,71 +353,65 @@ class TwitterMonitor(Monitor):
         return dt
 
 
-    def _decode(self, twitter_item):
-        "Return a tuple of (raw, tweet, users, links)."
+    def _decode(self, raw):
+        "Return a tuple of (raw, tweet)."
 
-        source = twitter_item
         now = datetime.datetime.utcnow()
 
-        tweet = {"_id": source["id_str"], "_timestamp": now}
-        users = []
-        links = []
+        tweet = {"_id": raw["id_str"], "_timestamp": now}
 
-        ts = tweet["_source"] = {"id": source["id_str"] }  # id repeated intentionally
+        ts = tweet["_source"] = {"id": raw["id_str"] }  # id repeated intentionally
 
         # This user...
-        source_user = source["user"]  # Always present
-        user = { "id": source_user["id_str"] }
-        # Add author to 'user' list
-        users.append({"from": user["id"], "type": self.RELATION_AUTHOR, "to": user["id"]})
+        raw_user = raw["user"]  # Always present
+        user = { "id": raw_user["id_str"] }
 
         ts["user"] = user
-        self._setfield(source_user, user, "screen_name")
-        self._setfield(source_user, user, "name")
-        self._setfield(source_user, user, "lang")
-        self._setfield(source_user, user, "description")
-        self._setfield(source_user, user, "location")
-        self._setfield(source_user, user, "profile_image_url")
-        self._setfield(source_user, user, "protected")
-        self._setfield(source_user, user, "geo_enabled")
-        created_at = self._get_datetime(source_user, "created_at", "timestamp_ms") or now
+        self._setfield(raw_user, user, "screen_name")
+        self._setfield(raw_user, user, "name")
+        self._setfield(raw_user, user, "lang")
+        self._setfield(raw_user, user, "description")
+        self._setfield(raw_user, user, "location")
+        self._setfield(raw_user, user, "profile_image_url")
+        self._setfield(raw_user, user, "protected")
+        self._setfield(raw_user, user, "geo_enabled")
+        created_at = self._get_datetime(raw_user, "created_at", "timestamp_ms") or now
         if created_at:
             user["created_at"] = created_at
 
         # Misc. top level stuff for the tweet:
 
-        source_retweet = source.get("retweeted_status")
-        if source_retweet:
+        raw_retweet = raw.get("retweeted_status")
+        if raw_retweet:
             # Find out who has been retweeted:
-            retweeted_user_id = source_retweet["user"]["id_str"]
-            users.append({"from": user["id"], "type": self.RELATION_RETWEET, "to": retweeted_user_id})
-            if self.config.ignore_retweets:
-                return (None, None, users, links)
+            ts["retweet_user_id"] = raw_retweet["user"]["id_str"]
+            if self.config.drop_retweets:
+                return (None, None)
 
-        self._setfield(source, ts, "text")
-        self._setfield(source, ts, "truncated")
-        self._setfield(source, ts, "lang")
+        self._setfield(raw, ts, "text")
+        self._setfield(raw, ts, "truncated")
+        self._setfield(raw, ts, "lang")
 
         in_reply_to = {}
-        self._setfield(source, in_reply_to, "in_reply_to_user_id_str", "user_id")
-        self._setfield(source, in_reply_to, "in_reply_to_screen_name", "screen_name")
-        self._setfield(source, in_reply_to, "in_reply_to_status_id", "status_id")
+        self._setfield(raw, in_reply_to, "in_reply_to_user_id_str", "user_id")
+        self._setfield(raw, in_reply_to, "in_reply_to_screen_name", "screen_name")
+        self._setfield(raw, in_reply_to, "in_reply_to_status_id", "status_id")
         if in_reply_to:
             ts["in_reply_to"] = in_reply_to
 
-        ts["created_at"] = self._get_datetime(source, "created_at", "timestamp_ms") or now
+        ts["created_at"] = self._get_datetime(raw, "created_at", "timestamp_ms") or now
 
-        source_source = source.get("source")
+        source_source = raw.get("source")
         if source_source:
             try:
                 ts["source"] = XML.fromstring(source_source.encode("utf8")).text
             except Exception as e:
                 pass  # Otherwise just ignore this
 
-        self._setfield(source, ts, "geo")
+        self._setfield(raw, ts, "geo")
 
         # Do only a partial extract of 'place':
-        source_place = source.get("place")
+        source_place = raw.get("place")
         if source_place:
             place = {}
             self._setfield(source_place, place, "country")
@@ -444,7 +421,7 @@ class TwitterMonitor(Monitor):
 
         # Handle entities extracted by Twitter:
 
-        source_entities = source.get("entities")
+        source_entities = raw.get("entities")
         if source_entities:
             entities = {}
             # Get hashtags
@@ -458,8 +435,6 @@ class TwitterMonitor(Monitor):
                     url = u["expanded_url"]
                     item = { "url": url, "indices": u["indices"] }
                     urls.append(item)
-                    # Add to "links" list:
-                    links.append({"url": url, "what": "twitter", "who": user["id"]})
                 if urls:
                     entities["urls"] = urls
             # Get user mentions
@@ -471,11 +446,9 @@ class TwitterMonitor(Monitor):
                     m["id"] = m["id_str"]
                     del m["id_str"]
                     user_mentions.append(m)
-                    # Add to 'users' list:
-                    users.append({"from": user["id"], "type": self.RELATION_MENTION, "to": m["id"]})
                 if user_mentions:
                     entities["user_mentions"] = user_mentions
             if entities:
                 ts["entities"] = entities
 
-        return (source, tweet, users, links)
+        return (raw, tweet)

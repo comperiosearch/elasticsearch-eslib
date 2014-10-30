@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import unittest, json
-from eslib.procs import TwitterMonitor
+from eslib.procs import TwitterMonitor, TweetExtractor
 
 import logging
 LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
@@ -18,7 +18,25 @@ class TestTwitterMonitor(unittest.TestCase):
         f.close()
 
         m = TwitterMonitor()
-        raw, tweet = m._decode(j)
+        raw, tweet_mon = m._decode(j)
+
+        x = TweetExtractor()
+        tweet, users, links = x._extract(tweet_mon)
+
+        # Test links
+        self.assertTrue(len(links) == 1)
+        self.assertTrue(links[0]["what"] == "twitter")
+        self.assertTrue(links[0]["who"]  == "2196916282")
+        self.assertTrue(links[0]["url"]  == "http://www.eraliquida.com/?p=1010")
+
+        # Test users
+        self.assertTrue(len(users) == 2)
+        self.assertTrue(users[0]["from"] == "2196916282")
+        self.assertTrue(users[1]["from"] == "2196916282")
+        self.assertTrue(users[0]["to"] == "2196916282")
+        self.assertTrue(users[1]["to"] == "2649736855")
+        self.assertTrue(users[0]["type"] == "author")
+        self.assertTrue(users[1]["type"] == "mention")
 
         # Test tweet
         self.assertTrue(tweet["_id"] == "520149420122578944")

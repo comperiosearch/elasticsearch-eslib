@@ -1,6 +1,6 @@
 __author__ = 'Hans Terje Bakke'
 
-import csv
+import csv, codecs
 from ..Processor import Processor
 
 class CsvConverter(Processor):
@@ -72,29 +72,35 @@ class CsvConverter(Processor):
                     self._columns = csvrow
                     return
 
-        for csvrow in csv.reader([line], delimiter=self.config.delimiter): # Although there is at max one in 'line'..
+        print "*** INTERNAL TYPE=", type(line)
+        print "*** LINE=", line
 
-            if not len(self._columns) == len(csvrow):
-                self.doclog.warning("Column count does not match number of fields. Aborting. Row =\n%s" % csvrow)
-                self.abort()  # NOTE: We might want to continue processing, or we might not...
+        # Pick the only line. Since csv does not support unicode, we do this little encoding massage:
+        raw_line = codecs.encode(line, "UTF-8")
+        raw_csvrow = csv.reader([raw_line], delimiter=self.config.delimiter).next()
+        csvrow = [codecs.decode(x, "UTF-8") for x in raw_csvrow]
 
-            doc = {}
-            id = None
-            index = None
-            doctype = None
-            for i in range(len(self._columns)):
-                if not self._columns[i]:
-                    continue # Skip non-specified fields
-                elif self._columns[i] == self.config.id_field:
-                    id = csvrow[i]
-                elif self._columns[i] == self.config.index_field: # Override index
-                    index = csvrow[i]
-                elif self._columns[i] == self.config.type_field: # Override doctype
-                    doctype = csvrow[i]
-                else:
-                    doc.update({self._columns[i]: csvrow[i]})
+        if not len(self._columns) == len(csvrow):
+            self.doclog.warning("Column count does not match number of fields. Aborting. Row =\n%s" % csvrow)
+            self.abort()  # NOTE: We might want to continue processing, or we might not...
 
-            # Convert to Elasticsearch type document
-            esdoc = {"_index":self.config.index or index, "_type":self.config.doctype or doctype, "_id":id, "_source":doc}
+        doc = {}
+        id = None
+        index = None
+        doctype = None
+        for i in range(len(self._columns)):
+            if not self._columns[i]:
+                continue # Skip non-specified fields
+            elif self._columns[i] == self.config.id_field:
+                id = csvrow[i]
+            elif self._columns[i] == self.config.index_field: # Override index
+                index = csvrow[i]
+            elif self._columns[i] == self.config.type_field: # Override doctype
+                doctype = csvrow[i]
+            else:
+                doc.update({self._columns[i]: csvrow[i]})
 
-            self.output.send(esdoc)
+        # Convert to Elasticsearch type document
+        esdoc = {"_index":self.config.index or index, "_type":self.config.doctype or doctype, "_id":id, "_source":doc}
+
+        self.output.send(esdoc)
