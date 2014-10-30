@@ -42,6 +42,7 @@ class JSONArraysToURLRequest(Processor):
 
         for output in self._handle_all(doc):
             self._output.send(output)
+            self.log.info("%s was sent to _ouput" % str(doc))
 
     def _handle_all(self, jsonobject):
         """
@@ -50,7 +51,7 @@ class JSONArraysToURLRequest(Processor):
         :return: a generator which generates request objects
         """
         for (key, value) in jsonobject.iteritems():
-            if type(value) is list:
+            if isinstance(value, list):
                 for val in value:
                     yield self._handle(val)
 
@@ -67,5 +68,6 @@ class JSONArraysToURLRequest(Processor):
         output["url"] = value
         output["what"] = self.config.what
         output["who"] = self.config.who
+        self.log.info("url request created %s" % str(output))
         return output
 
