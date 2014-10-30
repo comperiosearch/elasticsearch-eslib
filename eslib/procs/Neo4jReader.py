@@ -84,6 +84,7 @@ class Neo4jReader(Generator):
                         izip(*self._queue[:num_elem])]
         rq = self.neo4j._build_rq(queries)
         resp = self.neo4j.commit(rq)
+        self.log.info("Asking neo4j for %i users" % num_elem)
         self._queue = self._queue[num_elem:]
         self.last_get = time.time()
         self.write_uids(ids, resp)
@@ -100,5 +101,6 @@ class Neo4jReader(Generator):
         for uid, result in izip(ids, resp.json()["results"]):
             if not result["data"]:
                 self._output.send(uid)
+                self.log.info("uid %s does not have properties" % str(uid))
             else:
                 self.has_properties.add(uid)
