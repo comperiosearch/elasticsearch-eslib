@@ -226,8 +226,8 @@ class WebGetter(Generator):
 
         if not type(domain_config) is dict:
             raise TypeError("'domain_config' should be a dict; was %s" % type(domain_config))
-        domain_id  = domain_config._get("domain_id")
-        url_prefix = domain_config._get("url_prefix")
+        domain_id  = domain_config.get("domain_id")
+        url_prefix = domain_config.get("url_prefix")
         if not domain_id:
             raise AttributeError("'domain_config' missing mandatory 'domain_id'")
         if not url_prefix:
@@ -238,9 +238,9 @@ class WebGetter(Generator):
 
         # Create object
         domain = Domain(domain_id, url_prefix)
-        domain.rate_number = domain_config._get("rate_number") or 0
-        domain.rate_window = domain_config._get("rate_window") or 0
-        domain.ttl         = domain_config._get("ttl")         or 0
+        domain.rate_number = domain_config.get("rate_number") or 0
+        domain.rate_window = domain_config.get("rate_window") or 0
+        domain.ttl         = domain_config.get("ttl")         or 0
 
         with self._lock:
             self._domains.append(domain)
@@ -323,7 +323,7 @@ class WebGetter(Generator):
             self.doclog.warning("Expected dict type document with at least a 'url' attribute.")
             return
 
-        url = document._get("url")
+        url = document.get("url")
         if not url:
             self.doclog.warning("'url' attribute was empty.")
             return
@@ -332,8 +332,8 @@ class WebGetter(Generator):
         if not domain:
             return  # Incoming URL request was not in a monitored domain
 
-        what = document._get("what")
-        who = document._get("who")
+        what = document.get("what")
+        who = document.get("who")
 
         domain.add(url, what, who)
 
@@ -359,7 +359,7 @@ class WebGetter(Generator):
             self._queue.put(ready_tuple)
 
     def _process_queue_item(self):
-        info, ttl_expired = self._queue._get()
+        info, ttl_expired = self._queue.get()
         self._queue.task_done()
 
         body = {}

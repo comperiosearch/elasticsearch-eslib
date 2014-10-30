@@ -42,14 +42,14 @@ class TweetEntityRemover(Processor):
 
     def _clean(self, doc):
 
-        source = doc._get("_source")
+        source = doc.get("_source")
         if not source:
             return doc
 
         text = esdoc.getfield(source, self.config.source_field)
 
         coords = []
-        entities = source._get("entities")
+        entities = source.get("entities")
         if self.config.remove_urls:
             x = esdoc.getfield(entities, "urls", [])
             coords += [l["indices"] for l in x]

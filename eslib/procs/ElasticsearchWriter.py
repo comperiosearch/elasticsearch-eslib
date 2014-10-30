@@ -57,9 +57,9 @@ class ElasticsearchWriter(Generator):
         self._queue_lock = Lock()
 
     def _incoming(self, document):
-        id = document._get("_id")
-        index = self.config.index or document._get("_index")
-        doctype = self.config.doctype or document._get("_type")
+        id = document.get("_id")
+        index = self.config.index or document.get("_index")
+        doctype = self.config.doctype or document.get("_type")
 
         if not index:
             self.doclog.error(esdoc_logmsg("Missing '_index' field in input and no override."))
@@ -70,7 +70,7 @@ class ElasticsearchWriter(Generator):
             #       It only does a shallow copy of the original document and replace the meta data '_index' and '_type'
             #       if there are subscribers!
 
-            fields = document._get("_source")
+            fields = document.get("_source")
 
             if self.config.update_fields:
                 # Use the partial 'update' API

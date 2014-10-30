@@ -40,7 +40,7 @@ def getfield(doc, fieldpath, default=None):
         d = d[f]
     if not d:
         return default
-    return d._get(fp[-1]) or default
+    return d.get(fp[-1]) or default
 
 
 def putfield(doc, fieldpath, value):

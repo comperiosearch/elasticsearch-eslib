@@ -86,7 +86,7 @@ class TestConnections(unittest.TestCase, Connections):
         self.assertTrue(len(self.d.connectors["input_ext"].connections) == 1) # c
 
 
-    def test_connect(self):
+    def test_connect2(self):
         self.create_processors()
         self.create_terminals()
         self.connect_terminals()

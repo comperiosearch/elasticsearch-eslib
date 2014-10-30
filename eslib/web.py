@@ -35,14 +35,14 @@ class WebGetter(object):
             raise IOError(msg)
 
         # Verify allowed content type
-        content_type = (res.headers._get("content-type") or "").split(";")[0]
+        content_type = (res.headers.get("content-type") or "").split(";")[0]
         if not content_type in self.content_types:
             msg = "Skipping web page with content type '%s', URL: %s" % (content_type, url)
             raise ValueError(msg)
 
         # Size check with reported content size
         if self.max_size > 0:
-            size = int(res.headers._get("content-length") or -1)
+            size = int(res.headers.get("content-length") or -1)
             if size > 0 and size > self.max_size:
                 msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
                 raise ValueError(msg)

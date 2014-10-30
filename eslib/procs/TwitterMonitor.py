@@ -381,7 +381,7 @@ class TwitterMonitor(Monitor):
 
         # Misc. top level stuff for the tweet:
 
-        raw_retweet = raw._get("retweeted_status")
+        raw_retweet = raw.get("retweeted_status")
         if raw_retweet:
             # Find out who has been retweeted:
             ts["retweet_user_id"] = raw_retweet["user"]["id_str"]
@@ -401,7 +401,7 @@ class TwitterMonitor(Monitor):
 
         ts["created_at"] = self._get_datetime(raw, "created_at", "timestamp_ms") or now
 
-        source_source = raw._get("source")
+        source_source = raw.get("source")
         if source_source:
             try:
                 ts["source"] = XML.fromstring(source_source.encode("utf8")).text
@@ -411,7 +411,7 @@ class TwitterMonitor(Monitor):
         self._setfield(raw, ts, "geo")
 
         # Do only a partial extract of 'place':
-        source_place = raw._get("place")
+        source_place = raw.get("place")
         if source_place:
             place = {}
             self._setfield(source_place, place, "country")
@@ -421,14 +421,14 @@ class TwitterMonitor(Monitor):
 
         # Handle entities extracted by Twitter:
 
-        source_entities = raw._get("entities")
+        source_entities = raw.get("entities")
         if source_entities:
             entities = {}
             # Get hashtags
             self._setfield(source_entities, entities, "hashtags")  # Use these directly
             # Get URLs
             # Do only a partial extract of 'urls'
-            source_urls = source_entities._get("urls")
+            source_urls = source_entities.get("urls")
             if source_urls:
                 urls = []
                 for u in source_urls:
@@ -439,7 +439,7 @@ class TwitterMonitor(Monitor):
                     entities["urls"] = urls
             # Get user mentions
             # Use 'id_str' as 'id' of type 'str'
-            source_user_mentions = source_entities._get("user_mentions")
+            source_user_mentions = source_entities.get("user_mentions")
             if source_user_mentions:
                 user_mentions = []
                 for m in source_user_mentions:
