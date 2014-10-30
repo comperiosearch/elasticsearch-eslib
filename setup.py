@@ -3,7 +3,6 @@
 import os
 import sys
 
-import eslib
 
 try:
     from setuptools import setup
@@ -24,20 +23,20 @@ requires = [
     'requests',
     'TwitterAPI',
     'PyYAML',             # for prog logging init stuff
-    'feedparser'
+    'feedparser',
+    'python-dateutil'
 ]
 
 
 setup(
     name='eslib',
-    version=eslib.__version__,
+    version='0.0.1',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
     long_description=open("README.md").read(),
     author='Hans Terje Bakke',
     author_email='hans.terje.bakke@comperio.no',
     url='https://github.com/comperiosearch/elasticsearch-eslib',
-    packages=['eslib'],
-    package_dir={'eslib': 'eslib'},
+    packages=['eslib', 'eslib.procs'],
     package_data={'': ['LICENSE', 'README.md', 'PROTOCOLS.md']},
     include_package_data=True,
     install_requires=requires,
