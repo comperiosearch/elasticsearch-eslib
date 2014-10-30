@@ -30,9 +30,9 @@ class PatternRemover(Processor):
     def __init__(self, **kwargs):
         super(PatternRemover, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
+        m = self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
         self.create_connector(self._incoming_str  , "str"  , "str"  , "Incoming document of type 'str' or 'unicode'.")
-        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.", is_default=True)
+        self.output_esdoc = self.create_socket("output" , "esdoc"   , "Outgoing, cleaned, 'esdoc'.", is_default=True, mimic=m)
         self.output_str   = self.create_socket("str"    , "str"     , "Outgoing, cleaned, 'str'.")
 
         self.config.set_default(

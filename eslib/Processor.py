@@ -122,16 +122,14 @@ class Processor(Configurable):
     #region Connection management
 
     @staticmethod
-    def _get_terminals(producer, socket_name, subscriber, connector_name):
+    def _get_connector(subscriber, connector_name):
         """
-        :return (socket, connector):
+        :return socket:
         """
 
         connector = None
         if len(subscriber.connectors) == 0:
             raise Exception("Processor '%s' has no connectors." % subscriber.name)
-        if len(producer.sockets) == 0:
-            raise Exception("Processor '%s' has no sockets to connect to." % producer.name)
 
         if not connector_name:
             if len(subscriber.connectors) > 1:
@@ -146,6 +144,14 @@ class Processor(Configurable):
             connector = subscriber.connectors.get(connector_name)
             if not connector:
                 raise Exception("Connector named '%s' not found in processor '%s'." % (connector_name, subscriber.name))
+
+        return connector
+
+    @staticmethod
+    def _get_socket(producer, socket_name):
+        """
+        :return socket:
+        """
 
         socket = None
         if not socket_name:
@@ -162,6 +168,19 @@ class Processor(Configurable):
             if not socket:
                 raise Exception("Socket named '%s' not found in processor '%s'." % (socket_name, producer.name))
 
+        return socket
+
+    @staticmethod
+    def _get_terminals(producer, socket_name, subscriber, connector_name):
+        """
+        :return (socket, connector):
+        """
+
+        if len(producer.sockets) == 0:
+            raise Exception("Processor '%s' has no sockets to connect to." % producer.name)
+
+        connector = Processor._get_connector(subscriber, connector_name)
+        socket = Processor._get_socket(producer, socket_name)
         return (socket, connector)
 
     def subscribe(self, producer, socket_name=None, connector_name=None):
@@ -472,27 +491,17 @@ class Processor(Configurable):
     #region Send and receive data with external methods
 
     def put(self, document, connector_name=None):
-        connector = None
-        if not self.connectors:
-            raise Exception("Processor '%s' has no connectors." % self.name)
-        elif not connector_name and len(self.connectors) == 1:
-            connector = self.connectors.itervalues().next()
-        else:
-            if not connector_name in self.connectors:
-                raise Exception("No connector named '%s' in processor '%s'." % (connector_name, self.name))
-            connector = self.connectors[connector_name]
+        connector = self._get_connector(self, connector_name)
+        if not connector:
+            raise Exception("Connector not found.")
         if not connector.accepting:
             raise Exception("Connector %s.%s is not currently accepting input." % (self.name, connector.name))
         connector.receive(document)
 
     def add_callback(self, method, socket_name=None):
-        socket = None
-        if not socket_name and len(self.sockets) == 1:
-            socket = self.sockets.itervalues().next()
-        else:
-            if not socket_name in self.sockets:
-                raise Exception("No socket named '%s' in processor '%s'." % (socket_name, self.name))
-            socket = self.sockets[socket_name]
+        socket = self._get_socket(self, socket_name)
+        if not socket:
+            raise Exception("Socket not found.")
         socket.callbacks.append(method)
 
     #endregion Send and receive data with external methods

@@ -49,6 +49,7 @@ class TestBlacklistFilter_str(unittest.TestCase):
         # Should have hit "young" from blacklist, but "young girls" from whitelist should override it
         self.assertTrue(check)
 
+
 class TestBlacklistFilter_esdoc(unittest.TestCase):
 
     def test_str_nohit(self):
