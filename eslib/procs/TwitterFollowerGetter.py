@@ -22,9 +22,10 @@ class TwitterFollowerGetter(Generator):
         super(TwitterFollowerGetter, self).__init__(**kwargs)
         self.twitter = twitter
         self.create_connector(self._incoming, "ids", "str")
-        self.create_socket("ids", "str", "IDs of related nodes.")
-        self.create_socket("edges", "graph-edge")
-        self.config.set_default(outgoing=True)
+        self._output_id = self.create_socket("ids", "str", "IDs of related nodes.")
+        self._output_edge = self.create_socket("edge", "graph-edge")
+        self.config.set_default(outgoing=True, reltype="follows")
+
 
     def on_open(self):
         if self.twitter is None:
@@ -36,19 +37,28 @@ class TwitterFollowerGetter(Generator):
             )
 
     def _incoming(self, document):
-        users = self.twitter.get_follows(uid=document, outgoing=self.config.outgoing)
-        for id_ in users:
-            self.sockets["ids"].send(id_)
+        try:
+            id_ = int(document)
+        except ValueError:
+            self.log.exception("Could not parse id: %s to int" % str(document))
+        else:
+            related = self.twitter.get_follows(uid=str(id_),
+                                               outgoing=self.config.outgoing)
+            self._send(id_, related)
+
+    def _send(self, origin, related):
+        for id_ in related:
+            edge = {"from": None, "type": self.config.reltype, "to": None}
+            self._output_id.send(id_)
             if self.config.outgoing:
-                edge = {
-                    "from": document,
-                    "type": "follows",
-                    "to": id_
-                   }
+                edge["from"] = origin
+                edge["to"] = id_
             else:
-                edge = {
-                    "from": id_,
-                    "type": "follows",
-                    "to": document
-                    }
-            self.sockets["edges"].send(edge)
+                edge["from"] = id_
+                edge["to"] = origin
+
+            if all(edge.itervalues()):
+                self._output_edge.send(edge)
+                self.log.info("Sending edge %s to Neo4j" % str(edge))
+            else:
+                self.log.error("Edge did had None-fields: %s" % str(edge))

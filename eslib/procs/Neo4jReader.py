@@ -22,6 +22,9 @@ class Neo4jReader(Generator):
     Config:
         batchsize  = 20       : How many IDs to gather up before making a call to Neo4j.
         batchtime  = 5.0      : How many seconds to wait before we send a batch if it is not full.
+        host       = localhost: The host we should connect to
+        port       = 7474     : The default neo4j port
+
     """
 
     def __init__(self, **kwargs):
@@ -30,7 +33,9 @@ class Neo4jReader(Generator):
         self._output = self.create_socket("ids", "str", "Outputs IDs that lack properties.")
         self.config.set_default(
             batchsize=20,
-            batchtime=5.0
+            batchtime=5.0,
+            host="localhost",
+            port="7474"
         )
         self._queue = []
         self.last_get = time.time()
@@ -79,6 +84,7 @@ class Neo4jReader(Generator):
                         izip(*self._queue[:num_elem])]
         rq = self.neo4j._build_rq(queries)
         resp = self.neo4j.commit(rq)
+        self.log.info("Asking neo4j for %i users" % num_elem)
         self._queue = self._queue[num_elem:]
         self.last_get = time.time()
         self.write_uids(ids, resp)
@@ -95,5 +101,6 @@ class Neo4jReader(Generator):
         for uid, result in izip(ids, resp.json()["results"]):
             if not result["data"]:
                 self._output.send(uid)
+                self.log.info("uid %s does not have properties" % str(uid))
             else:
                 self.has_properties.add(uid)

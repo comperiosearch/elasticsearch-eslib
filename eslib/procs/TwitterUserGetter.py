@@ -51,7 +51,12 @@ class TwitterUserGetter(Generator):
 
         :param doc: the id of a twitter user
         """
-        self._queue.append(str(doc))
+        try:
+            id_ = int(doc)
+        except ValueError:
+            self.log.exception("Could not parse id: %s to int" % doc)
+        else:
+            self._queue.append(str(id_))
 
     def on_tick(self):
         """
@@ -64,6 +69,7 @@ class TwitterUserGetter(Generator):
 
     def on_shutdown(self):
         """ Get rid of rest of queue before shutting down. """
+        self.log.info("Shutting down")
         while self._queue:
             self.get()
 
@@ -71,9 +77,17 @@ class TwitterUserGetter(Generator):
         """
         Gets users from twitter and outputs to a socket.
         """
-        resp = self.twitter.get_users(uids=self._queue[:self.config.batchsize])
-        self._queue = self._queue[self.config.batchsize:]
+        num = len(self._queue)
+        self.log.info("Getting %i users from Twitter" % num)
+        resp = self.twitter.get_users(uids=self._queue[:num])
+        self._queue = self._queue[num:]
         for raw_user in resp:
-            #TODO: Some kind of check here?
-            user = self.twitter.raw_to_dict(raw_user)
-            self._output.send(user)
+            try:
+                user = self.twitter.raw_to_dict(raw_user)
+            except TypeError as type_error:
+                self.log.exception(type_error)
+            else:
+                self._output.send(user)
+                self.log.info(
+                    "Sent %s to output: %s" % (str(user), self._output.name)
+                )

@@ -3,7 +3,6 @@
 import os
 import sys
 
-import eslib
 
 try:
     from setuptools import setup
@@ -14,8 +13,9 @@ if sys.argv[-1] == 'publish':
     os.system('python setup.py sdist upload')
     sys.exit()
 
+# For Python versions earlier than 2.3 the 'csv' package is also required. This is included in 2.3 and later. Is Pip
+# able to conditionally require this package for earlier versions or maybe time to ditch 2.2 and below support?
 requires = [
-    'csv',
     'elasticsearch',
     'argparse',
     'pika', 'pyrabbit',   # for Rabbitmq
@@ -23,20 +23,20 @@ requires = [
     'requests',
     'TwitterAPI',
     'PyYAML',             # for prog logging init stuff
-    'feedparser'
+    'feedparser',
+    'python-dateutil'
 ]
 
 
 setup(
     name='eslib',
-    version=eslib.__version__,
+    version='0.0.1',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
     long_description=open("README.md").read(),
     author='Hans Terje Bakke',
     author_email='hans.terje.bakke@comperio.no',
     url='https://github.com/comperiosearch/elasticsearch-eslib',
-    packages=['eslib'],
-    package_dir={'eslib': 'eslib'},
+    packages=['eslib', 'eslib.procs'],
     package_data={'': ['LICENSE', 'README.md', 'PROTOCOLS.md']},
     include_package_data=True,
     install_requires=requires,
