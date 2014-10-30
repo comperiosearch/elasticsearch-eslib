@@ -40,10 +40,9 @@ class TwitterFollowerGetter(Generator):
         try:
             id_ = int(document)
         except ValueError:
-            self.log.exception("Could not parse id: %s to int" % str(document))
+            self.doclog.exception("Could not parse id: %s to int" % str(document))
         else:
-            related = self.twitter.get_follows(uid=str(id_),
-                                               outgoing=self.config.outgoing)
+            related = self.twitter.get_follows(uid=str(id_), outgoing=self.config.outgoing)
             self._send(id_, related)
 
     def _send(self, origin, related):
@@ -58,7 +57,7 @@ class TwitterFollowerGetter(Generator):
                 edge["to"] = origin
 
             if all(edge.itervalues()):
+                self.doclog.trace("Sending edge %s to Neo4j" % str(edge))
                 self._output_edge.send(edge)
-                self.log.info("Sending edge %s to Neo4j" % str(edge))
             else:
-                self.log.error("Edge did had None-fields: %s" % str(edge))
+                self.doclog.error("Edge had None-fields: %s" % str(edge))

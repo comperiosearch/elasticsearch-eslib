@@ -68,9 +68,9 @@ class BlacklistFilter(Processor):
         self._filters = []
         if self.config.filters:
             for filtercfg in self.config.filters:
-                tokens    = filtercfg.get("tokens")
-                blacklist = filtercfg.get("blacklist")
-                whitelist = filtercfg.get("whitelist")
+                tokens    = filtercfg._get("tokens")
+                blacklist = filtercfg._get("blacklist")
+                whitelist = filtercfg._get("whitelist")
                 if tokens and (blacklist or whitelist):
                     token_regex     = self._create_regex(tokens   , "token")
                     blacklist_regex = self._create_regex(blacklist, "blacklist")
@@ -113,7 +113,7 @@ class BlacklistFilter(Processor):
             self.doclog.debug("Unsupported document type '%s'." % type(doc))
             return True  # So this silly document will pass through unfiltered...
 
-        source = doc.get("_source")
+        source = doc._get("_source")
         if not source:
             return True  # Missing source section; don't do anything and let it pass through unfiltered...
 

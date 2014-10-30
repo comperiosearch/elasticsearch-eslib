@@ -192,7 +192,7 @@ class TestWebGetter(unittest.TestCase):
 
 
     def hook(self, doc):
-        content_size = len(doc["_source"].get("content") or "")
+        content_size = len(doc["_source"]._get("content") or "")
         if doc["_id"] == "http://www.comperio.no":
             self.last_comperio_had_content = ("content" in doc["_source"])
             self.last_comperio_was_stopping = self.is_stopping

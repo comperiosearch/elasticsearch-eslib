@@ -141,7 +141,7 @@ class Processor(Configurable):
             else:
                 connector = subscriber.connectors.itervalues().next()
         else:
-            connector = subscriber.connectors.get(connector_name)
+            connector = subscriber.connectors._get(connector_name)
             if not connector:
                 raise Exception("Connector named '%s' not found in processor '%s'." % (connector_name, subscriber.name))
 
@@ -164,7 +164,7 @@ class Processor(Configurable):
             else:
                 socket = producer.sockets.itervalues().next()
         else:
-            socket = producer.sockets.get(socket_name)
+            socket = producer.sockets._get(socket_name)
             if not socket:
                 raise Exception("Socket named '%s' not found in processor '%s'." % (socket_name, producer.name))
 

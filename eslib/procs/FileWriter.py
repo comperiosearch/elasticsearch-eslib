@@ -34,7 +34,7 @@ class FileWriter(Processor):
     def on_open(self):
 
         if self._file:
-            print "*** FileWriter MULTIPLE STARTUP" # DEBUG
+            self.log.error("on_open() attempted when _file exists -- should not be possible.")
             return
 
         if not self.config.filename:

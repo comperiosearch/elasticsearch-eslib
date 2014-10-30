@@ -85,7 +85,7 @@ class TweetExtractor(Processor):
         users.append({"from": user_id, "type": self.RELATION_AUTHOR, "to": user_id})
 
         # Retweets
-        retweet_user_id = source.get("retweet_user_id")
+        retweet_user_id = source._get("retweet_user_id")
         if retweet_user_id:
             # Find out who has been retweeted:
             # Add retweet to 'users' list
@@ -94,10 +94,10 @@ class TweetExtractor(Processor):
                 return (None, users, links)
 
         # URLs and mentions from entities
-        entities = source.get("entities")
+        entities = source._get("entities")
         if entities:
             # Get URLs
-            urls = entities.get("urls")
+            urls = entities._get("urls")
             if urls:
                 for url in urls:
                     # Add to "links" list:
@@ -107,7 +107,7 @@ class TweetExtractor(Processor):
                         "who" : user_id
                     })
             # Get user mentions
-            user_mentions = entities.get("user_mentions")
+            user_mentions = entities._get("user_mentions")
             if user_mentions:
                 for m in user_mentions:
                     # Add relation to 'users' list:

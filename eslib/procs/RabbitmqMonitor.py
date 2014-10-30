@@ -43,9 +43,11 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
 
     def on_open(self):
         self._open_connection()
+        self.log.info("Connected to RabbitMQ.")
 
     def on_close(self):
-        self._close_connection()
+        if self._close_connection():
+            self.log.info("Connection to RabbitMQ closed.")
 
     #endregion Processor stuff
 
@@ -83,7 +85,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
             try:
                 self._close_connection()
                 self._open_connection()
-                self.log.debug("Successfully reconnected to RabbitMQ.")
+                self.log.info("Successfully reconnected to RabbitMQ.")
                 self.reconnecting = 0  # No longer attempting reconnects
                 self._start_consuming()
             except pika.exceptions.AMQPConnectionError as e:
@@ -92,7 +94,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
                     self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds." % timeout)
                     time.sleep(timeout)
                 else:
-                    self.log.warning("Missing connection to RabbitMQ. Max retries exceeded. Aborting.")
+                    self.log.critical("Missing connection to RabbitMQ. Max retries exceeded. Aborting.")
                     self.abort()  # We give up and abort
             return
 
@@ -100,7 +102,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
             self._channel.connection.process_data_events()
         except Exception as e:
             if self._reconnecting >= 0:
-                self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
+                self.log.info("No open connection to RabbitMQ. Trying to reconnect.")
                 self._reconnecting = self.config.max_reconnects  # Number of reconnect attempts; will start reconnecting on next tick
 
     def _callback(self, callback, method, properties, body):
@@ -138,6 +140,6 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
             else:
                 self.doclog.warning("Received empty document from RabbitMQ.")
         except Exception as e:
-            self.log.error("An exception occured inside the callback: %s" % e.message)
+            self.log.error("An exception occurred inside the callback: %s" % e.message)
 
     #endregion Generator stuff

@@ -57,9 +57,9 @@ class ElasticsearchWriter(Generator):
         self._queue_lock = Lock()
 
     def _incoming(self, document):
-        id = document.get("_id")
-        index = self.config.index or document.get("_index")
-        doctype = self.config.doctype or document.get("_type")
+        id = document._get("_id")
+        index = self.config.index or document._get("_index")
+        doctype = self.config.doctype or document._get("_type")
 
         if not index:
             self.doclog.error(esdoc_logmsg("Missing '_index' field in input and no override."))
@@ -70,7 +70,7 @@ class ElasticsearchWriter(Generator):
             #       It only does a shallow copy of the original document and replace the meta data '_index' and '_type'
             #       if there are subscribers!
 
-            fields = document.get("_source")
+            fields = document._get("_source")
 
             if self.config.update_fields:
                 # Use the partial 'update' API
@@ -108,8 +108,13 @@ class ElasticsearchWriter(Generator):
         if not len(payload):
             return # Nothing to do
 
+        self.log.debug("Submitting batch to Elasticsearch.")
+
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
         res = es.bulk(payload)
+
+        self.log.debug("Processing batch result.")
+
         for i, docop in enumerate(res["items"]):
             if   "index"  in docop: resdoc = docop["index"]
             if   "create" in docop: resdoc = docop["create"]
@@ -134,18 +139,20 @@ class ElasticsearchWriter(Generator):
                     self.output.send(doc)
             else:
                 # TODO: Perhaps send failed documents to another (error) socket(?)
-                print "*** NO DOC %d" % i # DEBUG
+                self.doclog.debug("No document %d" % i)
 
     #region Generator
 
     def on_shutdown(self):
         # Send remaining queue to Elasticsearch (still in batches)
         if not self.suspended: # Hm... do we want to complete if suspended, or stop where we are?
+            self.log.info("Submitting all remaining batches.")
             while self._queue.qsize():
                 self._send()
 
     def on_tick(self):
         if not self.config.batchsize or self._queue.qsize() >= self.config.batchsize:
+            self.log.info("Submitting full batch.")
             self._send()
 
     #endregion Generator

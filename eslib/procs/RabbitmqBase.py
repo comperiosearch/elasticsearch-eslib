@@ -19,7 +19,7 @@ class RabbitmqBase(Configurable):
             queue        = "default"
         )
 
-        self.config.max_reconnects   = 3
+        self.config.max_reconnects    = 3
         self.config.reconnect_timeout = 3
 
         # Pika connection and channel
@@ -84,7 +84,7 @@ class RabbitmqBase(Configurable):
         print fmt_h % ("Name", "Status", "Ready", "Unack", "Total")
         print fmt_h % (u*20, u*10, u*5, u*5, u*5)
         for q in queues:
-            print fmt_d % (q["name"], q["status"], q.get("messages_ready") or 0, q.get("messages_unacknowledged") or 0, q.get("messages") or 0)
+            print fmt_d % (q["name"], q["status"], q._get("messages_ready") or 0, q._get("messages_unacknowledged") or 0, q._get("messages") or 0)
 
     #endregion Admin
 
@@ -117,6 +117,7 @@ class RabbitmqBase(Configurable):
             except:
                 pass
             self._connection = None
+            return True
 
     def _reconnect(self, attempts, timeout):
         attempts = 3

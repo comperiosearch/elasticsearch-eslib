@@ -24,7 +24,8 @@ requires = [
     'TwitterAPI',
     'PyYAML',             # for prog logging init stuff
     'feedparser',
-    'python-dateutil'
+    'python-dateutil',
+    'mock'                # for tests
 ]
 
 

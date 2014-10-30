@@ -1,7 +1,10 @@
 from __future__ import division
+from __future__ import absolute_import
+
 from .Configurable import Configurable
 import json
 import requests
+import time
 
 class Neo4j(Configurable):
     """
@@ -11,12 +14,14 @@ class Neo4j(Configurable):
 
     def __init__(self, **kwargs):
         super(Neo4j, self).__init__(**kwargs)
+
         self.config.set_default(
-            host="localhost",
-            port="7474",
-            start_reconnect_wait=2,
-            max_reconnect_wait=30*60
+            host                 = "localhost",
+            port                 = 7474,
+            start_reconnect_wait = 2,
+            max_reconnect_wait   = 30*60
         )
+
         self._set_config()
         self.validate()
 
@@ -145,7 +150,7 @@ class Neo4j(Configurable):
 
         """
 
-        # Idially one should not use type() in if.
+        # Ideally one should not use type() in if.
         # TODO: Preallocate memory
         if type(queries) == int:
             queries = [None] * queries

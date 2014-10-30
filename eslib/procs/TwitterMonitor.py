@@ -207,7 +207,7 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
@@ -226,7 +226,7 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
@@ -243,14 +243,14 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'416: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("'503: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
                 self._connecting = True
                 if self._connect_delay < 320000:
                     self._connect_delay += 5000
-                self.log.error("'416: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
+                self.log.error("'503: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
                 return  # Run loop will try to reconnect
 
         # Authorization and validation errors:
@@ -304,7 +304,7 @@ class TwitterMonitor(Monitor):
             if self.stopping:
                 pass  # This is caused by us closing the underlying connection in order to get the iterator to stop. (Weirdness.. wish we could have sent a 'stop' -- HTB)
             else:
-                self.log.error("StopIteration received without stopping. Aborting!")
+                self.log.critical("StopIteration received without stopping. Aborting!")
                 self.abort()
         except Exception as e:
             self._inside_blocking = False
@@ -381,7 +381,7 @@ class TwitterMonitor(Monitor):
 
         # Misc. top level stuff for the tweet:
 
-        raw_retweet = raw.get("retweeted_status")
+        raw_retweet = raw._get("retweeted_status")
         if raw_retweet:
             # Find out who has been retweeted:
             ts["retweet_user_id"] = raw_retweet["user"]["id_str"]
@@ -401,7 +401,7 @@ class TwitterMonitor(Monitor):
 
         ts["created_at"] = self._get_datetime(raw, "created_at", "timestamp_ms") or now
 
-        source_source = raw.get("source")
+        source_source = raw._get("source")
         if source_source:
             try:
                 ts["source"] = XML.fromstring(source_source.encode("utf8")).text
@@ -411,7 +411,7 @@ class TwitterMonitor(Monitor):
         self._setfield(raw, ts, "geo")
 
         # Do only a partial extract of 'place':
-        source_place = raw.get("place")
+        source_place = raw._get("place")
         if source_place:
             place = {}
             self._setfield(source_place, place, "country")
@@ -421,14 +421,14 @@ class TwitterMonitor(Monitor):
 
         # Handle entities extracted by Twitter:
 
-        source_entities = raw.get("entities")
+        source_entities = raw._get("entities")
         if source_entities:
             entities = {}
             # Get hashtags
             self._setfield(source_entities, entities, "hashtags")  # Use these directly
             # Get URLs
             # Do only a partial extract of 'urls'
-            source_urls = source_entities.get("urls")
+            source_urls = source_entities._get("urls")
             if source_urls:
                 urls = []
                 for u in source_urls:
@@ -439,7 +439,7 @@ class TwitterMonitor(Monitor):
                     entities["urls"] = urls
             # Get user mentions
             # Use 'id_str' as 'id' of type 'str'
-            source_user_mentions = source_entities.get("user_mentions")
+            source_user_mentions = source_entities._get("user_mentions")
             if source_user_mentions:
                 user_mentions = []
                 for m in source_user_mentions:

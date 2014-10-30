@@ -95,7 +95,7 @@ class PatternRemover(Processor):
             self.doclog.debug("Unsupported document type '%s'." % type(doc))
             return doc
 
-        source = doc.get("_source")
+        source = doc._get("_source")
         if not source:
             return doc  # Missing source section; don't do anything
 
