@@ -1,3 +1,5 @@
+__author__ = 'Eivind Eidheim Elseth'
+
 import unittest, json
 from eslib.procs.JSONArraysToURLRequest import JSONArraysToURLRequest
 

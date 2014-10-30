@@ -16,7 +16,7 @@ class JSONArraysToURLRequest(Processor):
     You can also prepend each value with a string if you do not get the entire url from the source socket
 
     Sockets:
-        input     (urlrequset)   (default)   : Output from the command line utility's stdout
+        input     (urlrequest)   (default)   : Output from the command line utility's stdout
     Config:
         prepend         = None   : The string to prepend each value with.
     """
