@@ -37,6 +37,8 @@ class CLIReader(Generator):
             (output, err) = p.communicate()
             if output:
                 self._stdout.send(output)
+                self.log.info("The document: %s, was outputted" % str(output))
             if err:
                 self._stderr.send(err)
+                self.log.error("An error occured: %s" % str(err))
             self.last_get = time.time()
