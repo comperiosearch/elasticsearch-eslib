@@ -6,12 +6,14 @@ eslib.debug
 
 Module containing functions useful for debugging.
 """
+import os
 
 
 __all__ = ("byte_size_string", "get_memory_used")
 
 
-import resource
+if os.name == 'posix':
+    import resource
 
 
 def byte_size_string(bytes, decimals=1):
@@ -27,5 +29,8 @@ def byte_size_string(bytes, decimals=1):
 
 
 def get_memory_used():
-    "Get current memory useage by this process."
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    """Get current memory useage by this process."""
+    if os.name == 'posix':
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    else:
+        raise NotImplementedError
