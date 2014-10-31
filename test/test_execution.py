@@ -1,5 +1,5 @@
 import unittest, time, sys
-from connections import Connections
+from test_connections import Connections
 from eslib import Processor, Generator, Controller
 
 
