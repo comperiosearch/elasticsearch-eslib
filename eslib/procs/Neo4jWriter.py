@@ -27,17 +27,21 @@ class Neo4jWriter(Generator):
         super(Neo4jWriter, self).__init__(**kwargs)
         self.create_connector(self._incoming_edge, "edge", "graph-edge")
         self.create_connector(self._incoming_user, "user", "graph-user")
-        # This could be better
-        self.edge_queue = []
-        self.last_edge_commit = time.time()
-        self.user_queue = []
-        self.last_user_commit = time.time()
+
         self.config.set_default(
-            batchsize=20,
-            batchtime=5,
-            host="localhost",
-            port="7474"
+            batchsize = 20,
+            batchtime = 5,
+            host      = "localhost",
+            port      = 7474
         )
+
+        self._neo4j = None
+
+        # This could be better
+        self._edge_queue = []
+        self._last_edge_commit = time.time()
+        self._user_queue = []
+        self._last_user_commit = time.time()
 
     def on_open(self):
         """
@@ -49,7 +53,10 @@ class Neo4jWriter(Generator):
 
         """
 
-        self.neo4j = Neo4j(host=self.config.host, port=self.config.port)
+        # TODO: Need logging, request timeout and exception handling down there:
+        self.log.debug("Connecting to Neo4j.")
+        self._neo4j = Neo4j(host=self.config.host, port=self.config.port)
+        self.log.status("Connected to Neo4j on %s:%d." % (self.config.host, self.config.port))
 
     def _incoming_edge(self, document):
         """
@@ -69,13 +76,13 @@ class Neo4jWriter(Generator):
         except KeyError as ke:
             self.log.exception("Unable to parse document: %s" % str(document))
         else:
-            query = self.neo4j.get_edge_query(from_id, edge_type, to_id)
-            self.edge_queue.append(query)
+            query = self._neo4j.get_edge_query(from_id, edge_type, to_id)
+            self._edge_queue.append(query)
 
     def _incoming_user(self, document):
-        self.log.info("Incoming user %s" % str(document))
-        query, params = self.neo4j.get_node_merge_query(document)
-        self.user_queue.append((query, params))
+        self.doclog.trace("Incoming user '%s'." % str(document))
+        query, params = self._neo4j.get_node_merge_query(document)
+        self._user_queue.append((query, params))
 
     def on_tick(self):
         """
@@ -84,43 +91,44 @@ class Neo4jWriter(Generator):
 
         """
         now = time.time()
-        if((len(self.edge_queue) >= self.config.batchsize) or
-            (now - self.last_edge_commit >= self.config.batchtime and
-                 self.edge_queue)):
-            self.edge_send()
+        if ((len(self._edge_queue) >= self.config.batchsize) or
+            (now - self._last_edge_commit >= self.config.batchtime and
+                 self._edge_queue)):
+            self._edge_send()
 
-        if((len(self.user_queue) >= self.config.batchsize) or
-           ((now - self.last_user_commit >= self.config.batchtime) and
-                self.user_queue)):
-            self.user_send()
+        if ((len(self._user_queue) >= self.config.batchsize) or
+           ((now - self._last_user_commit >= self.config.batchtime) and
+                self._user_queue)):
+            self._user_send()
 
     def on_shutdown(self):
         """ Clear out the rest of the items in the queue """
-        self.log.info("Shutting down")
-        while self.edge_queue:
-            self.edge_send()
-        while self.user_queue:
-            self.user_send()
+        self.log.info("Processing remaining edge queue.")
+        while self._edge_queue:
+            self._edge_send()
+        self.log.info("Processing remaining user queue.")
+        while self._user_queue:
+            self._user_send()
 
-    def edge_send(self):
-        num_edges = len(self.edge_queue)
-        rq = self.neo4j._build_rq(self.edge_queue[:num_edges])
-        self.neo4j.commit(rq)
-        self.log.info("Committed %i edges" % num_edges)
-        self.edge_queue = self.edge_queue[num_edges:]
-        self.last_edge_commit = time.time()
+    def _edge_send(self):
+        num_edges = len(self._edge_queue)
+        rq = self._neo4j._build_rq(self._edge_queue[:num_edges])
+        self._neo4j.commit(rq)
+        self.log.info("Committed %i edges." % num_edges)
+        self._edge_queue = self._edge_queue[num_edges:]
+        self._last_edge_commit = time.time()
 
-    def user_send(self):
-        num_users = len(self.user_queue)
+    def _user_send(self):
+        num_users = len(self._user_queue)
         users, params = [list(t)
                          for t in
-                         izip(*self.user_queue[:num_users])]
+                         izip(*self._user_queue[:num_users])]
 
-        rq = self.neo4j._build_rq(users, params)
-        self.neo4j.commit(rq)
-        self.log.info("Committed %i users" % num_users)
-        self.user_queue = self.user_queue[num_users:]
-        self.last_user_commit = time.time()
+        rq = self._neo4j._build_rq(users, params)
+        self._neo4j.commit(rq)
+        self.log.info("Committed %i users." % num_users)
+        self._user_queue = self._user_queue[num_users:]
+        self._last_user_commit = time.time()
 
     # def parse(self, document):
     #     """

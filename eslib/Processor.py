@@ -44,6 +44,9 @@ class Processor(Configurable):
         self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
         self._initialized = False # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
 
+    def __str__(self):
+        return "%s|%s" % (self.__class__.__name__, self.name)
+
     @property
     def name(self):
         return self.config.name
@@ -122,16 +125,14 @@ class Processor(Configurable):
     #region Connection management
 
     @staticmethod
-    def _get_terminals(producer, socket_name, subscriber, connector_name):
+    def _get_connector(subscriber, connector_name):
         """
-        :return (socket, connector):
+        :return socket:
         """
 
         connector = None
         if len(subscriber.connectors) == 0:
             raise Exception("Processor '%s' has no connectors." % subscriber.name)
-        if len(producer.sockets) == 0:
-            raise Exception("Processor '%s' has no sockets to connect to." % producer.name)
 
         if not connector_name:
             if len(subscriber.connectors) > 1:
@@ -146,6 +147,14 @@ class Processor(Configurable):
             connector = subscriber.connectors.get(connector_name)
             if not connector:
                 raise Exception("Connector named '%s' not found in processor '%s'." % (connector_name, subscriber.name))
+
+        return connector
+
+    @staticmethod
+    def _get_socket(producer, socket_name):
+        """
+        :return socket:
+        """
 
         socket = None
         if not socket_name:
@@ -162,6 +171,19 @@ class Processor(Configurable):
             if not socket:
                 raise Exception("Socket named '%s' not found in processor '%s'." % (socket_name, producer.name))
 
+        return socket
+
+    @staticmethod
+    def _get_terminals(producer, socket_name, subscriber, connector_name):
+        """
+        :return (socket, connector):
+        """
+
+        if len(producer.sockets) == 0:
+            raise Exception("Processor '%s' has no sockets to connect to." % producer.name)
+
+        connector = Processor._get_connector(subscriber, connector_name)
+        socket = Processor._get_socket(producer, socket_name)
         return (socket, connector)
 
     def subscribe(self, producer, socket_name=None, connector_name=None):
@@ -296,7 +318,10 @@ class Processor(Configurable):
 
         self._runchan_count += 1
 
-        self.on_startup()
+        try:
+            self.on_startup()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_startup() -- proceeding.")
 
         while self.running:
             if self.sleep:
@@ -304,13 +329,19 @@ class Processor(Configurable):
 
             if self.stopping:
                 if self._runchan_count == 1: # Now it is only us left...
-                    self.on_shutdown()
+                    try:
+                        self.on_shutdown()
+                    except Exception as e:
+                        self.log.exception("Unhandled exception in on_shutdown() -- proceeding.")
                     self.production_stopped() # Ready to close down
             elif not self.suspended:
-                self.on_tick()
+                try:
+                    self.on_tick()
+                except Exception as e:
+                    self.log.exception("Unhandled exception in on_tick() -- proceeding.")
 
         if self.aborted:
-            #self.on_abort()
+            # note: on_abort() should have been called already, or we should never have gotten here
             self._close()
             self._runchan_count -= 1 # If stopped normally, it was decreased in call to production_stopped()
 
@@ -330,7 +361,13 @@ class Processor(Configurable):
     def _setup(self):
         if self._initialized:
             return
-        self.on_open()
+
+        try:
+            self.on_open()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_open() -- TERMINATING IMMEDIATELY.")
+            raise e
+
         self._initialized = True
         # Tell all subscribers, cascading, to run setup
         for subscriber in self._iter_subscribers():
@@ -338,8 +375,13 @@ class Processor(Configurable):
 
     def _close(self):
         if not self._initialized:
-            print "*** %s WAS NOT INITIALIZED BEFORE CALL TO _close()!" % self.name # DEBUG
-        self.on_close()
+            self.log.warning("_close was called on this processor that has not been _initialized !!!")
+
+        try:
+            self.on_close()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_close() -- proceeding.")
+
         self._initialized = False
         # Note: Do NOT tell subscribers to close. They will do this themselves after they have been stopped or aborted.
 
@@ -428,7 +470,11 @@ class Processor(Configurable):
         self.accepting = False
         self.running = False
         self.stopping = False  # We will stop immediately
-        self.on_abort()
+
+        try:
+            self.on_abort()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_abort() -- proceeding.")
 
         if not self.is_generator:  # Otherwise handled in the _run() loop
             self._close()
@@ -442,7 +488,12 @@ class Processor(Configurable):
 
         # Suspend monitoring remote source or generating output.
         self.suspended = True
-        self.on_suspend()
+
+        try:
+            self.on_suspend()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_suspend() -- proceeding.")
+
         # Suspend all connectors from polling items from its queue and requesting processing
         for connector in self.connectors.itervalues():
             connector.suspend()
@@ -452,7 +503,12 @@ class Processor(Configurable):
 
         # Resume monitoring remote source or generating output.
         self.suspended = False
-        self.on_resume()
+
+        try:
+            self.on_resume()
+        except Exception as e:
+            self.log.exception("Unhandled exception in on_resume() -- proceeding.")
+
         # Resume all connectors
         for connector in self.connectors.itervalues():
             connector.resume()
@@ -472,27 +528,17 @@ class Processor(Configurable):
     #region Send and receive data with external methods
 
     def put(self, document, connector_name=None):
-        connector = None
-        if not self.connectors:
-            raise Exception("Processor '%s' has no connectors." % self.name)
-        elif not connector_name and len(self.connectors) == 1:
-            connector = self.connectors.itervalues().next()
-        else:
-            if not connector_name in self.connectors:
-                raise Exception("No connector named '%s' in processor '%s'." % (connector_name, self.name))
-            connector = self.connectors[connector_name]
+        connector = self._get_connector(self, connector_name)
+        if not connector:
+            raise Exception("Connector not found.")
         if not connector.accepting:
             raise Exception("Connector %s.%s is not currently accepting input." % (self.name, connector.name))
         connector.receive(document)
 
     def add_callback(self, method, socket_name=None):
-        socket = None
-        if not socket_name and len(self.sockets) == 1:
-            socket = self.sockets.itervalues().next()
-        else:
-            if not socket_name in self.sockets:
-                raise Exception("No socket named '%s' in processor '%s'." % (socket_name, self.name))
-            socket = self.sockets[socket_name]
+        socket = self._get_socket(self, socket_name)
+        if not socket:
+            raise Exception("Socket not found.")
         socket.callbacks.append(method)
 
     #endregion Send and receive data with external methods

@@ -207,7 +207,7 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("Connection error -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
@@ -226,7 +226,7 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("'420: Rate Limited' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
@@ -243,14 +243,14 @@ class TwitterMonitor(Monitor):
             self._connected = False
             if self._connect_attempts >= self.config.max_reconnect_attempts:
                 self._connecting = False
-                self.log.error("'416: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
+                self.log.critical("'503: Service unavailable' -- Max attempts (%d) exceeded. Aborting!" % self.config.max_reconnect_attempts)
                 self.abort()
                 return
             else:
                 self._connecting = True
                 if self._connect_delay < 320000:
                     self._connect_delay += 5000
-                self.log.error("'416: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
+                self.log.error("'503: Service unavailable' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
                 return  # Run loop will try to reconnect
 
         # Authorization and validation errors:
@@ -304,7 +304,7 @@ class TwitterMonitor(Monitor):
             if self.stopping:
                 pass  # This is caused by us closing the underlying connection in order to get the iterator to stop. (Weirdness.. wish we could have sent a 'stop' -- HTB)
             else:
-                self.log.error("StopIteration received without stopping. Aborting!")
+                self.log.critical("StopIteration received without stopping. Aborting!")
                 self.abort()
         except Exception as e:
             self._inside_blocking = False

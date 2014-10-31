@@ -49,7 +49,7 @@ class Pipeline(object):
             while not self._input_ended:
                 while not self._input_ended and self._input_queue.empty(): _sleep()
                 while not self._input_queue.empty():
-                    item = self._input_queue.get()
+                    item = self._input_queue._get()
                     self._handle(proc, item)
         elif not feeder: # This is a generator
             for item in proc.read(None):
@@ -59,7 +59,7 @@ class Pipeline(object):
                 if not feeder.done and feeder.output_queue.empty(): _sleep()
                 # Read all items and process
                 while not feeder.output_queue.empty():
-                    item = feeder.output_queue.get()
+                    item = feeder.output_queue._get()
                     self._handle(proc, item)
 
         proc.finish()
@@ -127,7 +127,7 @@ class Pipeline(object):
     def get(self): # OBS: Blocking
         "Get and remove an item from the pipeline's ouput queue."
         if not self.processors: return None
-        return self.processors[-1].output_queue.get()
+        return self.processors[-1].output_queue._get()
 
     def count(self):
         max_count = 0

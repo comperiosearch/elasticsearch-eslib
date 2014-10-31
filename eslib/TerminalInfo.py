@@ -27,12 +27,15 @@ class TerminalInfo(object):
         spacing = "  "
         spc = spacing * indent
         type_indicator = "?"
+        mimic_str = ""
         if self.type is Socket:
             type_indicator = "+"
+            if self.mimic:
+                mimic_str = " (mimic=%s)" % self.mimic.name
         elif self.type is Connector:
             type_indicator = "-"
 
-        print "%s%c%s.%s(%s) (conns=%d)%s" % (spc, type_indicator, self.owner, self.name, self.protocol, self.count, kat_count_str)
+        print "%s%c%s.%s(%s) (conns=%d)%s" % (spc, type_indicator, self.owner, self.name, self.protocol, self.count, mimic_str)
         if verbose and self.description:
             print "\"%s%s%s\"" % (spc, spc, self.description)
 

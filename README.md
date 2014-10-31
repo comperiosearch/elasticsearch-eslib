@@ -274,14 +274,39 @@ output either for the entire processor or per socket, with
         log                    # logger; log processor events here
         doclog                 # logger; log problems with documents here
     Methods to call:
-        create_connector(method, name=None, protocol=None, description=None)
-        create_socket(name=None, description=None)
+        create_connector(method, name=None, protocol=None, description=None, is_default=False)
+        create_socket(name=None, description=None, is_default=False, mimic=None)
         stop()                 # call this if you want to explicitly stop prematurely
         abort()                # call this if you want to explicitly abort prematurely
     Properties and methods on sockets:
         socket.has_output      # bool; indicating whether the socket has connections (subscribers)
         socket.send(document)  # sends document to connected subscribers for asynchronous processing
 ```
+
+
+### Default terminal
+
+A connector can be set as default using the 'is_default' parameter or setting the 'default_connector' and
+'default_socket'. There can only be one default connector and one default socket. This makes it possible
+to address a terminal without name, which will then be routed to the default terminal. If only one socket
+or connector exists, then that one also becomes the defacto default within its collection.
+
+### Protocol "mimicing"
+
+A processor can have a socket "mimic" protocol of connected connector. This is useful in a processing chain
+A-B-C, where B massages the output from A and passes it on to C. A and C needs to have the same protocols on
+their terminals, while B can be more general. Example:
+
+```text
+    TwitterMonitor socket=tweet(esdoc.tweet)
+        => HtmlRemover connector=input(esdoc) | socket=output(esdoc) mimic=input
+            => TweetExtractor connector=tweet(esdoc.tweet)
+```
+
+Normal protocol compliance would dictate that TweetExtractor connector would require the more specific
+'esdoc.tweet' protocol, while the HtmlRemover only outputs 'esdoc'. However, HtmlRemover has its output
+socket set to 'mimic' its input connector. When we then attach the TwitterMonitor socket with protocol
+'esdoc.tweet', the HtmlRemover's socket will mimic that protocol, and the TweetExtractor will accept it.
 
 ### Processor lifespan
 

@@ -73,7 +73,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
     def _get_actor_weight(self, actor):
         actor = actor.lower()
         if actor in self._actors_db:
-            return float(self._actors_db[actor].get("weight", 0.0))
+            return float(self._actors_db[actor]._get("weight", 0.0))
         return 0.0
 
     def _get_actors(self, fields):
@@ -142,7 +142,7 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         
 
     def process(self, doc):
-        fields  = doc.get("_source")
+        fields  = doc._get("_source")
         text = eslib.getfield(fields, self.field, "")
 
         if self._actors_db:
@@ -154,9 +154,9 @@ class TweetAnalyzer(eslib.DocumentProcessor):
         target_score = self._get_text_stuff(fields, text, self._target_index, "targets", "target_score")
 
         if self.DEBUG:
-            id      = doc.get("_id")
-            index   = doc.get("_index")
-            doctype = doc.get("_type")
+            id      = doc._get("_id")
+            index   = doc._get("_index")
+            doctype = doc._get("_type")
             self.doclog(doc, "actor=%5.2f, target=%5.2f, action=%5.2f" % (actor_score, target_score, action_score))
 
         # A simple summary score

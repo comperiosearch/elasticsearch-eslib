@@ -22,8 +22,8 @@ class Throttle(Processor):
     def __init__(self, **kwargs):
         super(Throttle, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming, "input", None, "Incoming document.")
-        self.output = self.create_socket("output" , None, "Outgoing document.")
+        m = self.create_connector(self._incoming, "input", None, "Incoming document.")
+        self.output = self.create_socket("output" , None, "Outgoing document.", mimic=m)
 
         self.config.set_default(
             delay  = 1.0,

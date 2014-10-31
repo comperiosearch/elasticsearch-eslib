@@ -38,9 +38,11 @@ class RabbitmqWriter(Processor, RabbitmqBase):
 
     def on_open(self):
         self._open_connection()
+        self.log.info("Connected to RabbitMQ.")
 
     def on_close(self):
-        self._close_connection()
+        if self._close_connection():
+            self.log.info("Connection to RabbitMQ closed.")
 
     def _incoming(self, document):
         if document == None:
@@ -58,12 +60,12 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             try:
                 data = tojson(document)
             except TypeError as e:
-                self.doclog.warning("JSON serialization failed: %s" % e.message)
+                self.doclog.error("JSON serialization failed: %s" % e.message)
                 return
             msg_type = "json"
         else:
             data = str(document)
             msg_type = "str" #type(document).__name__
-            self.doclog.debug("Writing document of unsupported type '%s' as type 'str'." % type(document).__name__)
+            self.doclog.warning("Writing document of unsupported type '%s' as type 'str'." % type(document).__name__)
 
         self._publish(msg_type, data)

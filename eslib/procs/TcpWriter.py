@@ -79,9 +79,7 @@ class TcpWriter(Generator):
 
         r, w, e = select([self._socket], [], [self._socket], 0)  # Non-blocking
         if e:
-            # There is something wrong with this serve socket... now what?
-            print "*** ERROR ON SERVER SOCKET"
-            pass
+            self.log.warning("Error on server socket -- now what?")
         if r:
             # We have one or more new connections pending. Get one and return to run loop.
             c = self._socket.accept()
@@ -94,9 +92,7 @@ class TcpWriter(Generator):
         sockets = [s for s,a in connections]
         r, w, e = select(sockets, [], sockets, 0)
         if e:
-            # There is something wrong with a connection
-            print "*** ERROR ON A CONNECTION"
-            pass
+            self.log.warning("Error on connected socket -- now what?")
         for s in r:
             # This socket is intended for write only, but since there is now data,
             # we read a bit just to work down the input buffer. If it is empty, getting

@@ -111,6 +111,7 @@ class ElasticsearchReader(Generator):
             self._es = None
             return
 
+        self.log.info("Fetching initial scan batch from Elasticsearch.")
         res = self._es.search(
             index=self.config.index,
             doc_type = self.config.doctype,
@@ -136,6 +137,7 @@ class ElasticsearchReader(Generator):
             if self.suspended:
                 sleep(self.sleep)
             else:
+                self.log.info("Fetching follow-up scan batch from Elasticsearch.")
                 res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)
                 self._scroll_id = res["_scroll_id"]
                 hits = res["hits"]["hits"]
@@ -156,6 +158,8 @@ class ElasticsearchReader(Generator):
         # Since we finished properly, no need to delete this on server
         self._scroll_id = None
         self._es = None
+
+        self.log.info("All documents retrieved from Elasticsearch.")
 
         # We are done, but this is a generator and will not stop by itself unless explicitly stopped, so:
         self.stop()

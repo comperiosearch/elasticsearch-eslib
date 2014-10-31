@@ -69,7 +69,7 @@ class TwitterUserGetter(Generator):
 
     def on_shutdown(self):
         """ Get rid of rest of queue before shutting down. """
-        self.log.info("Shutting down")
+        self.log.info("Processing remaining items in queue.")
         while self._queue:
             self.get()
 

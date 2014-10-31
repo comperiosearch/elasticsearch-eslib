@@ -31,15 +31,19 @@ class Neo4jReader(Generator):
         super(Neo4jReader, self).__init__(**kwargs)
         self.create_connector(self._incoming_id, "id", "str", "Incoming IDs to check.")
         self._output = self.create_socket("ids", "str", "Outputs IDs that lack properties.")
+
         self.config.set_default(
-            batchsize=20,
-            batchtime=5.0,
-            host="localhost",
-            port="7474"
+            batchsize = 20,
+            batchtime = 5.0,
+            host      = "localhost",
+            port      = 7474
         )
+
+        self._neo4j = None
+
         self._queue = []
-        self.last_get = time.time()
-        self.has_properties = set([])
+        self._last_get = time.time()
+        self._has_properties = set([])
 
     #TODO: Could place this in Neo4jBase
     def on_open(self):
@@ -50,15 +54,19 @@ class Neo4jReader(Generator):
             - ConnectionError if neo4j can't contact its server
             - Exception if twitter can't authenticate properly
         """
-        self.neo4j = Neo4j(host=self.config.host, port=self.config.port)
+
+        # TODO: Need logging, request timeout and exception handling down there:
+        self.log.debug("Connecting to Neo4j.")
+        self._neo4j = Neo4j(host=self.config.host, port=self.config.port)
+        self.log.status("Connected to Neo4j on %s:%d." % (self.config.host, self.config.port))
 
     def _incoming_id(self, id_):
         """
         Takes an incoming id, gets the correct query string from self.neo4j,
         before appending the query to self._queue
         """
-        if id_ not in self.has_properties:
-            query = self.neo4j.get_node_query_if_properties(id_)
+        if id_ not in self._has_properties:
+            query = self._neo4j.get_node_query_if_properties(id_)
             self._queue.append((id_, query))
 
     def on_tick(self):
@@ -66,30 +74,28 @@ class Neo4jReader(Generator):
         Commit items in queue if queue exceeds batchsize or it's been long
         since last commit.
         """
-        now = time.time()
-
         if ((len(self._queue) >= self.config.batchsize) or
-            (now - self.last_get > self.config.batchtime and self._queue)):
-            self.get()
+            (time.time() - self._last_get > self.config.batchtime and self._queue)):
+            self._get()
 
     def on_shutdown(self):
         """ Get rid of rest of queue before shutting down. """
         while self._queue:
-            self.get()
+            self._get()
 
-    def get(self):
+    def _get(self):
         num_elem = len(self._queue)
         ids, queries = [list(t)
                         for t in
                         izip(*self._queue[:num_elem])]
-        rq = self.neo4j._build_rq(queries)
-        resp = self.neo4j.commit(rq)
-        self.log.info("Asking neo4j for %i users" % num_elem)
+        rq = self._neo4j._build_rq(queries)
+        resp = self._neo4j.commit(rq)
+        self.log.debug("Asking neo4j for %i users." % num_elem)
         self._queue = self._queue[num_elem:]
-        self.last_get = time.time()
-        self.write_uids(ids, resp)
+        self._last_get = time.time()
+        self._write_uids(ids, resp)
 
-    def write_uids(self, ids, resp):
+    def _write_uids(self, ids, resp):
         """
         Outputs the ids of the nodes in the resp-object to a socket.
 
@@ -103,4 +109,4 @@ class Neo4jReader(Generator):
                 self._output.send(uid)
                 self.log.info("uid %s does not have properties" % str(uid))
             else:
-                self.has_properties.add(uid)
+                self._has_properties.add(uid)

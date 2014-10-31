@@ -75,13 +75,13 @@ class HttpMonitor(Monitor):
         TCPServer.allow_reuse_address = True  # OBS: Class level setting.
 
     def on_open(self):
-        self.log.debug("Starting HTTP listener on %s:%d" % (self.config.host, self.config.port))
+        self.log.info("Starting HTTP listener on %s:%d" % (self.config.host, self.config.port))
         self._server = TCPServer((self.config.host, self.config.port), _ServerHandlerClass, bind_and_activate=True)
         self._server.owner = self
         self._server.timeout = 1.0  # Max 1 second blocking in _server.handle_request()
 
     def on_close(self):
-        self.log.debug("Closing HTTP listener.")
+        self.log.info("Closing HTTP listener.")
         self._server.server_close()
         self._server = None
 

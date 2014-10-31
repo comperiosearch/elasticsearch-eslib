@@ -72,9 +72,6 @@ class CsvConverter(Processor):
                     self._columns = csvrow
                     return
 
-        print "*** INTERNAL TYPE=", type(line)
-        print "*** LINE=", line
-
         # Pick the only line. Since csv does not support unicode, we do this little encoding massage:
         raw_line = codecs.encode(line, "UTF-8")
         raw_csvrow = csv.reader([raw_line], delimiter=self.config.delimiter).next()

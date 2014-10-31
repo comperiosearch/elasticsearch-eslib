@@ -32,7 +32,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
 
 
     def process(self, doc):
-        fields  = doc.get("_source")
+        fields  = doc._get("_source")
 
         sentiments = []
         for fieldStr in self.fieldList:
@@ -40,7 +40,7 @@ class SentimentProcessor(eslib.DocumentProcessor):
             field = a[0]
             weight = 1.0
             if len(a) > 1: weight = float(a[1])
-            partialSentiment = self._analyze(self._sentimentMeta, fields.get(field))
+            partialSentiment = self._analyze(self._sentimentMeta, fields._get(field))
             if partialSentiment: # Skip completely neutral fields
                 sentiments.append(partialSentiment * weight)
 
@@ -50,9 +50,9 @@ class SentimentProcessor(eslib.DocumentProcessor):
             sentiment = sum(sentiments) / float(len(sentiments))
 
         if self.DEBUG:
-            id      = doc.get("_id")
-            index   = doc.get("_index")
-            doctype = doc.get("_type")
+            id      = doc._get("_id")
+            index   = doc._get("_index")
+            doctype = doc._get("_type")
             self.doclog(doc, "%5.2f" % sentiment)
 
         # Add sentiment to the document

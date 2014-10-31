@@ -56,7 +56,7 @@ class FileReader(Generator):
     def on_open(self):
 
         if self._file:
-            print "*** FileReader ATTEMPTED STARTUP/open WHEN _file WAS ALREADY SET" # DEBUG
+            self.log.error("on_open() attempted when _file exists -- should not be possible.")
             return
 
         # Create a more usable filenames array
@@ -162,10 +162,10 @@ class FileReader(Generator):
         else:
             filename = self._filenames[self._filename_index]
             if not filename:
-                #print "*** FileReader USING stdin"  # DEBUG
+                self.log.debug("Starting read from stdin.")
                 self._file = sys.stdin
             else:
-                #print "*** FileReader OPENING FILE '%s'" % filename  # DEBUG
+                self.log.debug("Opening file '%s'." % filename)
                 self._file = open(filename, "r" if self.config.document_per_file else "rt")
             self._filename_index += 1
             # Return from tick and reenter later with a file to process

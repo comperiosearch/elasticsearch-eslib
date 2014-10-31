@@ -19,7 +19,7 @@ class RabbitmqBase(Configurable):
             queue        = "default"
         )
 
-        self.config.max_reconnects   = 3
+        self.config.max_reconnects    = 3
         self.config.reconnect_timeout = 3
 
         # Pika connection and channel
@@ -117,6 +117,7 @@ class RabbitmqBase(Configurable):
             except:
                 pass
             self._connection = None
+            return True
 
     def _reconnect(self, attempts, timeout):
         attempts = 3
