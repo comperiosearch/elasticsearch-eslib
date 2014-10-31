@@ -2,9 +2,9 @@ __author__ = 'Eivind Eidheim Elseth'
 import time
 import subprocess
 
-from ..Generator import Generator
+from ..Monitor import Monitor
 
-class CLIReader(Generator):
+class CLIReader(Monitor):
     """
     The CLIReader is a Generator that will periodically call a command line utility
 
@@ -27,10 +27,6 @@ class CLIReader(Generator):
         self.last_get = None
 
     def on_tick(self):
-        """
-        Commit items in queue if queue exceeds batchsize or it's been long
-        since last commit.
-        """
         if not self.last_get or (time.time() - self.last_get  > self.config.interval):
             p = subprocess.Popen(self.config.cmd, shell=False, stdout=subprocess.PIPE)
             p.wait()
