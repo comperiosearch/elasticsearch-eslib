@@ -30,6 +30,7 @@ from .HtmlRemover           import HtmlRemover
 from .BlacklistFilter       import BlacklistFilter
 from .Throttle              import Throttle
 from .ParseEdgeToIds        import ParseEdgeToIds
+from .ProtocolConverter     import ProtocolConverter
 
 
 __all__ = (
@@ -54,5 +55,6 @@ __all__ = (
     "PatternRemover",
     "HtmlRemover",
     "BlacklistFilter",
-    "Throttle"
+    "Throttle",
+    "ProtocolConverter"
 )

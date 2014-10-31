@@ -29,7 +29,7 @@ p.subscribe(r)
 
 
 w.subscribe(p)
-w.config.domains = [{"domain_id": "http://localhost", "url_prefix":"http://localhost"}]
+w.config.domains = [{"domain_id": "localhost", "url_prefix":"http://localhost"}]
 w.add_callback(listener, socket_name="output")
 r.start()
 
