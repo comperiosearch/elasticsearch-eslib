@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 import unittest, json
 from eslib.procs import TwitterMonitor
@@ -13,7 +14,8 @@ class TestTwitterMonitor(unittest.TestCase):
     def test_simple(self):
 
         # Load test data
-        f = open("data/twitter_raw_mock.json")
+        self_dir, _ = os.path.split(__file__)
+        f = open(os.path.join(self_dir, "data/twitter_raw_mock.json"))
         j = json.load(f)
         f.close()
 
