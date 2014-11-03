@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 import unittest, json
 from eslib.procs import TweetEntityRemover
@@ -14,7 +15,8 @@ class TestTweetEntityRemoval(unittest.TestCase):
     def test_all(self):
 
         # Load test data
-        f = open("data/tweet_entity_removal.json")
+        self_dir, _ = os.path.split(__file__)
+        f = open(os.path.join(self_dir, "data/tweet_entity_removal.json"))
         doc = json.load(f)
         f.close()
 
