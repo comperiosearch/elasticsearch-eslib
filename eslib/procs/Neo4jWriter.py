@@ -73,7 +73,7 @@ class Neo4jWriter(Generator):
             from_id = document["from"]
             to_id = document["to"]
             edge_type = document["type"]
-        except KeyError as ke:
+        except KeyError:
             self.log.exception("Unable to parse document: %s" % str(document))
         else:
             query = self._neo4j.get_edge_query(from_id, edge_type, to_id)
@@ -130,34 +130,8 @@ class Neo4jWriter(Generator):
                          for t in
                          izip(*self._user_queue[:num_users])]
 
-        rq = self.neo4j._build_rq(users, params)
-        self.neo4j.commit(rq)
+        rq = self._neo4j._build_rq(users, params)
+        self._neo4j.commit(rq)
         self.log.info("Committed %i users" % num_users)
         self.user_queue = self.user_queue[num_users:]
         self.last_user_commit = time.time()
-
-    # def parse(self, document):
-    #     """
-    #     Assumes that document is a valid esdoc, with the full tweet
-    #     source code found in _source.
-    #
-    #     Raises:
-    #         - KeyError if entities are not included in the tweet
-    #
-    #     Ideas:
-    #         - We could extract hashtags and
-    #         - "in_response_to" extract, and perhaps use
-    #         - retweeted_status for some cool retweet stuff.
-    #
-    #     """
-    #     edges = []
-    #     from_id = document["_source"]["user"]["id_str"]
-    #     uniques = set([from_id])
-    #     for obj in document["_source"]["entities"]["user_mentions"]:
-    #         to_id = obj["id_str"]
-    #         uniques.add(to_id)
-    #         edges.append((from_id, "mentioned", to_id))
-    #
-    #     return edges, uniques
-
-
