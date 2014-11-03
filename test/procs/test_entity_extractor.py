@@ -46,19 +46,19 @@ class TestEntityExtractor(unittest.TestCase):
 
     def test_add_entities(self):
         self.assertEqual(self.extractor._entities, [])
-        self.extractor.addEntity(self.entity)
+        self.extractor.add_entity(self.entity)
         expected = [self.entity]
         actual = self.extractor._entities
         self.assertEqual(expected, actual)
 
-        self.extractor.addEntities(self.entities)
+        self.extractor.add_entities(self.entities)
 
         expected.extend(self.entities)
         actual = self.extractor._entities
         self.assertEqual(expected, actual)
 
     def test_extract_exact(self):
-        self.extractor.addEntity(self.entity)
+        self.extractor.add_entity(self.entity)
         comperio = self.entity
         match_comperio = comperio["match"][0]
         input = "We all love " + match_comperio["value"]
@@ -68,7 +68,7 @@ class TestEntityExtractor(unittest.TestCase):
         self.assertEqual(expected, actual)
 
         nrk = self.entities[0]
-        self.extractor.addEntity(nrk)
+        self.extractor.add_entity(nrk)
         match_nrk = nrk["match"][0]
         expected[nrk["category"]].append(self._create_result_object(nrk,match_nrk))
         input = "we at" + match_comperio["value"] + " love watching " + match_nrk["value"]
@@ -76,7 +76,7 @@ class TestEntityExtractor(unittest.TestCase):
         self.assertEqual(expected, actual)
 
         hans_terje = self.entities[1]
-        self.extractor.addEntity(hans_terje)
+        self.extractor.add_entity(hans_terje)
         match_hans_terje = hans_terje["match"][0]
         expected[hans_terje["category"]] = [self._create_result_object(hans_terje,match_hans_terje)]
         input =  match_hans_terje["value"] + "works at " + match_comperio["value"] + "and  loves watching " + match_nrk["value"]
