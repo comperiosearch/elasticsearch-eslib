@@ -1,6 +1,6 @@
 from __future__ import division
+import time
 from .Configurable import Configurable
-import json
 import requests
 
 class Neo4j(Configurable):
@@ -220,7 +220,7 @@ class Neo4j(Configurable):
         dump = json.dumps(requests)
         wait = self.config.start_reconnect_wait
         while resp is None:
-            if wait >self.config.max_reconnect_wait:
+            if wait > self.config.max_reconnect_wait:
                 raise Exception("To many reconnect attempts")
             time.sleep(wait)
             try:

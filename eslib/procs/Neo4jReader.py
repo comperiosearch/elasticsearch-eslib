@@ -79,6 +79,9 @@ class Neo4jReader(Generator):
 
     def get(self):
         num_elem = len(self._queue)
+        if num_elem > self.config.batchsize:
+            num_elem = self.config.batchsize
+
         ids, queries = [list(t)
                         for t in
                         izip(*self._queue[:num_elem])]
