@@ -33,7 +33,7 @@ class ElasticsearchWriter(Generator):
     Config:
         hosts             = None    : List of Elasticsearch hosts to write to.
         index             = None    : Index override. If set, use this index instead of documents' '_index' (if any).
-        doctype           = False   : Document type override. If set, use this type instead of documents' '_type' (if any).
+        doctype           = None    : Document type override. If set, use this type instead of documents' '_type' (if any).
         update_fields     = []      : If specified, only this list of fields will be updated in existing documents.
         batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
     """
