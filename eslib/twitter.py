@@ -45,33 +45,20 @@ class Twitter(Configurable):
 
         """
 
-        resp = self.api.request("application/rate_limit_status",
-                                  {"resources": "users"})
+        resp = self.api.request("application/rate_limit_status")
         resp.response.raise_for_status()
-        user_resp = resp.response.json()
-        user_lim = int(user_resp["resources"]["users"]["/users/lookup"]["limit"])
-        
-        resp = self.api.request("application/rate_limit_status",
-                                {"resources": "followers"})
+        parsed = resp.response.json()
 
-        resp.response.raise_for_status()
-        flw_resp = resp.response.json()
-        flw_lim = int(
-            flw_resp["resources"]["followers"]["/followers/ids"]["limit"]
-        )
-
-        resp = self.api.request("application/rate_limit_status",
-            {"resources": "friends"})
-        resp.response.raise_for_status()
-        fr_resp = resp.response.json()
-        fr_lim = int(fr_resp["resources"]["friends"]["/friends/ids"]["limit"])
+        user_lim = parsed["resources"]["users"]["/users/lookup"]["limit"]
+        flw_lim = parsed["resources"]["followers"]["/followers/ids"]["limit"]
+        fr_lim = parsed["resources"]["friends"]["/friends/ids"]["limit"]
 
         self.last_call = {"users": 0,
                           "followers": 0,
                           "friends": 0}
-        self.limits = {"users": user_lim,
-                       "followers": flw_lim,
-                       "friends": fr_lim}
+        self.limits = {"users": int(user_lim),
+                       "followers": int(flw_lim),
+                       "friends": int(fr_lim)}
 
     def blew_rate_limit(self, protocol):
 
@@ -79,13 +66,12 @@ class Twitter(Configurable):
                                      {"resources": protocol})
         resp = raw.response.json()
         if protocol == "users":
-            wait_time = int(resp["resources"]["users"]["/users/lookup"]["remaining"])
-        elif protocol == "friends":
-            wait_time = int(resp["resources"]["friends"]["/friends/ids"]["remaining"])
+            wait_time = int(resp["resources"][protocol]["/users/lookup"]["remaining"])
         else:
-            wait_time = int(resp["resources"]["followers"]["/followers/ids"]["remaining"])
-        #TODO: This should be log
-        print("waiting for {0} seconds".format(wait_time))
+            wait_time = int(resp["resources"][protocol]["/%s/ids" % protocol]["remaining"])
+
+        #TODO: There should be loggin here in to future
+        # print("waiting for {0} seconds".format(wait_time))
         time.sleep(wait_time)
 
     def sleep_for_necessary_time(self, protocol):

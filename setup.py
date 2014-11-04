@@ -25,7 +25,7 @@ requires = [
     'PyYAML',             # for prog logging init stuff
     'feedparser',
     'python-dateutil',
-    'mock'                # for tests
+    'mock'                # for testing
 ]
 
 
