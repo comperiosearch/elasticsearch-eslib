@@ -1,10 +1,11 @@
 __author__ = 'mats'
 
+from itertools import izip
+import time
+
 from ..Generator import Generator
 from ..neo4j import Neo4j
 
-from itertools import izip
-import time
 
 class Neo4jWriter(Generator):
     """
@@ -56,7 +57,7 @@ class Neo4jWriter(Generator):
         # TODO: Need logging, request timeout and exception handling down there:
         self.log.debug("Connecting to Neo4j.")
         self._neo4j = Neo4j(host=self.config.host, port=self.config.port)
-        self.log.status("Connected to Neo4j on %s:%d." % (self.config.host, self.config.port))
+        self.log.status("Connected to Neo4j on %s:%s." % (self.config.host, self.config.port))
 
     def _incoming_edge(self, document):
         """
