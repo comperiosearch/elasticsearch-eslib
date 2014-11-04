@@ -16,11 +16,11 @@ from .TcpWriter             import TcpWriter
 from .RabbitmqMonitor       import RabbitmqMonitor
 from .RabbitmqWriter        import RabbitmqWriter
 from .HttpMonitor           import HttpMonitor
-from .TwitterMonitor        import TwitterMonitor
 from .CsvConverter          import CsvConverter
 from .WebGetter             import WebGetter
 from .Neo4jWriter           import Neo4jWriter
 from .Neo4jReader           import Neo4jReader
+from .TwitterMonitor        import TwitterMonitor
 from .TwitterUserGetter     import TwitterUserGetter
 from .TwitterFollowerGetter import TwitterFollowerGetter
 from .TweetEntityRemover    import TweetEntityRemover
@@ -32,7 +32,8 @@ from .Throttle              import Throttle
 from .ParseEdgeToIds        import ParseEdgeToIds
 from .ProtocolConverter     import ProtocolConverter
 from .EntityExtractor       import EntityExtractor
-
+from .ProcessWrapper        import ProcessWrapper
+from .CLIReader             import CLIReader
 
 __all__ = (
     "ElasticsearchReader",
@@ -43,11 +44,11 @@ __all__ = (
     "RabbitmqMonitor",
     "RabbitmqWriter",
     "HttpMonitor",
-    "TwitterMonitor",
     "CsvConverter",
     "WebGetter",
     "Neo4jWriter",
     "Neo4jReader",
+    "TwitterMonitor",
     "TwitterUserGetter",
     "TwitterFollowerGetter",
     "ParseEdgeToIds",
@@ -58,5 +59,7 @@ __all__ = (
     "BlacklistFilter",
     "Throttle",
     "ProtocolConverter",
-    "EntityExtractor"
+    "EntityExtractor",
+    "ProcessWrapper",
+    "CLIReader"
 )
