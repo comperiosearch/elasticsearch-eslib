@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 __author__ = 'Eivind Eidheim Elseth'
 
 import unittest
@@ -20,7 +22,7 @@ class TestEntityExtractor(unittest.TestCase):
             "category": "targets",
             "name": "comperio",
             "match": [
-                { "type": "exact", "pattern": "hans terje bakke", "weight": 0.8 },
+                { "type": "exact", "pattern": u"hans terje bøkke", "weight": 0.8 },
                 { "type": "exact", "pattern": "10.0.0.100", "weight": 0.5 },
                 { "type": "exact", "pattern": "comperio" }
             ]
@@ -44,10 +46,6 @@ class TestEntityExtractor(unittest.TestCase):
         },
     ]
 
-# TODO: TEST CASE INSENSITIVE
-# TODO: TEST UNICODE/SPECIAL CHARS
-# TODO: TEST NOT OVERWRITING EXISTING ENTITIES
-
     def test_defaults(self):
         ex = EntityExtractor()
         ex.on_open()
@@ -61,7 +59,7 @@ class TestEntityExtractor(unittest.TestCase):
         ex.config.entities = self.entities
         ex.on_open()
 
-        s = "As mentioned on nrk.no, Hans Terje Bakke works for Comperio. His PC has IP address 10.0.0.100. " + \
+        s = u"As mentioned ø on nrk.no, Hans Terje Bøkke works for Comperio. His PC has IP address 10.0.0.100. " + \
        "He never uses his credit card: 1234.5678.9876.5432. You can contact him on " + \
        "hans.terje.bakke@gmail.com. But balle.klorin@wesenlund.no will not work for IBM."
 
