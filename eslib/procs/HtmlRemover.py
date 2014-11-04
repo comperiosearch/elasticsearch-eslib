@@ -12,7 +12,7 @@ class HtmlRemover(Processor):
         input      (esdoc)   (default) : Incoming document in 'esdoc' dict format.
         str        (str)               : Incoming document of type 'str' or 'unicode'.
     Sockets:
-        output     (esdoc)   (default)  : Output of documents that arrived on 'input' connector.
+        output     (esdoc)   (default) : Output of documents that arrived on 'input' connector.
         str        (str)               : Output of documents that arrived on 'str' connector.
 
     Config:
