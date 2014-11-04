@@ -1,95 +1,147 @@
 __author__ = 'Eivind Eidheim Elseth'
 
-import unittest, json
+import unittest
 from eslib.procs.EntityExtractor import EntityExtractor
+from eslib import esdoc
+
 
 class TestEntityExtractor(unittest.TestCase):
     entities = \
-        [
-            {
-                "category": "webpage",
-                "name": "nrk.no",
-                "match": [
-                    { "type": "exact", "value": "nrk" },
-                    #{ "type": "iprange", "value": "160.68.205.231/16" }
-                ]
-            },
-            {
-                "category": "agent",
-                "name": "18036928545",
-                "match": [
-                    { "type": "exact", "value": "hans terje bakke" },
-                ]
-            }
-        ]
-    entity = {
-                "category": "webpage",
-                "name": "comperio",
-                "match": [
-                    { "type": "exact", "value": "comperio" },
-                    #{ "type": "iprange", "value": "81.27.32.186/16" }
-                ]
-            }
+    [
+        {
+            "category": "webpage",
+            "name": "nrk",
+            "match": [
+                { "type": "exact", "pattern": "nrk.no" },
+                #{ "type": "iprange", "value": "160.68.205.231/16" }
+            ]
+        },
+        {
+            "category": "targets",
+            "name": "comperio",
+            "match": [
+                { "type": "exact", "pattern": "hans terje bakke", "weight": 0.8 },
+                { "type": "exact", "pattern": "10.0.0.100", "weight": 0.5 },
+                { "type": "exact", "pattern": "comperio" }
+            ]
+        },
+        {
+            "category": "targets",
+            "name": "IBM",
+            "match": [
+                { "type": "exact", "pattern": "ibm" }
+            ]
+        },
+        {
+            "category": "creditcards",
+            "name": "creditcard",  # The name should become the credit card number
+            "match": [ { "type": "creditcard" } ]
+        },
+        {
+            "category": "emails",
+            "name": "email",  # The email should become the email address
+            "match": [ { "type": "email" } ]
+        },
+    ]
 
-
-    def setUp(self):
-        self.extractor = EntityExtractor()
-        self.extractor.on_open()
-
-
+# TODO: TEST CASE INSENSITIVE
+# TODO: TEST UNICODE/SPECIAL CHARS
+# TODO: TEST NOT OVERWRITING EXISTING ENTITIES
 
     def test_defaults(self):
-        self.assertEqual(self.extractor.config.source_field, "text")
-        self.assertEqual(self.extractor.config.target_field, "entities")
-        self.assertEqual(self.extractor.config.entities, [])
-        pass
+        ex = EntityExtractor()
+        ex.on_open()
 
-    def test_add_entities(self):
-        self.assertEqual(self.extractor._entities, [])
-        self.extractor.add_entity(self.entity)
-        expected = [self.entity]
-        actual = self.extractor._entities
-        self.assertEqual(expected, actual)
+        self.assertEqual(ex.config.fields, [])
+        self.assertEqual(ex.config.target, "entities")
+        self.assertEqual(ex.config.entities, [])
 
-        self.extractor.add_entities(self.entities)
+    def test_extract_str(self):
+        ex = EntityExtractor()
+        ex.config.entities = self.entities
+        ex.on_open()
 
-        expected.extend(self.entities)
-        actual = self.extractor._entities
-        self.assertEqual(expected, actual)
+        s = "As mentioned on nrk.no, Hans Terje Bakke works for Comperio. His PC has IP address 10.0.0.100. " + \
+       "He never uses his credit card: 1234.5678.9876.5432. You can contact him on " + \
+       "hans.terje.bakke@gmail.com. But balle.klorin@wesenlund.no will not work for IBM."
 
-    def test_extract_exact(self):
-        self.extractor.add_entity(self.entity)
-        comperio = self.entity
-        match_comperio = comperio["match"][0]
-        input = "We all love " + match_comperio["value"]
-        expected = {}
-        expected[comperio["category"]] = [self._create_result_object(comperio, match_comperio)]
-        actual = self.extractor._extract_exact(input)
-        self.assertEqual(expected, actual)
+        extracted = ex._extract(None, s)
+        elist = list(extracted)
 
-        nrk = self.entities[0]
-        self.extractor.add_entity(nrk)
-        match_nrk = nrk["match"][0]
-        expected[nrk["category"]].append(self._create_result_object(nrk,match_nrk))
-        input = "we at" + match_comperio["value"] + " love watching " + match_nrk["value"]
-        actual = self.extractor._extract_exact(input)
-        self.assertEqual(expected, actual)
+        for e in elist:
+            print e
 
-        hans_terje = self.entities[1]
-        self.extractor.add_entity(hans_terje)
-        match_hans_terje = hans_terje["match"][0]
-        expected[hans_terje["category"]] = [self._create_result_object(hans_terje,match_hans_terje)]
-        input =  match_hans_terje["value"] + "works at " + match_comperio["value"] + "and  loves watching " + match_nrk["value"]
-        actual = self.extractor._extract_exact(input)
-        self.assertEqual(expected, actual)
+        self.assertEqual(len(elist), 8)
 
 
-    def _create_result_object(self, entity, match):
-        return {
-                entity["name"] : {
-                    match["type"]: [
-                        match["value"]
-                    ]
-                }
-            }
+    def _verify(self, entities):
+        webpage = entities["webpage"]
+        targets = entities["targets"]
+        emails = entities["emails"]
+        creditcards = entities["creditcards"]
 
+        print "WEBPAGE:",webpage.keys()
+        print "TARGETS:",targets.keys()
+        print "EMAILS :",emails.keys()
+        print "CREDITC:",creditcards.keys()
+
+        self.assertEqual(['nrk'], webpage.keys())
+        self.assertEqual(['comperio', 'IBM'], targets.keys())
+        self.assertEqual(['hans.terje.bakke@gmail.com', 'balle.klorin@wesenlund.no'], emails.keys())
+        self.assertEqual(['1234.5678.9876.5432'], creditcards.keys())
+
+    def test_merge(self):
+        ex = EntityExtractor()
+        ex.config.entities = self.entities
+        ex.on_open()
+
+        s = "As mentioned on nrk.no, Hans Terje Bakke works for Comperio. His PC has IP address 10.0.0.100. " + \
+       "He never uses his credit card: 1234.5678.9876.5432. You can contact him on " + \
+       "hans.terje.bakke@gmail.com. But balle.klorin@wesenlund.no will not work for IBM."
+
+        extracted = ex._extract(None, s)
+        entities = ex._merge(extracted)
+
+        self._verify(entities)
+
+    def test_doc_through(self):
+
+        ex = EntityExtractor()
+        ex.config.entities = self.entities
+
+        doc = {"_id": "123", "_source": {
+            "field1": "As mentioned on nrk.no, Hans Terje Bakke works for Comperio.",
+            "field2": "He never uses his credit card: 1234.5678.9876.5432.",
+            "field3": "You can contact him on hans.terje.bakke@gmail.com.",
+            "subsection" : {
+                "subfield": "But balle.klorin@wesenlund.no will not work for IBM."
+            },
+            "entities": { "old" : "stuff" }
+        }}
+
+        ex.config.fields = ["field1", "field2", "field3", "subsection.subfield"]
+
+        output = []
+        ex.add_callback(lambda doc: output.append(doc))
+        ex.start()
+        ex.put(doc)
+        ex.stop()
+        ex.wait()
+
+        #print output[0]
+
+        new_doc = output[0]
+        entities = new_doc["_source"]["entities"]
+
+        self._verify(entities)
+
+        # Check that old and new doc are not the same
+        self.assertFalse(doc is new_doc)
+
+        # Check that the previous entities still exist in the new document
+        old = esdoc.getfield(new_doc, "_source.entities.old")
+        self.assertEqual(old, "stuff")
+
+        # Check that the new entities do not exist in the original document
+        self.assertTrue(esdoc.getfield(doc, "_source.entities.webpage") is None)
+        self.assertTrue(esdoc.getfield(new_doc, "_source.entities.webpage") is not None)
