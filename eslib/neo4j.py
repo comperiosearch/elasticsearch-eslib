@@ -1,9 +1,12 @@
 from __future__ import division
 from __future__ import absolute_import
+import json
 import time
-from .Configurable import Configurable
+
 import requests
-import time
+
+from .Configurable import Configurable
+
 
 class Neo4j(Configurable):
     """
