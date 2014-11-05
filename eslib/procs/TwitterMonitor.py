@@ -217,7 +217,7 @@ class TwitterMonitor(Monitor):
                 self.log.debug("Connection error, exception: %s" % e.message)
                 self.log.error("Connection error -- Trying to reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay))
                 return  # Run loop will try to reconnect
-        elif code == 420:  # TODO
+        elif code == 420:
             # As suggested by Twitter;
             #   Back off exponentially for HTTP 420 errors. Start with a 1 minute
             #   wait and double each attempt. Note that every HTTP 420 received
@@ -235,7 +235,7 @@ class TwitterMonitor(Monitor):
                     self._connect_delay += 5000
                 self.log.error("'420: Rate Limited' -- Trying to reconnect (%d/%d) in %.0f s." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay/1000.0))
                 return  # Run loop will try to reconnect
-        elif code == 503:  # TODO
+        elif code == 503:
             # As suggested by Twitter;
             #   Back off exponentially for HTTP errors for which reconnecting would
             #   be appropriate. Start with a 5 second wait, doubling each attempt,
@@ -275,8 +275,8 @@ class TwitterMonitor(Monitor):
         # Unknown errors:
         else:
             exstr = ", %s: %s" % (e.__class__.__name__, e.message if e else None) if e else ""
-            msg = "Unknown problem reading from Twitter. Aborting! status_code=%d%s" % (code, exstr)
-            do_abort = True
+            msg = "Unknown problem reading from Twitter. Ignoring! status_code=%d%s" % (code, exstr)
+            #do_abort = True
 
         if do_abort:
             if raise_instead_of_abort:
