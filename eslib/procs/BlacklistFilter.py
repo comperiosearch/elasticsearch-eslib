@@ -94,19 +94,19 @@ class BlacklistFilter(Processor):
                 if whitelist_regex and whitelist_regex.search(text):
                     return True  # We must keep documents with a token + whitelist match
                 if blacklist_regex and blacklist_regex.search(text):
-                    blacklist_match = False
+                    blacklist_match = True
                     break  # Document is not blacklisted, but we must proceed in case we also get a whitelist match
 
-        return blacklist_match
+        return not blacklist_match  # I.e. the check should return True if there was no blacklist match
 
     def _check(self, doc):
 
         if not doc or not self._filters:
-            return False
+            return True
 
         # This makes this method work also for 'str' and 'unicode' type documents; not only for the expected 'esdoc' protocol (a 'dict').
         if type(doc) in [str, unicode]:
-            if not doc or self._global_whitelist_regex and self._global_whitelist_regex.search(doc):
+            if self._global_whitelist_regex and self._global_whitelist_regex.search(doc):
                 return True  # Hit in global whitelist
             return self._check_text(doc)
         elif not type(doc) is dict:

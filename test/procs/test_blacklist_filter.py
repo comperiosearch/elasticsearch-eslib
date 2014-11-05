@@ -16,8 +16,8 @@ class TestBlacklistFilter_str(unittest.TestCase):
         p.on_open()
         check = p._check(s)
 
-        print "str_nohit (exp:False)=", check
-        self.assertFalse(check)
+        print "str_nohit (exp:True)=", check
+        self.assertTrue(check)
 
     def test_str_hit_but_not_blacklisted(self):
         s = "I like girls."
@@ -26,8 +26,8 @@ class TestBlacklistFilter_str(unittest.TestCase):
         p.on_open()
         check = p._check(s)
 
-        print "str_hit_but_not_blacklisted (exp:False)=", check
-        self.assertFalse(check)
+        print "str_hit_but_not_blacklisted (exp:True)=", check
+        self.assertTrue(check)
 
     def test_str_hit_and_blacklisted(self):
         s = "I like young girls."
@@ -48,6 +48,16 @@ class TestBlacklistFilter_str(unittest.TestCase):
         print "str_global_whitelist_override (exp:True)=", check
         # Should have hit "young" from blacklist, but "young girls" from whitelist should override it
         self.assertTrue(check)
+
+
+    def test_brooklyn(self):
+        s = "Brooklyn Nets trounce short-handed Oklahoma City Thunder 116-85 http://t.co/qJZPBEJRCT"
+        p = BlacklistFilter(filters=[{"tokens": ["nets"], "blacklist": ["brooklyn"]}])
+        p.on_open()
+        check = p._check(s)
+
+        print "check (expect False)=", check
+        self.assertFalse(check)
 
 
 class TestBlacklistFilter_esdoc(unittest.TestCase):
