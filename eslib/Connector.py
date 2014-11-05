@@ -60,6 +60,8 @@ class Connector(Terminal):
         while self.running:
             if self.sleep:
                 time.sleep(self.sleep)
+            if not self.running:
+                break
             if self.stopping and (self.suspended or self.queue.empty()):
                 # Notify owner that we are finished stopping
                 self.owner.production_stopped()
