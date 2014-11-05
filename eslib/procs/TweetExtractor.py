@@ -1,10 +1,6 @@
 __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
-import datetime, time
-from xml.etree import ElementTree as XML
-from requests.exceptions import ConnectionError
-import dateutil, dateutil.parser
 
 
 class TweetExtractor(Processor):
