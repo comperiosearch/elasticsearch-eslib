@@ -6,13 +6,10 @@ __author__ = 'Hans Terje Bakke'
 # TODO: Test update_fields with new documents, and see if all fields are created or only those listed.
 # TODO: Also verify that only mentioned fields are changed in existing documents.
 
-# TODO: Don't wait forever for a batch... submit if it's too long since the last batch
-# TODO: flush (for pushing a batch)
-
 import elasticsearch
 from Queue import Queue
 from threading import Lock
-import copy
+import copy, time
 from ..Generator import Generator
 from .. import esdoc_logmsg
 
@@ -36,6 +33,7 @@ class ElasticsearchWriter(Generator):
         doctype           = None    : Document type override. If set, use this type instead of documents' '_type' (if any).
         update_fields     = []      : If specified, only this list of fields will be updated in existing documents.
         batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
+        batchtime         = 5.0     : Submit an incomplete batch if 'batchtime' seconds have elapsed since last shipment.
     """
 
     def __init__(self, **kwargs):
@@ -48,13 +46,15 @@ class ElasticsearchWriter(Generator):
             index         = None,
             doctype       = None,
             update_fields = [],
-            batchsize     = 1000
+            batchsize     = 1000,
+            batchtime     = 5.0
             # TODO: SHALL WE USE AN OPTIONAL ALTERNATIVE TIMESTAMP FIELD FOR PROCESSED/INDEXED TIME? (OR NOT?)
             #timefield    = "_timestamp"
         )
 
         self._queue = Queue()
         self._queue_lock = Lock()
+        self._last_batch_time = 0
 
     def _incoming(self, document):
         id = document.get("_id")
@@ -97,7 +97,7 @@ class ElasticsearchWriter(Generator):
         self._queue_lock.acquire()
         docs = []
         payload = []
-        while (self.config.batchsize or len(docs) <= self.config.batchsize) and not self._queue.empty():
+        while (self.config.batchsize and len(docs) <= self.config.batchsize) and not self._queue.empty():
             (doc,l1,l2) = self._queue.get() # TODO: Or get_nowait() ?
             self._queue.task_done()
             docs.append(doc)
@@ -108,7 +108,7 @@ class ElasticsearchWriter(Generator):
         if not len(payload):
             return # Nothing to do
 
-        self.log.debug("Submitting batch to Elasticsearch.")
+        self.log.debug("Sending batch to Elasticsearch.")
 
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
         res = es.bulk(payload)
@@ -141,18 +141,38 @@ class ElasticsearchWriter(Generator):
                 # TODO: Perhaps send failed documents to another (error) socket(?)
                 self.doclog.debug("No document %d" % i)
 
+        self._last_batch_time = time.time()
+
     #region Generator
+
+    def on_start(self):
+        self._last_batch_time = 0
 
     def on_shutdown(self):
         # Send remaining queue to Elasticsearch (still in batches)
-        if not self.suspended: # Hm... do we want to complete if suspended, or stop where we are?
-            self.log.info("Submitting all remaining batches.")
-            while self._queue.qsize():
-                self._send()
+        self.log.info("Submitting all remaining batches.")
+        while self._queue.qsize():
+            self._send()
 
     def on_tick(self):
-        if not self.config.batchsize or self._queue.qsize() >= self.config.batchsize:
-            self.log.info("Submitting full batch.")
+        if not self.config.batchsize and not self.config.batchtime:
+            self.log.debug("Submitting single document.")
+            self._send()
+        elif self.config.batchsize and (self._queue.qsize() >= self.config.batchsize):
+            self.log.debug("Submitting full batch (%d)." % self.config.batchsize)
+            self._send()
+        elif self.config.batchtime and (time.time() - self._last_batch_time > self.config.batchtime):
+            self.log.info("Submitting partial batch due to batch timeout (%d)." % self._queue.qsize())
             self._send()
 
     #endregion Generator
+
+    #region Utility methods
+
+    def flush(self):
+        self.log.info("Submitting all (%d) queued documents with 'flush'." % self._queue.qsize())
+        while self._queue.qsize():
+            self._send()
+        self.log.info("Flush completed.")
+
+    #endregion Utility methods
