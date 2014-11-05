@@ -11,6 +11,7 @@ class CLIReader(Monitor):
     Sockets:
         stdout     (str)   (default)   : Output from the command line utility's stdout
         stderr     (str)               : Output from the command line utility's stderr
+
     Config:
         cmd             = None   : The command to run
         interval        = 10     : The waiting period in seconds between each time the command is run
