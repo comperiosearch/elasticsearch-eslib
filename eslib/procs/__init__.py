@@ -29,7 +29,6 @@ from .PatternRemover        import PatternRemover
 from .HtmlRemover           import HtmlRemover
 from .BlacklistFilter       import BlacklistFilter
 from .Throttle              import Throttle
-from .ParseEdgeToIds        import ParseEdgeToIds
 from .ProtocolConverter     import ProtocolConverter
 from .EntityExtractor       import EntityExtractor
 from .ProcessWrapper        import ProcessWrapper
@@ -51,7 +50,6 @@ __all__ = (
     "TwitterMonitor",
     "TwitterUserGetter",
     "TwitterFollowerGetter",
-    "ParseEdgeToIds",
     "TweetEntityRemover",
     "TweetExtractor",
     "PatternRemover",
