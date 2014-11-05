@@ -1,19 +1,33 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import time, sys, signal
 from select import select
 
-def _signal_handler(signal, frame):
-    print "INNER/RECEIVED SIGNAL: "
+#region Signal handling
 
-signal.signal(signal.SIGINT, _signal_handler)
+def _handler_SIGINT(signal, frame):
+    print "INNER/RECEIVED SIGINT -- ignoring"
 
-print "INNER/HERE WE GO"
-print "INNER/SOME MORE"
-time.sleep(1)
-print "INNER/I JUST WOKE UP"
+def _handler_SIGTERM(signal, frame):
+    global running
+    print "INNER/RECEIVED SIGTERM -- terminating"
+    running = False
 
-while True:
+def _handler_SIGHUP(signal, frame):
+    print "INNER/RECEIVED SIGHUP -- ignoring"
+
+signal.signal(signal.SIGINT , _handler_SIGINT )
+signal.signal(signal.SIGTERM, _handler_SIGTERM)
+signal.signal(signal.SIGHUP , _handler_SIGHUP )
+
+#endregion Signal handling
+
+running = True
+
+print "INNER/STARTING"
+
+while running:
     r,w,e = select([sys.stdin],[],[],0)
     if r:
         line = sys.stdin.readline()
@@ -22,14 +36,11 @@ while True:
             print "INNER/ECHO:", line
             if line == "*HANGUP*":
                 print "INNER/HANGING UP ON *HANGUP* REQUEST"
-                break
+                running = False
+            elif line == "*RAISE*":
+                raise Exception("INNER/RAISED EXCEPTION UPON *RAISE* REQUEST")
         else:
-            print "INNER/GOOD BYE"
-            break
+            print "INNER/STDIN WAS HUNG UP -- GOOD BYE"
+            running = False
 
-print "INNER/A FINAL WORD"
-
-
-
-# TODO: Handle exceptions
-# TODO: Handle SIGHUP
+print "INNER/EXITING"
