@@ -95,7 +95,7 @@ class ProcessWrapper(Monitor):
                 doc = self._outgoing.get()
                 self._outgoing.task_done()
                 try:
-                    print >> self._process.stdout, doc
+                    print >> self._process.stdin, doc
                 except Exception as e:
                     self.log.exception("Error writing to subprocess. PROBABLY BROKEN PIPE -- I AM CURIOUS WHICH EXCEPTION! (htb)")
                     self._process = None
