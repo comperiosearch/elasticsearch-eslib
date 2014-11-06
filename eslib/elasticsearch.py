@@ -77,13 +77,14 @@ def rename_index_alias(es_client, alias, current_index, new_index):
         raise ESRequestFailedException
 
 
-def rotate_indices(es_client, new_index, current_index, alias):
+def rotate_indices(es_client, new_index, current_index, alias, optimize=False):
     """
 
     :param es_client: elasticsearch.client.Elasticsearch Elasticsearch client instance (from elasticsearch package).
     :param new_index: str Name of the index to rotate to.
     :param current_index: str Name of the index to rotate from.
     :param alias: str Alias indicating current index in the rotation.
+    :param optimize: bool Set to True to optimize current_index (see Curator documentation).
     :raises eslib.elasticsearch.ESRequestFailedException
     :return:
     """
@@ -94,5 +95,6 @@ def rotate_indices(es_client, new_index, current_index, alias):
                                      (alias, current_index, new_index))
     rename_index_alias(es_client, alias, current_index, new_index)
 
-    logging.getLogger(__name__).info('Optimizing index %s ...' % current_index)
-    curator.optimize_index(es_client, current_index)
+    if optimize:
+        logging.getLogger(__name__).info('Optimizing index %s ...' % current_index)
+        curator.optimize_index(es_client, current_index)
