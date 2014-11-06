@@ -87,6 +87,12 @@ def rotate_indices(es_client, new_index, current_index, alias):
     :raises eslib.elasticssearch.ESRequrestFailedException
     :return:
     """
+    logging.getLogger(__name__).info('Creating index %s ...' % new_index)
     create_index(es_client, new_index)
+
+    logging.getLogger(__name__).info('Moving alias %s from index %s to index %s ...' %
+                                     (alias, current_index, new_index))
     rename_index_alias(es_client, alias, current_index, new_index)
+
+    logging.getLogger(__name__).info('Optimizing index %s ...' % current_index)
     curator.optimize_index(es_client, current_index)
