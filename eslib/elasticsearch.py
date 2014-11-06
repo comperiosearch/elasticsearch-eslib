@@ -35,7 +35,7 @@ def create_index(es_client, new_index):
 
     :param es_client: elasticsearch.client.Elasticsearch Elasticsearch client instance (from elasticsearch package).
     :param new_index: str Name of the new index.
-    :raises eslib.elasticssearch.ESRequrestFailedException
+    :raises eslib.elasticsearch.ESRequestFailedException
     :return:
     """
     # Note this method might be redundant but may be useful until we know all the exceptions and return values that
@@ -63,7 +63,7 @@ def rename_index_alias(es_client, alias, current_index, new_index):
     :param alias: str Name of the alias
     :param new_index: str Name of new index to change alias to.
     :param current_index: str Name of the index the alias is currently pointing to.
-    :raises eslib.elasticssearch.ESRequrestFailedException
+    :raises eslib.elasticsearch.ESRequestFailedException
     :return:
     """
     ic = IndicesClient(es_client)
@@ -84,7 +84,7 @@ def rotate_indices(es_client, new_index, current_index, alias):
     :param new_index: str Name of the index to rotate to.
     :param current_index: str Name of the index to rotate from.
     :param alias: str Alias indicating current index in the rotation.
-    :raises eslib.elasticssearch.ESRequrestFailedException
+    :raises eslib.elasticsearch.ESRequestFailedException
     :return:
     """
     logging.getLogger(__name__).info('Creating index %s ...' % new_index)
