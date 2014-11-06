@@ -193,6 +193,12 @@ class TwitterMonitor(Monitor):
             self._may_iterate = True  # It may now enter blocking call
             self._inside_blocking = False
 
+    def _force_reconnect(self):
+            self._connected = False
+            if self._connect_delay < 16000:
+                self._connect_delay += 250
+            self.log.info("Forcing reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay))
+
     def _handle_communication_error(self, e=None, raise_instead_of_abort=False):
 
         do_abort = False
@@ -304,8 +310,9 @@ class TwitterMonitor(Monitor):
             if self.stopping:
                 pass  # This is caused by us closing the underlying connection in order to get the iterator to stop. (Weirdness.. wish we could have sent a 'stop' -- HTB)
             else:
-                self.log.critical("StopIteration received without stopping. Aborting!")
-                self.abort()
+                self.log.error("StopIteration received without stopping. Forcing reconnect.")
+                self._force_reconnect()
+                return
         except Exception as e:
             self._inside_blocking = False
             self._handle_communication_error(e)
