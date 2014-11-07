@@ -108,12 +108,12 @@ class ElasticsearchWriter(Generator):
         if not len(payload):
             return # Nothing to do
 
-        self.log.debug("Sending batch to Elasticsearch.")
+        self.log.trace("Sending batch to Elasticsearch.")
 
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
         res = es.bulk(payload)
 
-        self.log.debug("Processing batch result.")
+        self.log.trace("Processing batch result.")
 
         for i, docop in enumerate(res["items"]):
             if   "index"  in docop: resdoc = docop["index"]
@@ -156,13 +156,13 @@ class ElasticsearchWriter(Generator):
 
     def on_tick(self):
         if not self.config.batchsize and not self.config.batchtime:
-            self.log.debug("Submitting single document.")
+            self.log.trace("Submitting single document.")
             self._send()
         elif self.config.batchsize and (self._queue.qsize() >= self.config.batchsize):
             self.log.debug("Submitting full batch (%d)." % self.config.batchsize)
             self._send()
         elif self.config.batchtime and (time.time() - self._last_batch_time > self.config.batchtime):
-            self.log.info("Submitting partial batch due to batch timeout (%d)." % self._queue.qsize())
+            self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()
 
     #endregion Generator
