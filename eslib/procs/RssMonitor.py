@@ -4,14 +4,71 @@ __author__ = 'Hans Terje Bakke'
 #TODO: cmd script with ESLIB_RSS_ELASTICSEARCH_HOSTS environment variable
 #TODO: cmd script use logs for verbose output
 #TODO: Elasticsearch mappings for channels and items
+#TODO: Delete/Remove indices entirely
+#TODO: Elasticsearch mappings use 'facet' analyzer
 
+es_default_settings = {
+    "analysis": {
+        "analyzer": {
+            "facet" : {
+                "type" : "custom",
+                "tokenizer" : "keyword",
+                "filter" : [ "lowercase" ]
+            }
+        }
+    }
+}
+
+es_default_mapping_channel = {
+    "_timestamp": {"enabled": "true", "store": "yes"},
+    "properties" : {
+        "channel"      : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "title"        : {"type": "string"   , "index": "analyzed"    , "include_in_all": True},
+        "url"          : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "version"      : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "updated"      : {"type": "date"     , "index": "analyzed"    , "include_in_all": False,
+                          "format": "dateOptionalTime", "store": "yes"},
+        "generator"    : {"type": "string"   , "index": "analyzed"    , "include_in_all": False},
+        "language"     : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "description"  : {"type": "string"   , "index": "analyzed"    , "include_in_all": True},
+
+        "lastFetch"    : {"type": "date"     , "index": "analyzed"    , "include_in_all": False,
+                          "format": "dateOptionalTime", "store": "yes"}
+    }
+}
+
+es_default_mapping_item = {
+    "_timestamp": {"enabled": "true", "store": "yes"},
+    "properties" : {
+        "channel"      : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "title"        : {"type": "string"   , "index": "analyzed"    , "include_in_all": True},
+        "link"         : {"type": "string"   , "index": "no"          , "include_in_all": False},
+        "updated"      : {"type": "date"     , "index": "analyzed"    , "include_in_all": False,
+                          "format": "dateOptionalTime", "store": "yes"},
+        "author"       : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "description"  : {"type": "string"   , "index": "analyzed"    , "include_in_all": True},
+        "comments"     : {"type": "string"   , "index": "no"          , "include_in_all": False},
+        "categories"   : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "location"     : {"type": "geo_point", "index": "analyzed"    , "include_in_all": False},
+        "enclosures" :
+        {
+            "properties" : {
+                "url"    : {"type": "string", "index": "no"          , "include_in_all": False},
+                "type"   : {"type": "string", "index": "not_analyzed", "include_in_all": False},
+                "length" : {"type": "long"  , "index": "no"          , "include_in_all": False}
+            }
+        },
+
+        "page"         : {"type": "string"  , "index": "analyzed"     , "include_in_all": True}
+    }
+}
 
 from ..Monitor import Monitor
 from ..time import date2iso, iso2date
 from datetime import datetime
-import requests, feedparser, elasticsearch
+import requests, feedparser
 import uuid, time, logging
-
+import elasticsearch, elasticsearch.exceptions
 
 class RssMonitor(Monitor):
     """
@@ -25,16 +82,18 @@ class RssMonitor(Monitor):
     Config:
         elasticsearch_hosts  = []           : List of elasticsearch hosts within same cluster (list: for failover).
                                               Default "localhost:9200" if empty.
-        channel_index        = "store_rss"  :
-        item_index           = "store_rss"  :
-        include_linked_page  = False        :
+        index                = None         : If 'index' is set it will override both 'channel_index' and 'item_index'!
+        channel_index        = "rss"        : Index where channel metadata will be stored as doctype 'channel'.
+        item_index           = None         : Index where items will be stored as doctype 'items'.
+                                              If not set and not overridden by 'index', items will not be written automatically.
+                                              Also if there are connectors on the output socket 'item' then they are not written automatically
+        include_linked_page  = False        : Whether to fetch referenced link to article from RSS item.
         interval             = 600          : Check for new RSS items every 'interval' seconds. Defaults to 10 minutes by default.
         channels             = []           : All channels if empty.
     """
     #TODO: Document
     DOCTYPE_ITEM         = "item"
     DOCTYPE_CHANNEL      = "channel"
-    FIELD_CHANNEL        = "channel"
     MAX_CHANNELS = 1000
 
 
@@ -45,24 +104,35 @@ class RssMonitor(Monitor):
 
         self.config.set_default(
             elasticsearch_hosts = [],
-            channel_index       = "store_rss",
-            item_index          = "store_rss",
+            index               = None,
+            channel_index       = "rss",
+            item_index          = None,
             include_linked_page = False,
             interval            = 10*60,         # 10 minutes
             channels            = [],
             simulate            = False
         )
 
-        self._channel_index = None
-        self._item_index    = None
         self._last_get_time = 0
 
-    def on_open(self):
-        self._channel_index = self.config.channel_index
-        self._item_index = self.config.item_index or self._channel_index
-        # Intentionally not resetting _last_get_time, so that 'interval' will pass before we do another fetch if we restart.
+    @property
+    def _channel_index(self):
+        return self.config.index or self.config.channel_index
 
-        # TODO: Ensure channel_index exists in elasticsearch, or create one with a mapping
+    @property
+    def _item_index(self):
+        return self.config.index or self.config.item_index
+
+    def on_open(self):
+        # Note: Intentionally not resetting _last_get_time, so that 'interval' will pass before we do another fetch if we restart.
+
+        # Make sure we have an index for the channel data configured
+        if not self._channel_index:
+            raise ValueError("Missing index; neither given as argument nor 'index' or 'channel_index' configured.")
+
+        # Ensure at least an index for the channel data exists in Elasticsearch
+        es = self._get_es()
+        self._create_index(es, self._channel_index, expected_to_exist=True)
 
     def on_tick(self):
         if (time.time() - self._last_get_time) > self.config.interval:
@@ -70,10 +140,49 @@ class RssMonitor(Monitor):
             es = self._get_es()
             self._fetch_items(es, self.config.channels, simulate=self.config.simulate)
 
-    #region Utility methods
+    #region Misc core methods
 
     def _get_es(self):
-        return elasticsearch.Elasticsearch(hosts=self.config.elasticsearch_hosts)
+        hosts = None
+        # Funny that we have to do this rather than supplying the empty list as it is...
+        if self.config.elasticsearch_hosts:
+            hosts = self.config.elasticsearch_hosts
+        return elasticsearch.Elasticsearch(hosts=hosts)
+
+    def _create_index(self, es, index, expected_to_exist=False):
+        try:
+            self.log.debug("Checking if index '%s' already exists." % index)
+            if es.indices.exists(index=index):
+                msg = "Index '%s' already exists. Leaving it as it is." % index
+                if expected_to_exist:
+                    self.log.debug(msg)
+                else:
+                    self.log.warning(msg)
+                return False
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            self.log.critical(msg)
+            raise Exception(msg)
+
+        body = {
+            "settings": es_default_settings,
+            "mappings": {
+                self.DOCTYPE_CHANNEL: es_default_mapping_channel,
+                self.DOCTYPE_ITEM   : es_default_mapping_item,
+            }
+        }
+
+        self.log.info("Creating index '%s'." % index)
+
+        try:
+            es.indices.create(index=index, body=body)
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            self.log.critical(msg)
+            raise Exception(msg)
+
+        self.log.status("Index '%s' created with channel and item mappings." % index)
+        return True
 
     def _fetch_items(self, es, channel_names=None, force=False, simulate=False, offline=False):
 
@@ -160,28 +269,33 @@ class RssMonitor(Monitor):
     def _create_query_filter(filter):
         return {"query":{"filtered":{"filter":filter}}}
 
-    def _get_channels(self, es, *channel_names):
+    def _get_channels(self, es, channel_names=None):
         "Get channels from ES."
         body = None
         if channel_names:
-            body = self._create_query_filter({"terms": {self.FIELD_CHANNEL: channel_names}})
+            body = self._create_query_filter({"terms": {"channel": channel_names}})
         else:
             body = {"query": {"match_all": {}}}
         body.update({"size": self.MAX_CHANNELS})
-        # TODO: try/except
-        res = es.search(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, body=body);
+
+        try:
+            res = es.search(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, body=body);
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            self.log.error(msg)
+            return {}
 
         channels = {}
         for hit in res["hits"]["hits"]:
             name = hit["_id"]
             channel = hit["_source"]
-            channels.update({name: channel})
+            channels[name] = channel
         return channels
 
     def _put_channel(self, es, channel):
         "Write channel to ES."
         # TODO: try/except
-        res = es.index(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel[self.FIELD_CHANNEL], body=channel)
+        res = es.index(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel["channel"], body=channel)
 
     def _add_linked_page(self, doc):
         link = doc["_source"].get("link")
@@ -212,6 +326,135 @@ class RssMonitor(Monitor):
                 replaced = 1
 
         return (new, replaced)
+
+    def _get_rss_channel_info(self, channel_name, url):
+        rss = self._get_rss(channel_name, url, skip_items=True)
+        return rss[0] if rss else None
+
+    def _delete_channel(self, es, channel_name):
+        try:
+            res = es.delete(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel_name)
+        except:
+            self.log.warning("Failed to delete channel info for channel '%s'." % channel_name)
+            return 0
+        self.log.info("Channel '%s' deleted." % channel_name)
+        return 1
+
+    def _delete_items(self, es, channel_names, before_date):
+
+        if not self._item_index:
+            self.log.debug("Item index not configured; cannot delete items.")
+            return 0
+
+        and_parts = []
+
+        if channel_names:
+            and_parts.append({"terms": {"channel": channel_names}})
+
+        if before_date:
+            iso_before = date2iso(before_date)
+            and_parts.append({"range": {"updated": { "to": iso_before }}})
+
+        body = None
+        if and_parts:
+            body = self._create_query_filter({"and": and_parts})
+        else:
+            body = {"query": {"match_all": {}}}
+
+        #print "***DELETING"; print json.dumps(body)
+        #TODO: try/except
+        res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+        es.delete_by_query(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+
+        return res["count"]
+
+    def _list_channels(self, es, channel_names=None, since_date=None):
+
+        channels = self._get_channels(es, channel_names)
+
+        if not self._item_index:
+            self.log.warning("No item index configured, so we cannot retrieve item count per channel. (skipping)")
+        else:
+            # TODO: CONVERT THIS TO *ONE* AGGREGATION CALL INSTEAD
+
+            total = 0
+            for name, channel in channels.items():
+
+                # Get item count from ES
+
+                name_part = {"term": {"channel": name}}
+                since_part = None
+                if since_date:
+                    iso_since = date2iso(since_date)
+                    since_part = {"range": {"updated": { "from" : iso_since }}}
+
+                query = None
+                if since_part:
+                    query = self._create_query_filter({"and" : [name_part, since_part]})
+                else:
+                    query = self._create_query_filter(name_part)
+
+                try:
+                    res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=query)
+                except elasticsearch.exceptions.ConnectionError as e:
+                    msg = "Failed to connect to Elasticsearch: " + e.args[1]
+                    self.log.error(msg)
+                    continue
+
+                count = res["count"]
+                channel["count"] = count
+                total += count
+
+                if res["_shards"]["successful"] < res["_shards"]["total"]:
+                    self.log.error("Only partial result returned from Elasticsearch. Elasticsearch problem?")
+
+        return list(channels.values())
+
+    def _list_items(self, es, channel_names, since_date, limit):
+
+        if not self._item_index:
+            self.log.debug("Item index not configured; cannot retrieve items.")
+            return
+
+        body = {}
+        desc = {"order": "desc"}
+        body.update({"size": limit, "sort": [{"updated": desc}, {"_timestamp": desc}]})
+        and_parts = []
+
+        if channel_names:
+            and_parts.append({"terms": {"channel": channel_names}})
+
+        if since_date:
+            iso_since = date2iso(since_date)
+            and_parts.append({"range": {"updated": { "from": iso_since }}})
+
+        if and_parts:
+            body.update(self._create_query_filter({"and": and_parts}))
+        else:
+            body.update({"query": {"match_all": {}}})
+
+        #print json.dumps(body,indent=2)
+
+        # TODO: try/except
+        res = es.search(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+
+        partial = False
+        if res["_shards"]["successful"] < res["_shards"]["total"]:
+            partial = True
+        if partial:
+            self.log.error("Only partial result returned from Elasticsearch. Elasticsearch problem?")
+
+        #total = res["hits"]["total"]
+        #print "%d HITS:" % total
+
+        for item in res["hits"]["hits"]:
+            # Convert updated date string to a datetime type
+            updated_iso = item["_source"].get("updated")
+            if updated_iso:
+                item["_source"]["updated"] = iso2date(updated_iso)
+            yield item
+
+    #endregion Misc core methods
 
     #region Get RSS item
 
@@ -256,7 +499,7 @@ class RssMonitor(Monitor):
         try:
             feed = feedparser.parse(url)
         except:
-            self.log.error("Failed to read feed from channel '%s' with URL: %s" % (channel_name, url))
+            self.log.error("Failed to read RSS feed from channel '%s' with URL: %s" % (channel_name, url))
             return None
 
         channel = feed["channel"]
@@ -266,7 +509,7 @@ class RssMonitor(Monitor):
             self.log.warning("Registered URL and URL in channel meta differ: Our='%s', Remote='%s'." % (url, feed["url"]))
 
         # Create channel info part
-        cinfo = {self.FIELD_CHANNEL: channel_name, "url": url, "updated": self._get_channel_updated_iso_string(channel_name, channel)}
+        cinfo = {"channel": channel_name, "url": url, "updated": self._get_channel_updated_iso_string(channel_name, channel)}
         self._add_if(cinfo, feed   , "version")
         self._add_if(cinfo, feed   , "url")
         self._add_if(cinfo, channel, "title")
@@ -309,7 +552,7 @@ class RssMonitor(Monitor):
                 for t in i["tags"]:
                     categories.append(t["term"])
 
-            iinfo = {self.FIELD_CHANNEL: channel_name, "updated": updatedStr, "categories": categories}
+            iinfo = {"channel": channel_name, "updated": updatedStr, "categories": categories}
             self.add_if(iinfo, i, "link")
             self.add_if(iinfo, i, "title")
             self.add_if(iinfo, i, "author")
@@ -337,9 +580,72 @@ class RssMonitor(Monitor):
 
     #endregion Get RSS item
 
-    def add_channels(self, channel_infos):
-        #TODO: Document args
+    #region Utility methods
 
+    def create_index(self, index=None):
+        """
+        Create specified index or the configured effective 'channel_index' with mappings for both 'channel' and 'item'
+        document types.
+
+        :param index:
+        :returns bool success: Whether the index was created.
+        raises ValueError, Exception
+        """
+
+        if not index:
+            index = self._channel_index
+        if not index:
+            raise ValueError("Missing index; neither given as argument nor 'index' or 'channel_index' configured.")
+
+        es = self._get_es()
+        return self._create_index(es, index)
+
+    def delete_index(self, index=None):
+        """
+        Delete specified index or the configured effective 'channel_index' in Elasticsearch.
+
+        :param str index: Index to delete. Default is to use configured index or channel_index.
+        :returns bool success: Whether if index was deleted.
+        :raises ValueError, Exception
+        """
+        if not index:
+            index = self._channel_index
+        if not index:
+            raise ValueError("Missing index; netiher given as argument nor 'index' or 'channel_index' configured.")
+
+        self.log.info("Deleting index '%s'." % index)
+        es = self._get_es()
+        try:
+            es.indices.delete(index=index)
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            self.log.critical(msg)
+            raise Exception(msg)
+        except elasticsearch.exceptions.NotFoundError:
+            self.log.warning("Index '%s' not found." % index)
+            return False
+        self.log.status("Index '%s' deleted." % index)
+        return True
+
+    def list_channels(self, channel_names=None, since_date=None):
+        """
+        Get a list of channels and their info.
+        :param list channel_names: List of channel names, otherwise all channels.
+        :param since_date: Only get item counts since this date, if any.
+        :returns list channels: List of channel info items (dict).
+        """
+        self.log.info("Retrieving channels to list.")
+        es = self._get_es()
+        channels = self._list_channels(es, channel_names, since_date)
+        self.log.info("Channels retrieved.")
+        return channels
+
+    def add_channels(self, *channel_infos):
+        """
+        Add channels to watch. Will look up the URLs to get the channels' published metadata.
+        :param channel_infos: List of tuples of (channel_name, url).
+        :returns int number: Number of channels registered, whether new or updated.
+        """
         self.log.info("Adding %d channels." % len(channel_infos))
 
         es = self._get_es()
@@ -368,16 +674,16 @@ class RssMonitor(Monitor):
 
             self._put_channel(es, channel)
 
-        self.log.status("%d channels registered. (%d new.)" % (totalCount, totalCount - replaceCount))
+        self.log.status("Registered %d channels. (%d new, %d updated)" % (totalCount, totalCount - replaceCount, replaceCount))
         return totalCount
 
-    def _get_rss_channel_info(self, channel_name, url):
-        rss = self._get_rss(channel_name, url, skip_items=True)
-        return rss[0] if rss else None
-
     def delete_channels(self, channel_names=None, delete_items=False):
-        #TODO: Document args
-
+        """
+        Delete all or specified channels, optionally also delete all associated items.
+        :param list channel_names: List of channel names to delete, or all if nothing listed.
+        :param bool delete_items: Also delete all items associated with the deleted channels.
+        :return int number: Number of channels actually deleted.
+        """
         es = self._get_es()
         channels = self._get_channels(es, channel_names)
 
@@ -401,16 +707,13 @@ class RssMonitor(Monitor):
 
         return count
 
-    def _delete_channel(self, es, channel_name):
-        try:
-            res = es.delete(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel_name)
-        except:
-            self.log.warning("Failed to delete channel info for channel '%s'." % channel_name)
-            return 0
-        self.log.info("Channel '%s' deleted." % channel_name)
-        return 1
-
-    #TODO: list_items
+    def list_items(self, channel_names=None, since_date=None, limit=0):
+        #TODO: Document
+        self.log.info("Retrieving items to list.")
+        es = self._get_es()
+        for item in self._list_items(es, channel_names, since_date, limit):
+            yield item
+        self.log.info("Items retrieved.")
 
     def fetch_items(self, channel_names=None, force=False, simulate=False):
         #TODO: DOCUMENT ARGS
@@ -421,34 +724,6 @@ class RssMonitor(Monitor):
             count += 1
             yield item
         self.log.status("Fetch completed. %d items fetched." % count)
-
-    def _delete_items(self, es, channel_names, before_date):
-
-        if not self._item_index:
-            self.log.debug("Item index not configured; cannot delete items.")
-            return 0
-
-        and_parts = []
-
-        if channel_names:
-            and_parts.append({"terms": {self.FIELD_CHANNEL: channel_names}})
-
-        if before_date:
-            iso_before = date2iso(before_date)
-            and_parts.append({"range": {"updated": { "to": iso_before }}})
-
-        body = None
-        if and_parts:
-            body = self._create_query_filter({"and": and_parts})
-        else:
-            body = {"query": {"match_all": {}}}
-
-        #print "***DELETING"; print json.dumps(body)
-        #TODO: try/except
-        res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
-        es.delete_by_query(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
-
-        return res["count"]
 
     def delete_items(self, channel_names=None, before_date=None):
 
