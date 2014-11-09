@@ -1,11 +1,13 @@
 __author__ = 'Hans Terje Bakke'
 
 #TODO: Bulk check Elasticsearch for existing items
+#TODO: Batch up channel updates for writing back to Elasticsearch after a fetch(?)
 #TODO: cmd script with ESLIB_RSS_ELASTICSEARCH_HOSTS environment variable
 #TODO: cmd script use logs for verbose output
-#TODO: Elasticsearch mappings for channels and items
-#TODO: Delete/Remove indices entirely
 #TODO: Elasticsearch mappings use 'facet' analyzer
+#TODO: Find a way to filter out duplicates (e.g. search for all item ideas in the channel batch and drop those we found)
+#TODO:    This is needed especially for channels that do not have "updated" info. (e.g. digi.no)
+
 
 es_default_settings = {
     "analysis": {
@@ -137,8 +139,13 @@ class RssMonitor(Monitor):
     def on_tick(self):
         if (time.time() - self._last_get_time) > self.config.interval:
             # This one also writes to Elasticsearch and/or item socket
+
             es = self._get_es()
-            self._fetch_items(es, self.config.channels, simulate=self.config.simulate)
+            # We have to burn through this as fast as possible. It is a generator that also serves
+            # an offline fetch mode (i.e. not part of the run loop), but here we need it to process
+            # the items fast and be done and write back the new channel status immediately.
+            for item in self._fetch_items(es, self.config.channels, simulate=self.config.simulate):
+                pass
 
     #region Misc core methods
 
@@ -318,7 +325,7 @@ class RssMonitor(Monitor):
         elif self._item_index:
             # TODO: try/except; for now, let it fail here
             #print json.dumps(body, indent=2) # DEBUG
-            res = es.index(index=self._item_index, doc_type=self.DOCTYPE_ITEM, id=id, body=doc["_source"])
+            res = es.index(index=self._item_index, doc_type=self.DOCTYPE_ITEM, id=doc["_id"], body=doc["_source"])
             if res["created"]:
                 self.doclog.debug("New item in %s: %s" % (channel_name, doc["_source"]["title"]))
                 new = 1
@@ -449,9 +456,9 @@ class RssMonitor(Monitor):
 
         for item in res["hits"]["hits"]:
             # Convert updated date string to a datetime type
-            updated_iso = item["_source"].get("updated")
-            if updated_iso:
-                item["_source"]["updated"] = iso2date(updated_iso)
+            #updated_iso = item["_source"].get("updated")
+            #if updated_iso:
+            #    item["_source"]["updated"] = iso2date(updated_iso)
             yield item
 
     #endregion Misc core methods
@@ -478,7 +485,8 @@ class RssMonitor(Monitor):
 
     def _get_channel_updated_iso_string(self, channel_name, channel):
         t = time.gmtime()
-        if "updated_parsed" in channel and type(channel["updated_parsed"]) is time.struct_time:
+        updated_parsed = channel.get("updated_parsed")
+        if updated_parsed and type(updated_parsed) is time.struct_time:
             t = channel["updated_parsed"]
         elif self.log.isEnabledFor(logging.DEBUG):
             self.log.debug("Warning: Channel '%s' missing update time in channel meta data. Using processing time instead." % channel_name)
@@ -544,7 +552,7 @@ class RssMonitor(Monitor):
                 continue
 
             # Prefer "updated", alternative "published", alternative current processing time
-            updatedStr = self._get_item_updated_iso_tring(channel_name, i)
+            updatedStr = self._get_item_updated_iso_string(channel_name, i)
 
             # Extract categories from "tags/term"
             categories = []
@@ -553,20 +561,20 @@ class RssMonitor(Monitor):
                     categories.append(t["term"])
 
             iinfo = {"channel": channel_name, "updated": updatedStr, "categories": categories}
-            self.add_if(iinfo, i, "link")
-            self.add_if(iinfo, i, "title")
-            self.add_if(iinfo, i, "author")
-            self.add_if(iinfo, i, "comments")
+            self._add_if(iinfo, i, "link")
+            self._add_if(iinfo, i, "title")
+            self._add_if(iinfo, i, "author")
+            self._add_if(iinfo, i, "comments")
 
-            #addIf(iinfo, i, "summary") #, "description"
-            #addIf(iinfo, i, "content")
+            #self._add_if(iinfo, i, "summary") #, "description"
+            #self._add_if(iinfo, i, "content")
             # "content" comes with sub elements ("base", "type", "value"). Simplifying for now by extracting only value.
             # This actually again comes from the non-list field "description" in RSS, AFAIK. So calling it "description" here..
             # But there is not always "content", so use "summary" if it does not exist
             if "content" in i and i["content"]:
                 iinfo.update({"description": i["content"][0]["value"]})
             else:
-                self.add_if(iinfo, i, "summary", "description")
+                self._add_if(iinfo, i, "summary", "description")
 
             # Note: Skip "location" for now (in ES mapping)
             # Note: Skip "enclosures" (with "url", "type", "length") for now (in ES mapping)
@@ -587,11 +595,11 @@ class RssMonitor(Monitor):
         Create specified index or the configured effective 'channel_index' with mappings for both 'channel' and 'item'
         document types.
 
-        :param index:
-        :returns bool success: Whether the index was created.
-        raises ValueError, Exception
-        """
+        :param   str  index   : Override index to create, otherwise it is assumed from the configured 'index' or 'channel_index'.
+        :returns bool success : Whether the index was created.
 
+        :raises ValueError, Exception:
+        """
         if not index:
             index = self._channel_index
         if not index:
@@ -604,9 +612,10 @@ class RssMonitor(Monitor):
         """
         Delete specified index or the configured effective 'channel_index' in Elasticsearch.
 
-        :param str index: Index to delete. Default is to use configured index or channel_index.
-        :returns bool success: Whether if index was deleted.
-        :raises ValueError, Exception
+        :param   str  index   : Index to delete. Default is to use configured index or channel_index.
+        :returns bool success : Whether if index was deleted.
+
+        :raises ValueError, Exception:
         """
         if not index:
             index = self._channel_index
@@ -630,9 +639,10 @@ class RssMonitor(Monitor):
     def list_channels(self, channel_names=None, since_date=None):
         """
         Get a list of channels and their info.
-        :param list channel_names: List of channel names, otherwise all channels.
-        :param since_date: Only get item counts since this date, if any.
-        :returns list channels: List of channel info items (dict).
+
+        :param  list     channel_names : List of channel names, otherwise all channels.
+        :param  datetime since_date    : Only get item counts since this date, if any.
+        :returns list    channels      : List of channel info items (dict).
         """
         self.log.info("Retrieving channels to list.")
         es = self._get_es()
@@ -643,8 +653,9 @@ class RssMonitor(Monitor):
     def add_channels(self, *channel_infos):
         """
         Add channels to watch. Will look up the URLs to get the channels' published metadata.
-        :param channel_infos: List of tuples of (channel_name, url).
-        :returns int number: Number of channels registered, whether new or updated.
+
+        :param   channel_infos  : List of tuples of (channel_name, url).
+        :returns int     number : Number of channels registered, whether new or updated.
         """
         self.log.info("Adding %d channels." % len(channel_infos))
 
@@ -680,9 +691,10 @@ class RssMonitor(Monitor):
     def delete_channels(self, channel_names=None, delete_items=False):
         """
         Delete all or specified channels, optionally also delete all associated items.
-        :param list channel_names: List of channel names to delete, or all if nothing listed.
-        :param bool delete_items: Also delete all items associated with the deleted channels.
-        :return int number: Number of channels actually deleted.
+
+        :param  list channel_names : List of channel names to delete, or all if nothing listed.
+        :param  bool delete_items  : Also delete all items associated with the deleted channels.
+        :return int  number        : Number of channels actually deleted.
         """
         es = self._get_es()
         channels = self._get_channels(es, channel_names)
@@ -708,7 +720,14 @@ class RssMonitor(Monitor):
         return count
 
     def list_items(self, channel_names=None, since_date=None, limit=0):
-        #TODO: Document
+        """
+        Get list of items, filtered by channels or for all channels.
+
+        :param  list     channel_names : Channels to filter on, or all not specified.
+        :param  datetime since_date    : Get items newer than this date.
+        :param  int      limit         : Max number of items to retrieve. 0 = unlimited.
+        :return list     items         : Returns a list of items in 'esdoc' format.
+        """
         self.log.info("Retrieving items to list.")
         es = self._get_es()
         for item in self._list_items(es, channel_names, since_date, limit):
@@ -716,17 +735,31 @@ class RssMonitor(Monitor):
         self.log.info("Items retrieved.")
 
     def fetch_items(self, channel_names=None, force=False, simulate=False):
-        #TODO: DOCUMENT ARGS
+        """
+        Fetch new items from RSS feeds or all available items if 'force' is True.
+
+        :param   list channel_names : Fetch items for given channel names, or any if none specified.
+        :param   bool force         : Ignore last fetch date, publishing dates, etc, and retrieve all that is available.
+        :param   bool simulate      : Do not write to item index or update channel index with last fetch date, etc.
+                                      The fetch will still be simulated if the config.simulate is set; regardless of this.
+        :returns generator items    : Returns the list of items fetched, in 'esdoc' format.
+        """
         self.log.info("Fetching items.")
         es = self._get_es()
         count = 0
-        for item in self._fetch_items(channel_names, force, simulate, offline=True):
+        for item in self._fetch_items(es, channel_names, force, simulate or self.config.simulate, offline=True):
             count += 1
             yield item
         self.log.status("Fetch completed. %d items fetched." % count)
 
     def delete_items(self, channel_names=None, before_date=None):
+        """
+        Delete items for given channels or all channels, older than 'before_data', or all.
 
+        :param   list     channel_names : Channels to filter on, or all not specified.
+        :param   datetime before_date   : Only delete items older than this date, or all if not specified.
+        :returns int      number        : Returns number of items actually deleted.
+        """
         if not self._item_index:
             self.log.critical("Item index not configured; cannot delete items.")
             return 0
