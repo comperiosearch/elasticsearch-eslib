@@ -2,12 +2,15 @@ __author__ = 'Hans Terje Bakke'
 
 #TODO: Bulk check Elasticsearch for existing items
 #TODO: Batch up channel updates for writing back to Elasticsearch after a fetch(?)
+#TODO: Convert call to Elasticsearch to get item count per channel to ONE aggregation call instead?
 #TODO: cmd script with ESLIB_RSS_ELASTICSEARCH_HOSTS environment variable
 #TODO: cmd script use logs for verbose output
 #TODO: Elasticsearch mappings use 'facet' analyzer
 #TODO: Find a way to filter out duplicates (e.g. search for all item ideas in the channel batch and drop those we found)
 #TODO:    This is needed especially for channels that do not have "updated" info. (e.g. digi.no)
+#TODO: Make fetch items not be a generator
 
+#region Elasticsearch mappings
 
 es_default_settings = {
     "analysis": {
@@ -24,7 +27,7 @@ es_default_settings = {
 es_default_mapping_channel = {
     "_timestamp": {"enabled": "true", "store": "yes"},
     "properties" : {
-        "channel"      : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
+        "name"         : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
         "title"        : {"type": "string"   , "index": "analyzed"    , "include_in_all": True},
         "url"          : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
         "version"      : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
@@ -65,6 +68,8 @@ es_default_mapping_item = {
     }
 }
 
+#endregion Elasticsearch mappings
+
 from ..Monitor import Monitor
 from ..time import date2iso, iso2date
 from datetime import datetime
@@ -92,12 +97,12 @@ class RssMonitor(Monitor):
         include_linked_page  = False        : Whether to fetch referenced link to article from RSS item.
         interval             = 600          : Check for new RSS items every 'interval' seconds. Defaults to 10 minutes by default.
         channels             = []           : All channels if empty.
+        simulate             = False        : If 'simulate' is set, fetched items and channel metadata will not be written to the index.
     """
-    #TODO: Document
+
     DOCTYPE_ITEM         = "item"
     DOCTYPE_CHANNEL      = "channel"
     MAX_CHANNELS = 1000
-
 
     def __init__(self, **kwargs):
         super(RssMonitor, self).__init__(**kwargs)
@@ -115,7 +120,7 @@ class RssMonitor(Monitor):
             simulate            = False
         )
 
-        self._last_get_time = 0
+        self._last_get_time = 0  # For use only by on_tick()
 
     @property
     def _channel_index(self):
@@ -147,6 +152,8 @@ class RssMonitor(Monitor):
             for item in self._fetch_items(es, self.config.channels, simulate=self.config.simulate):
                 pass
 
+            self._last_get_time = time.time()
+
     #region Misc core methods
 
     def _get_es(self):
@@ -167,7 +174,7 @@ class RssMonitor(Monitor):
                     self.log.warning(msg)
                 return False
         except elasticsearch.exceptions.ConnectionError as e:
-            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
             self.log.critical(msg)
             raise Exception(msg)
 
@@ -184,7 +191,7 @@ class RssMonitor(Monitor):
         try:
             es.indices.create(index=index, body=body)
         except elasticsearch.exceptions.ConnectionError as e:
-            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
             self.log.critical(msg)
             raise Exception(msg)
 
@@ -223,10 +230,6 @@ class RssMonitor(Monitor):
 
             # Check if it is time to process the feed (or 'force' is specified)
             updated = iso2date(channel["updated"])
-            #========
-            #print "LAST_FETCH    ", lastFetchDate
-            #print "CHANNEL UPDATE", updated
-            #========
             qualified = False
             if not updated or not last_fetch_date or updated > last_fetch_date:
                 qualified = True
@@ -260,17 +263,17 @@ class RssMonitor(Monitor):
 
                 yield item
 
-                if not simulate:
-                    new, replaced = self._put_item(es, name, item)
-                    nNewItems += new
-                    nReplacedItems += replaced
+                new, replaced = self._put_item(es, name, item, simulate)
+                nNewItems += new
+                nReplacedItems += replaced
 
             # Update channel info with new lastFetch time (== now)
             channel["lastFetch"] =  date2iso(datetime.utcnow())
-            if not simulate:
-                self._put_channel(es, channel)
+            if simulate:
+                self.log.debug("Simulating update to channel '%-10s': %3d new, %3d replaced." % (name, nNewItems, nReplacedItems))
+            else:
                 self.log.info("Channel '%-10s': %3d new, %3d replaced." % (name, nNewItems, nReplacedItems))
-                self._last_get_time = time.time()
+                self._put_channel(es, channel)
 
     @staticmethod
     def _create_query_filter(filter):
@@ -280,7 +283,7 @@ class RssMonitor(Monitor):
         "Get channels from ES."
         body = None
         if channel_names:
-            body = self._create_query_filter({"terms": {"channel": channel_names}})
+            body = self._create_query_filter({"terms": {"name": channel_names}})
         else:
             body = {"query": {"match_all": {}}}
         body.update({"size": self.MAX_CHANNELS})
@@ -288,7 +291,7 @@ class RssMonitor(Monitor):
         try:
             res = es.search(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, body=body);
         except elasticsearch.exceptions.ConnectionError as e:
-            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
             self.log.error(msg)
             return {}
 
@@ -301,20 +304,32 @@ class RssMonitor(Monitor):
 
     def _put_channel(self, es, channel):
         "Write channel to ES."
-        # TODO: try/except
-        res = es.index(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel["channel"], body=channel)
+        # Do not raise exceptions. It might be able to write again on next attempt.
+        try:
+            res = es.index(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel["name"], body=channel)
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+            self.log.error(msg)
+        except elasticsearch.exceptions.NotFoundError:
+            self.log.warning("Index/channel '%s/%s' not found." % (self._channel_index, self.DOCTYPE_CHANNEL))
+        except elasticsearch.exceptions.TransportError as e:
+            self.log.error("Elasticsearch TransportError: %s: %s" % (e.__class__.__name__, e))
+        except Exception as e:
+            self.log.error("Exception while writing channel to Elasticsearch: %s: %s" % (e.__class__.__name__, e))
 
     def _add_linked_page(self, doc):
         link = doc["_source"].get("link")
         if link:
             # TODO: try/except; for now, let it fail here
-            res = requests.get(link, verify=False)
-            page = res.text
+            try:
+                res = requests.get(link, verify=False)
+                doc["_source"]["page"] = res.text
+            except Exception as e:
+                # Note: Logging this to doclog rather than processor log, since this is probably an invalid URL related to the item.
+                self.doclog.warning("Failed to fetch referenced URL: %s" % link)
+                self.doclog.debug("Exception when fetching referenced URL: %s: %s" % (e.__class__.__name__, e))
 
-            doc["_source"]["page"] = page
-            #print "Debug: In feed '%s', read item in linked-to page; size = %d bytes." % (feedname, len(page))
-
-    def _put_item(self, es, channel_name, doc):
+    def _put_item(self, es, channel_name, doc, simulate):
 
         new = 0; replaced = 0
 
@@ -322,15 +337,35 @@ class RssMonitor(Monitor):
         if self._output.has_output:
             self._output.send(doc)
             new = 1  # Consider it new; don't bother checking
+        elif simulate:
+            self.doclog.debug("Simulating new item in %-10s: %s" % (channel_name, doc["_source"]["title"]))
+            new = 1
         elif self._item_index:
-            # TODO: try/except; for now, let it fail here
-            #print json.dumps(body, indent=2) # DEBUG
-            res = es.index(index=self._item_index, doc_type=self.DOCTYPE_ITEM, id=doc["_id"], body=doc["_source"])
-            if res["created"]:
-                self.doclog.debug("New item in %s: %s" % (channel_name, doc["_source"]["title"]))
-                new = 1
-            else:
-                replaced = 1
+            ok = False
+            try:
+                res = es.index(index=self._item_index, doc_type=self.DOCTYPE_ITEM, id=doc["_id"], body=doc["_source"])
+                if res["created"]:
+                    new = 1
+                else:
+                    replaced = 1
+                ok = True
+            except elasticsearch.exceptions.ConnectionError as e:
+                msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+                self.log.error(msg)
+            except elasticsearch.exceptions.NotFoundError as e:
+                self.log.warning("Index/type '%s/%s' not found." % (self._item_index, self.DOCTYPE_ITEM, e.args[1]))
+            except elasticsearch.exceptions.TransportError as e:
+                self.log.error("Elasticsearch TransportError: %s: %s" % (e.__class__.__name__, e))
+            except Exception as e:
+                self.log.error("Exception while writing item to Elasticsearch: %s: %s" % (e.__class__.__name__, e))
+
+            title = doc["_source"]["title"]
+            if not ok:
+                self.doclog.warning("Failed to write item in channel '%s': %s" % (channel_name, title))
+            elif new:
+                self.doclog.debug("New      item in %-10s: %s" % (channel_name, doc["_source"]["title"]))
+            elif replaced:
+                self.doclog.trace("Replaced item in %-10s: %s" % (channel_name, doc["_source"]["title"]))
 
         return (new, replaced)
 
@@ -341,8 +376,9 @@ class RssMonitor(Monitor):
     def _delete_channel(self, es, channel_name):
         try:
             res = es.delete(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, id=channel_name)
-        except:
+        except Exception as e:
             self.log.warning("Failed to delete channel info for channel '%s'." % channel_name)
+            self.log.debug("Exception when deleting: %s: %s" % (e.__class__.__name__, e))
             return 0
         self.log.info("Channel '%s' deleted." % channel_name)
         return 1
@@ -368,12 +404,23 @@ class RssMonitor(Monitor):
         else:
             body = {"query": {"match_all": {}}}
 
-        #print "***DELETING"; print json.dumps(body)
-        #TODO: try/except
-        res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
-        es.delete_by_query(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+        count = 0
 
-        return res["count"]
+        try:
+            # First find how many we expect to delete...
+            res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+            # ...then delete them.
+            es.delete_by_query(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+            count = res["count"]
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+            self.log.error(msg)
+            return 0  # Proceed with the next channel... maybe we'll have better luck there (if tmp error)
+        except elasticsearch.exceptions.NotFoundError:
+            self.log.warning("Index/type '%s/%s' not found." % (self._item_index, self.DOCTYPE_ITEM))
+            return 0  # Proceed with the next channel... maybe we'll have better luck there (if tmp error)
+
+        return count
 
     def _list_channels(self, es, channel_names=None, since_date=None):
 
@@ -404,7 +451,7 @@ class RssMonitor(Monitor):
                 try:
                     res = es.count(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=query)
                 except elasticsearch.exceptions.ConnectionError as e:
-                    msg = "Failed to connect to Elasticsearch: " + e.args[1]
+                    msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
                     self.log.error(msg)
                     continue
 
@@ -440,10 +487,21 @@ class RssMonitor(Monitor):
         else:
             body.update({"query": {"match_all": {}}})
 
-        #print json.dumps(body,indent=2)
+        msg = None
+        try:
+            res = es.search(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+        except elasticsearch.exceptions.ConnectionError as e:
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+        except elasticsearch.exceptions.NotFoundError:
+            msg = "Index/type '%s/%s' not found." % (self._item_index, self.DOCTYPE_ITEM)
+        except elasticsearch.exceptions.TransportError as e:
+            msg = "Elasticsearch TransportError: %s: %s" % (e.__class__.__name__, e)
+        except Exception as e:
+            msg = "Exception while writing channel to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
 
-        # TODO: try/except
-        res = es.search(index=self._item_index, doc_type=self.DOCTYPE_ITEM, body=body)
+        if msg:
+            self.log.critical(msg)
+            raise Exception(msg)
 
         partial = False
         if res["_shards"]["successful"] < res["_shards"]["total"]:
@@ -506,8 +564,9 @@ class RssMonitor(Monitor):
 
         try:
             feed = feedparser.parse(url)
-        except:
+        except Exception as e:
             self.log.error("Failed to read RSS feed from channel '%s' with URL: %s" % (channel_name, url))
+            self.log.debug("Exception when trying to read RSS feed: %s: %s" % (e.__class__.__name__, e))
             return None
 
         channel = feed["channel"]
@@ -517,7 +576,7 @@ class RssMonitor(Monitor):
             self.log.warning("Registered URL and URL in channel meta differ: Our='%s', Remote='%s'." % (url, feed["url"]))
 
         # Create channel info part
-        cinfo = {"channel": channel_name, "url": url, "updated": self._get_channel_updated_iso_string(channel_name, channel)}
+        cinfo = {"name": channel_name, "url": url, "updated": self._get_channel_updated_iso_string(channel_name, channel)}
         self._add_if(cinfo, feed   , "version")
         self._add_if(cinfo, feed   , "url")
         self._add_if(cinfo, channel, "title")
@@ -627,7 +686,7 @@ class RssMonitor(Monitor):
         try:
             es.indices.delete(index=index)
         except elasticsearch.exceptions.ConnectionError as e:
-            msg = "Failed to connect to Elasticsearch: " + e.args[1]
+            msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
             self.log.critical(msg)
             raise Exception(msg)
         except elasticsearch.exceptions.NotFoundError:
@@ -719,13 +778,13 @@ class RssMonitor(Monitor):
 
         return count
 
-    def list_items(self, channel_names=None, since_date=None, limit=0):
+    def list_items(self, channel_names=None, since_date=None, limit=10):
         """
         Get list of items, filtered by channels or for all channels.
 
         :param  list     channel_names : Channels to filter on, or all not specified.
         :param  datetime since_date    : Get items newer than this date.
-        :param  int      limit         : Max number of items to retrieve. 0 = unlimited.
+        :param  int      limit         : Max number of items to retrieve.
         :return list     items         : Returns a list of items in 'esdoc' format.
         """
         self.log.info("Retrieving items to list.")

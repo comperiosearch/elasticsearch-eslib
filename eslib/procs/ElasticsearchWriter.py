@@ -106,6 +106,7 @@ class ElasticsearchWriter(Generator):
         self._queue_lock.release()
 
         if not len(payload):
+            self._last_batch_time = time.time()
             return # Nothing to do
 
         self.log.trace("Sending batch to Elasticsearch.")
@@ -146,7 +147,7 @@ class ElasticsearchWriter(Generator):
     #region Generator
 
     def on_start(self):
-        self._last_batch_time = 0
+        self._last_batch_time = time.time()  # Not 0, in that case we would attempt a zero batch immediately upon start
 
     def on_shutdown(self):
         # Send remaining queue to Elasticsearch (still in batches)
@@ -164,6 +165,7 @@ class ElasticsearchWriter(Generator):
         elif self.config.batchtime and (time.time() - self._last_batch_time > self.config.batchtime):
             self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()
+
 
     #endregion Generator
 
