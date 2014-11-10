@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+
+from eslib.procs import ElasticsearchReader, FileWriter
+import eslib.prog
+import eslib.time
+import argparse, sys
+
+
+def main():
+    help_i  = "Which index to return documents from."
+    help_t  = "Which type of document to return."
+    help_l  = "The maximum number of documents to return. Will by default return all documents."
+    help_f  = "Return display the specified field (forces 'field' format)."
+    help_s  = "Returns all documents added after SINCE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+    help_b  = "Returns all documents added after BEFORE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+    help_tf = "The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'."
+    help_fi = "Format for filter is, by example: 'category:politicians,party:democrats'."
+    #help_fo = "Available formats for 'format': 'json' (default), 'id', 'field' (used by default if -f given)."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -i index [-t type] [-f field] [-l limit] [more options]")
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-i", "--index"    , help=help_i, required=True)
+    parser.add_argument("-t", "--type"     , help=help_t)
+    parser.add_argument("-l", "--limit"    , help=help_l, default=0, type=int)
+    parser.add_argument("-f", "--field"    , help=help_f)
+    parser.add_argument("-s", "--since"    , help=help_s)
+    parser.add_argument("-b", "--before"   , help=help_b)
+    parser.add_argument(      "--host"     , help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
+    parser.add_argument(      "--timefield", help=help_tf, default="_timestamp")
+    parser.add_argument(      "--filter"   , help=help_fi)
+    #parser.add_argument(      "--format"   , help=help_fo, default="json")
+    #parser.add_argument(      "--debug"    , action="store_true")
+    parser.add_argument(      "--name"     , help="Process name.", default=None)
+
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        sys.exit(0)
+
+    args = parser.parse_args()
+
+    # Time validation conversion and checks
+    before = None
+    since  = None
+    if args.before:
+        try:
+            before = eslib.time.ago2date(args.before)
+        except:
+            print >> sys.stderr, "Illegal 'ago' time format to 'before' argument, '%s'" % args.before
+            sys.exit(-1)
+    if args.since:
+        try:
+            since = eslib.time.ago2date(args.since)
+        except:
+           print >> sys.stderr, "Illegal 'ago' time format to 'since' argument, '%s'" % args.since
+           sys.exit(-1)
+
+    # Parse filter string
+    filters = {}
+    if args.filter:
+        parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]
+        for part in parts:
+            filters.update(part)
+
+    # Set up and run this processor
+    dp = ElasticsearchReader(args.name or eslib.prog.progname())
+    dp.config.hosts        = [args.host] if args.host else []
+    dp.config.index        = args.index
+    dp.config.doctype      = args.type
+    dp.config.field        = args.field
+    dp.config.limit        = args.limit
+    dp.config.filters      = filters
+    dp.config.since        = since
+    dp.config.before       = before
+    dp.config.timefield    = args.timefield
+#    dp.config.outputFormat = args.format
+
+#    if args.debug: dp.debuglevel = 0
+
+    w = FileWriter()
+    w.subscribe(dp)
+    dp.start()
+    w.wait()
+
+
+if __name__ == "__main__": main()

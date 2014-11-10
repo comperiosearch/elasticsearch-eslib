@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+
+from eslib.procs import FileReader, FileWriter, TweetEntityRemover, PatternRemover, HtmlRemover
+import eslib.prog
+import argparse
+
+# TODO: Is ellipses suffixes a remnant from the Elasticsearch Twitter river, meaning 'truncated', or still part of tweet?
+
+
+def main():
+    desc   = "Perform a chain of cleaning operations on tweets:\n" + \
+             "  Remove entities (URLs, mentions)" + \
+             "  Remove retweet prefix and ellipses suffix" + \
+             "  Unescape HTML encoding"
+    help_t = "Write cleaned text to this field instead of overwriting input field."
+    help_f = "Field to clean. Defaults to 'text'."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -f field [-t target]", description=desc)
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-f", "--field",   default="text", help=help_f)
+    parser.add_argument("-t", "--target",  required=False, help=help_t)
+    parser.add_argument(      "--name"   , help="Process name.", default=None)
+
+    args = parser.parse_args()
+
+    source = args.field
+    target = args.target or args.field
+
+    # Set up and run the pipeline
+    entity_remover = TweetEntityRemover(
+        name           = "TER",#args.name or eslib.prog.progname(),
+        source_field   = source,
+        target_field   = target,
+        remove_url     = True,
+        remove_mention = True)
+    pattern_remover = PatternRemover(
+        name           = "PR",#args.name or eslib.prog.progname(),
+        patterns       = ["^RT @.+: ", u"\S+\u2026$"],  # Retweet prefix, ellipsis suffix
+        source_field   = target,
+        target_field   = target
+    )
+    unescaper = HtmlRemover(name="HR")
+
+    r = FileReader()  # Read from stdin
+    w = FileWriter()  # Write to stdout
+    entity_remover.subscribe(r)
+    pattern_remover.subscribe(entity_remover)#, socket_name="output", connector_name="input")
+    unescaper.subscribe(pattern_remover)#, socket_name="output", connector_name="input",)
+    w.subscribe(unescaper)#, socket_name="output")
+
+    r.start()  # Will cause cascading starts of each processor in the pipeline
+    w.wait()   # Wait for everything to finish writing
+
+
+if __name__ == "__main__": main()

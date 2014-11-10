@@ -3,8 +3,6 @@ __author__ = 'Hans Terje Bakke'
 #TODO: Bulk check Elasticsearch for existing items
 #TODO: Batch up channel updates for writing back to Elasticsearch after a fetch(?)
 #TODO: Convert call to Elasticsearch to get item count per channel to ONE aggregation call instead?
-#TODO: cmd script with ESLIB_RSS_ELASTICSEARCH_HOSTS environment variable
-#TODO: cmd script use logs for verbose output
 #TODO: Elasticsearch mappings use 'facet' analyzer
 #TODO: Find a way to filter out duplicates (e.g. search for all item ideas in the channel batch and drop those we found)
 #TODO:    This is needed especially for channels that do not have "updated" info. (e.g. digi.no)
@@ -288,10 +286,18 @@ class RssMonitor(Monitor):
             body = {"query": {"match_all": {}}}
         body.update({"size": self.MAX_CHANNELS})
 
+        msg = None
         try:
             res = es.search(index=self._channel_index, doc_type=self.DOCTYPE_CHANNEL, body=body);
         except elasticsearch.exceptions.ConnectionError as e:
             msg = "Failed to connect to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+        except elasticsearch.exceptions.NotFoundError:
+            msg = "Index/channel '%s/%s' not found." % (self._channel_index, self.DOCTYPE_CHANNEL)
+        except elasticsearch.exceptions.TransportError as e:
+            msg = "Elasticsearch TransportError: %s: %s" % (e.__class__.__name__, e)
+        except Exception as e:
+            msg = "Exception while writing channel to Elasticsearch: %s: %s" % (e.__class__.__name__, e)
+        if msg:
             self.log.error(msg)
             return {}
 

@@ -1,0 +1,353 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+#TODO: cmd script with ESLIB_RSS_ES_HOST and ESLIB_RSS_INDEX environment variable
+#TODO: cmd script use logs for verbose output
+#TODO: "config" cmd dump relevant config env vars set
+
+from eslib.procs import RssMonitor
+import eslib.prog
+from eslib.time import iso2date
+from eslib.debug import byte_size_string
+import argparse, sys, os
+
+# =============================================================================
+# Log setup
+# =============================================================================
+
+import logging
+LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) -5d: %(message)s')
+#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+
+console = logging.StreamHandler()
+console.setLevel(logging.WARNING)
+console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
+
+proclog = logging.getLogger("proclog")
+proclog.setLevel(logging.TRACE)
+proclog.addHandler(console)
+
+doclog  = logging.getLogger("doclog")
+doclog.setLevel(logging.TRACE)
+doclog.addHandler(console)
+
+
+# =============================================================================
+# Command handlers
+# =============================================================================
+
+def cmd_create_index(mon, debug, verbose):
+    created = mon.create_index()
+    if created:
+        print "Index created."
+    else:
+        print "Index was not created."
+
+def cmd_delete_index(mon, debug, verbose):
+    deleted = mon.delete_index()
+    if deleted:
+        print "Index deleted."
+    else:
+        print "Note: Index was not deleted."
+
+def cmd_add_channel(mon, debug, verbose, channel, url):
+    num = mon.add_channels((channel, url))
+    if num:
+        print "Channel '%s' added as new channel." % channel
+    else:
+        #TODO: There could have been an error... how to become aware and how to print this?
+        print "Channel '%s' updated (or failed)." % channel
+
+def cmd_add_channels_stdin(mon, debug, verbose):
+    if verbose:
+        print "Reading input from stdin."
+
+    for line in sys.stdin:
+        if not line or line.startswith("#"):
+            continue
+        line = line.strip()
+        args = line.split()
+        if len(args) != 2:
+            print "Expected format 'name url'; skipping line."
+        channel, url = args
+        cmd_add_channel(mon, debug, verbose, channel, url)
+
+def cmd_list_channels(mon, debug, verbose, channels, since_date):
+
+    _channels = mon.list_channels(channel_names=channels, since_date=since_date)
+
+    if not verbose:
+        print "%5s  %s" % ("ITEMS", "NAME")
+
+    total = 0
+    count_missing = False
+
+    for channel in _channels:
+
+        name = channel["name"]
+        count = channel.get("count")
+        if count is None:
+            count_missing = True
+            count_str = "?"
+        else:
+            count_str = str(count)
+
+        if verbose:
+            print "%s (%s)" % (name, count_str)
+            if channel:
+                fields = [ "version", "url", "title", "link",  "updated", "description", \
+                           "language", "generator", "lastFetch" ]
+                for f in fields:
+                    if f in channel:
+                        print "  %-11s : %s" % (f, channel[f])
+                    else:
+                        print "  %-11s :" % f
+            print
+        else:
+            print "%5s  %s" % (count_str, name)
+
+    if _channels:
+        total_str = "?" if count_missing else total
+        print "SUM ITEMS: %s" % total_str
+    else:
+        print "No channels found."
+
+def cmd_delete_channels(mon, debug, verbose, channels, delete_items):
+    num = mon.delete_channels(channel_names=channels, delete_items=delete_items)
+    print "Deleted %d channels." % num
+
+def cmd_list_items(mon, debug, verbose, channels, since_date, limit):
+
+    items = mon.list_items(channel_names=channels, since_date=since_date, limit=limit)
+    items = list(items)
+
+    if not items:
+        print "No items."
+        return
+
+    print "%d ITEMS:" % len(items)
+
+    for item in items:
+        id             = item["_id"]
+        source         = item["_source"]
+        channel        = source["channel"]
+        title          = source.get("title", "")
+        description    = source.get("description", "")
+        page           = source.get("page", "")
+        comments       = source.get("comments", "")
+        author         = source.get("author", "")
+        link           = source.get("link", "")
+        updatedDateIso = source.get("updated", "")
+        updatedDate = None
+        if updatedDateIso: updatedDate = iso2date(updatedDateIso)
+        categories = []
+        if "categories" in source: categories = source["categories"]
+
+        if verbose:
+            dateStr = ""
+            if updatedDate: dateStr = updatedDate.strftime("%Y-%m-%d %H:%M:%S z")
+            print "-"*78
+            print "ID          = %s" % id
+            print "CHANNEL     = %s" % channel
+            print "TITLE       = %s" % title
+            print "UPDATED     = %s" % dateStr
+            print "AUTHOR      = %s" % author
+            print "LINK        = %s" % link
+            print "COMMENTS    = %s" % id
+            print "CATEGORIES  = %s" % " | ".join(categories)
+            print "DESCRIPTION = (%s)" % byte_size_string(len(description), 1)
+            print "PAGE        = (%s)" % byte_size_string(len(page), 1)
+        else:
+            dateStr = ""
+            if updatedDate: dateStr = updatedDate.strftime("%b-%d %H:%M")
+            print "[%-10s] %s  %s" % (channel, dateStr, title.replace("\n", "\\n"))
+
+def cmd_fetch_items(mon, debug, verbose, channels, force, simulate):
+
+    items = mon.fetch_items(channel_names=channels, force=force, simulate=simulate)
+
+    count = 0
+    for item in items:
+        count += 1
+        if verbose:
+            s = item["_source"]
+            length = byte_size_string(len(s.get("page") or ""), 2)
+            print "%-10s | %10s | %s" % (s["channel"], length, s["title"])
+
+    if not count:
+        print "No items found."
+    else:
+        if verbose:
+            print
+        print "Total number of items fetched =", count
+
+def cmd_delete_items(mon, debug, verbose, channels, before_date):
+    num = mon.delete_items(channel_names=channels, before_date=before_date)
+    print "Deleted %d items." % num
+
+def cmd_config(host, cindex, iindex):
+    print "Environment variables:"
+    vars = ["ESLIB_RSS_ELASTICSEARCH", "ESLIB_RSS_INDEX", "ESLIB_RSS_ITEM_INDEX"]
+    for var in vars:
+        val = os.environ.get(var)
+        print "  %s=%s" % (var, "(not set)" if val is None else val)
+    print
+    print "Effective config:"
+    print "  Elasticsearch: %s" % (host or "localhost:9200")
+    print "  Channel index: %s" % cindex or ""
+    print "  Item index   : %s" % iindex or ""
+
+# COMMANDS:
+# ---------
+# create_index      : create_index [index]
+# delete_index      : delete_index [index]
+# list_channels     : info [--verbose] [--since=<ago>] [<channels...>]
+# add_channels      : add <name> <url> | add (stdin)
+# delete_channels   : remove [--items] [<channels...>]
+# list_items        : list [--verbose] [--since=<ago>] [--limit=<num>] [<channels...>]
+# fetch_items       : fetch [--verbose] [--force] [--links] [<channels...>]
+# delete_items      : clean [--before=<ago>] [<channels...>]
+# config            : config
+#
+# COMMON OPTIONS:
+# ---------------
+# --debug
+# --elasticsearch=<host:port>         # env: ESLIB_RSS_ELASTICSEARCH
+# --index=<index>                     # env: ESLIB_RSS_INDEX
+# --iindex=<item_index>               # env: ESLIB_RSS_ITEM_INDEX
+
+"""
+SOME SAMPLE CHANNELS:
+
+vg_sport  http://www.vg.no/rss/create.php?categories=20
+att       http://techchannel.att.com/feed.cfm?FeedID=1005
+cymru     http://www.team-cymru.org/News/index.rss
+ddossec   http://www.arbornetworks.com/asert/feed/
+dkcert    https://www.cert.dk/rss.xml
+fireeye   http://www.fireeye.com/blog/feed
+isc       https://isc.sans.edu/rssfeed_full.xml
+krebs     http://krebsonsecurity.com/feed/
+nakedsec  http://feeds.feedburner.com/NakedSecurity
+norsis    https://norsis.no/feed
+trendlabs http://feeds.trendmicro.com/Anti-MalwareBlog?format=xml
+tsocblog  http://feeds.feedburner.com/tsoc
+tsocnews  http://telenorsoc-news.blogspot.no/feeds/posts/default?alt=rss
+digi      http://feeds.allerinternett.no/articles/digi/rss.rss
+"""
+
+def main():
+    elasticsearch_hosts = None
+    index = "rss"
+    debug = True
+    verbose = True
+    before_date = None
+    since_date = None
+    channels = None
+    limit = 20
+    force = True
+    simulate = False
+    include_linked_page = True # --links
+    delete_items = False
+
+    # Apply environment variable overrides to defaults
+    host = os.environ.get("ESLIB_RSS_ELASTICSEARCH", None)
+    cindex  = os.environ.get("ESLIB_RSS_INDEX", "rss")
+    iindex = os.environ.get("ESLIB_RSS_ITEM_INDEX", cindex)
+    if iindex == "":
+        iindex = None
+
+    mon = RssMonitor(
+        elasticsearch_hosts=[host] if host else None,
+        channel_index=cindex,
+        item_index=iindex,
+        include_linked_page=include_linked_page)
+
+    #cmd_create_index(mon, debug, verbose)
+    #cmd_delete_index(mon, debug, verbose)
+    #cmd_list_channels(mon, debug, verbose, channels, since_date)
+    #cmd_add_channel(mon, debug, verbose, "digi", "http://feeds.allerinternett.no/articles/digi/rss.rss")
+    #cmd_add_channels_stdin(mon, debug, verbose)
+    #cmd_delete_channels(mon, debug, verbose, ["digi", "vg_sport"], delete_items)
+    #cmd_list_items(mon, debug, verbose, channels, since_date, limit)
+    #cmd_fetch_items(mon, debug, verbose, channels, force, simulate)
+    #cmd_delete_items(mon, debug, verbose, ["nakedsec"], before_date)
+    #cmd_fetch_items(mon, debug, verbose, ["nakedsec"], force, simulate)
+    #cmd_list_items(mon, debug, verbose, ["nakedsec"], since_date, limit)
+    cmd_config(host, cindex, iindex)
+
+#     help_i  = "Which index to return documents from."
+#     help_t  = "Which type of document to return."
+#     help_l  = "The maximum number of documents to return. Will by default return all documents."
+#     help_f  = "Return display the specified field (forces 'field' format)."
+#     help_s  = "Returns all documents added after SINCE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+#     help_b  = "Returns all documents added after BEFORE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
+#     help_tf = "The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'."
+#     help_fi = "Format for filter is, by example: 'category:politicians,party:democrats'."
+#     #help_fo = "Available formats for 'format': 'json' (default), 'id', 'field' (used by default if -f given)."
+#
+#     parser = argparse.ArgumentParser(usage="\n  %(prog)s -i index [-t type] [-f field] [-l limit] [more options]")
+#     parser._actions[0].help = argparse.SUPPRESS
+#     parser.add_argument("-i", "--index"    , help=help_i, required=True)
+#     parser.add_argument("-t", "--type"     , help=help_t)
+#     parser.add_argument("-l", "--limit"    , help=help_l, default=0, type=int)
+#     parser.add_argument("-f", "--field"    , help=help_f)
+#     parser.add_argument("-s", "--since"    , help=help_s)
+#     parser.add_argument("-b", "--before"   , help=help_b)
+#     parser.add_argument(      "--host"     , help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
+#     parser.add_argument(      "--timefield", help=help_tf, default="_timestamp")
+#     parser.add_argument(      "--filter"   , help=help_fi)
+#     #parser.add_argument(      "--format"   , help=help_fo, default="json")
+#     #parser.add_argument(      "--debug"    , action="store_true")
+#     parser.add_argument(      "--name"     , help="Process name.", default=None)
+#
+#     if len(sys.argv) == 1:
+#         parser.print_usage()
+#         sys.exit(0)
+#
+#     args = parser.parse_args()
+#
+#     # Time validation conversion and checks
+#     before = None
+#     since  = None
+#     if args.before:
+#         try:
+#             before = eslib.time.ago2date(args.before)
+#         except:
+#             print >> sys.stderr, "Illegal 'ago' time format to 'before' argument, '%s'" % args.before
+#             sys.exit(-1)
+#     if args.since:
+#         try:
+#             since = eslib.time.ago2date(args.since)
+#         except:
+#            print >> sys.stderr, "Illegal 'ago' time format to 'since' argument, '%s'" % args.since
+#            sys.exit(-1)
+#
+#     # Parse filter string
+#     filters = {}
+#     if args.filter:
+#         parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]
+#         for part in parts:
+#             filters.update(part)
+#
+#     # Set up and run this processor
+#     dp = ElasticsearchReader(args.name or eslib.prog.progname())
+#     dp.config.hosts        = [args.host] if args.host else []
+#     dp.config.index        = args.index
+#     dp.config.doctype      = args.type
+#     dp.config.field        = args.field
+#     dp.config.limit        = args.limit
+#     dp.config.filters      = filters
+#     dp.config.since        = since
+#     dp.config.before       = before
+#     dp.config.timefield    = args.timefield
+# #    dp.config.outputFormat = args.format
+#
+# #    if args.debug: dp.debuglevel = 0
+#
+#     w = FileWriter()
+#     w.subscribe(dp)
+#     dp.start()
+#     w.wait()
+
+
+if __name__ == "__main__": main()
