@@ -19,8 +19,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Copies all documents in one index to another.')
     parser.add_argument('-s', '--server', default='localhost', help='Elasticsearch server host (default: localhost).')
     parser.add_argument('-p', '--port', default=9200, type=int, help='Elasticsearch server port (default: 9200).')
-    parser.add_argument('-f', '--from-index', required=True, help='Index to rotate alias to.')
-    parser.add_argument('-t', '--to-index', required=True, help='Current index. Will be closed and optimized.')
+    parser.add_argument('-f', '--from-index', required=True, help='Index to copy from.')
+    parser.add_argument('-t', '--to-index', required=True, help='Index to copy to.')
     args = parser.parse_args()
 
     logging.info("Connecting to Elasticsearch at %s:%d ..." % (args.server, args.port))
