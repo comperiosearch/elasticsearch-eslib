@@ -1,50 +1,55 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-#TODO: cmd script with ESLIB_RSS_ES_HOST and ESLIB_RSS_INDEX environment variable
 #TODO: cmd script use logs for verbose output
-#TODO: "config" cmd dump relevant config env vars set
 
 from eslib.procs import RssMonitor
 import eslib.prog
-from eslib.time import iso2date
+from eslib.time import iso2date, ago2date
 from eslib.debug import byte_size_string
-import argparse, sys, os
+import getopt, sys, os
 
 # =============================================================================
 # Log setup
 # =============================================================================
 
-import logging
-LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
-console = logging.StreamHandler()
-console.setLevel(logging.WARNING)
-console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
+def setup_logging(debug=False):
 
-proclog = logging.getLogger("proclog")
-proclog.setLevel(logging.TRACE)
-proclog.addHandler(console)
+    import logging
+    #LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) -5d: %(message)s')
+    #logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
-doclog  = logging.getLogger("doclog")
-doclog.setLevel(logging.TRACE)
-doclog.addHandler(console)
+    loglevel = logging.WARNING
+    if debug:
+        loglevel = logging.DEBUG
+
+    console = logging.StreamHandler()
+    console.setLevel(loglevel)
+    console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
+
+    proclog = logging.getLogger("proclog")
+    proclog.setLevel(logging.TRACE)
+    proclog.addHandler(console)
+
+    doclog  = logging.getLogger("doclog")
+    doclog.setLevel(logging.TRACE)
+    doclog.addHandler(console)
 
 
 # =============================================================================
 # Command handlers
 # =============================================================================
 
-def cmd_create_index(mon, debug, verbose):
-    created = mon.create_index()
+def cmd_create_index(mon, debug, verbose, index):
+    created = mon.create_index(index)
     if created:
         print "Index created."
     else:
         print "Index was not created."
 
-def cmd_delete_index(mon, debug, verbose):
-    deleted = mon.delete_index()
+def cmd_delete_index(mon, debug, verbose, index):
+    deleted = mon.delete_index(index)
     if deleted:
         print "Index deleted."
     else:
@@ -60,7 +65,7 @@ def cmd_add_channel(mon, debug, verbose, channel, url):
 
 def cmd_add_channels_stdin(mon, debug, verbose):
     if verbose:
-        print "Reading input from stdin."
+        print "Reading name and url pairs from lines from stdin."
 
     for line in sys.stdin:
         if not line or line.startswith("#"):
@@ -75,6 +80,10 @@ def cmd_add_channels_stdin(mon, debug, verbose):
 def cmd_list_channels(mon, debug, verbose, channels, since_date):
 
     _channels = mon.list_channels(channel_names=channels, since_date=since_date)
+
+    if not _channels:
+        print "No channels found."
+        return
 
     if not verbose:
         print "%5s  %s" % ("ITEMS", "NAME")
@@ -106,11 +115,9 @@ def cmd_list_channels(mon, debug, verbose, channels, since_date):
         else:
             print "%5s  %s" % (count_str, name)
 
-    if _channels:
-        total_str = "?" if count_missing else total
-        print "SUM ITEMS: %s" % total_str
-    else:
-        print "No channels found."
+    total_str = "?" if count_missing else total
+    print "SUM ITEMS: %s" % total_str
+
 
 def cmd_delete_channels(mon, debug, verbose, channels, delete_items):
     num = mon.delete_channels(channel_names=channels, delete_items=delete_items)
@@ -119,13 +126,12 @@ def cmd_delete_channels(mon, debug, verbose, channels, delete_items):
 def cmd_list_items(mon, debug, verbose, channels, since_date, limit):
 
     items = mon.list_items(channel_names=channels, since_date=since_date, limit=limit)
-    items = list(items)
 
-    if not items:
-        print "No items."
-        return
-
-    print "%d ITEMS:" % len(items)
+#    items = list(items)
+#    if not items:
+#        print "No items."
+#        return
+#    print "%d ITEMS:" % len(items)
 
     for item in items:
         id             = item["_id"]
@@ -201,153 +207,190 @@ def cmd_config(host, cindex, iindex):
 # ---------
 # create_index      : create_index [index]
 # delete_index      : delete_index [index]
-# list_channels     : info [--verbose] [--since=<ago>] [<channels...>]
+# list_channels     : info [--since=<ago>] [<channels...>]
 # add_channels      : add <name> <url> | add (stdin)
 # delete_channels   : remove [--items] [<channels...>]
-# list_items        : list [--verbose] [--since=<ago>] [--limit=<num>] [<channels...>]
-# fetch_items       : fetch [--verbose] [--force] [--links] [<channels...>]
+# list_items        : list [--since=<ago>] [--limit=<num>] [<channels...>]
+# fetch_items       : fetch [--force] [--links] [<channels...>]
 # delete_items      : clean [--before=<ago>] [<channels...>]
 # config            : config
 #
 # COMMON OPTIONS:
 # ---------------
+# --verbose
 # --debug
 # --elasticsearch=<host:port>         # env: ESLIB_RSS_ELASTICSEARCH
 # --index=<index>                     # env: ESLIB_RSS_INDEX
 # --iindex=<item_index>               # env: ESLIB_RSS_ITEM_INDEX
 
-"""
-SOME SAMPLE CHANNELS:
+def usage(err=None, rich=False):
+    if err:
+        print "Argument error: %s" % err
 
-vg_sport  http://www.vg.no/rss/create.php?categories=20
-att       http://techchannel.att.com/feed.cfm?FeedID=1005
-cymru     http://www.team-cymru.org/News/index.rss
-ddossec   http://www.arbornetworks.com/asert/feed/
-dkcert    https://www.cert.dk/rss.xml
-fireeye   http://www.fireeye.com/blog/feed
-isc       https://isc.sans.edu/rssfeed_full.xml
-krebs     http://krebsonsecurity.com/feed/
-nakedsec  http://feeds.feedburner.com/NakedSecurity
-norsis    https://norsis.no/feed
-trendlabs http://feeds.trendmicro.com/Anti-MalwareBlog?format=xml
-tsocblog  http://feeds.feedburner.com/tsoc
-tsocnews  http://telenorsoc-news.blogspot.no/feeds/posts/default?alt=rss
-digi      http://feeds.allerinternett.no/articles/digi/rss.rss
-"""
+    p = os.path.basename(sys.argv[0])
+    print "Usage:"
+    print "  %s -h                                        More help" % p
+    print "  %s create [<index>]                          Create index" % p
+    print "  %s delete [<index>] --yes                    Delete index" % p
+    print "  %s -h                                        More help" % p
+    print "  %s info [--since=<ago>] [<channels>]         Show channel info" % p
+    print "  %s add <name> <url>                          Add channel" % p
+    print "  %s add                                       Add channels from stdin" % p
+    print "  %s remove [--cascading] [<channels>]         Remove channels" % p
+    print "  %s list [--limit=<num>] [--since=<since>] [<channels>]" % p
+    print "  %s                                           List items in index" % (" "*len(p))
+    print "  %s fetch [--peek] [--force] [--links] [<channels>]" % p
+    print "  %s                                           Fetch items" % (" "*len(p))
+    print "  %s clean [--before=<ago>] [<channels>]       Clean items in index" % p
+    print "  %s config                                    Show config" % p
+
+    if rich:
+        print
+        print "Common options"
+        print "  -e | --elasticsearch Elasticsearch host, default 'localhost:9200'."
+        print "  -i | --index=        The elasticsearch index to host channel info and items."
+        print "                       Default 'rss'."
+        print "       --iindex=       Item index, in case it differs from the channel index."
+        print "  -v | --verbose       Verbose output. Gives more info."
+        print "  -d | --debug         Show debug log output."
+        print
+        print "Contextual options"
+        print "  -c | --cascading     When removing channel, also delete all items."
+        print "  -p | --peek          Fetch without writing items or channel data to index."
+        print "  -f | --force         Force fetch all available items."
+        print "       --links         Enrich with web pages the items link to."
+        print "  -l | --limit=num     Limit = number of items to get and show."
+        print "  -s | --since=<ago>   Listing channel/items since 'ago'."
+        print "  -b | --before=<ago>  Delete items older than 'ago'."
+        print
+        print "'ago' format:"
+        print "  <n><unit>, where <n> is a number and <unit> a time unit, one of:"
+        print "  's', 'm', 'h', 'd', 'w', 'M', 'y'. For example three weeks = '3w'."
+
+    if err:
+        sys.exit(-1)
+    else:
+        sys.exit(0)
+
 
 def main():
-    elasticsearch_hosts = None
-    index = "rss"
-    debug = True
-    verbose = True
-    before_date = None
-    since_date = None
-    channels = None
-    limit = 20
-    force = True
+    debug = False
+    verbose = False
+    limit = 10
+    force = False
     simulate = False
-    include_linked_page = True # --links
+    include_linked_page = True
     delete_items = False
+    channels = None
+    confirmation = False
 
     # Apply environment variable overrides to defaults
-    host = os.environ.get("ESLIB_RSS_ELASTICSEARCH", None)
-    cindex  = os.environ.get("ESLIB_RSS_INDEX", "rss")
+    host   = os.environ.get("ESLIB_RSS_ELASTICSEARCH", None)
+    cindex = os.environ.get("ESLIB_RSS_INDEX", "rss")
     iindex = os.environ.get("ESLIB_RSS_ITEM_INDEX", cindex)
     if iindex == "":
         iindex = None
 
+    since_str = None
+    before_str = None
+    since_date = None
+    before_date = None
+
+    # Parse command line input
+    print "**PARSING"
+    if len(sys.argv) == 1: usage()
+    try:
+        optlist, args = getopt.gnu_getopt(
+            sys.argv[1:],
+            ':e:i:l:s:b:hvdcpfy',
+            ["help", "verbose", "debug",
+             "elasticsearch=", "host=", "index=", "iindex=", "item_index=",
+             "cascading", "items", "delete_items", "delete",
+             "peek", "simulate", "force"
+             "links", "nolinks",
+             "limit=", "since=", "before=",
+             "yes"])
+    except:
+        usage()
+    for (o, a) in optlist:
+        # Common options
+        if   o in ("-h", "--help")                      : usage(rich=True)
+        elif o in ("-v", "--verbose")                   : verbose = True
+        elif o in ("-d", "--debug")                     : debug = True
+        elif o in ("-e", "--elasticsearch", "--host")  : host = a
+        elif o in ("-i", "--index")                     : cindex = a
+        elif o in ("-iindex", "--item_index")           :
+            print "**--iindex"
+            iindex = a
+        # Contextual options, but collected globally (because it's easier to program...)
+        elif o in ("-c", "--cascading", "--items", "--delete_items", "--delete"): delete_items = True
+        elif o in ("-p", "--peek", "--simulate")        : simulate = True
+        elif o in ("-f", "--force")                     : force = True
+        elif o in ("--links")                           : include_linked_page = True
+        elif o in ("--nolinks")                         : include_linked_page = False
+        elif o in ("-l", "--limit")                     : limit = int(a)
+        elif o in ("-s", "--since", "--since_date")     : since_str = a
+        elif o in ("-b", "--before", "--before_date")   : before_str = a
+        elif o in ("-y", "--yes")                       : confirmation = True
+    if len(args) < 1: usage("missing command")
+    cmd = args[0]
+    args = args[1:]  # Channels in most cases, and (name, url) in add channel case.
+
+    # Time validation conversion and checks
+    if before_str:
+        try:
+            before_date = ago2date(before_str)
+        except:
+            usage("illegal 'ago' time format to 'before' argument, '%s'" % before_str)
+    if since_str:
+        try:
+            since_date = ago2date(since_str)
+        except:
+            usage("illegal 'ago' time format to 'since' argument, '%s'" % since_str)
+
+    # Set up logging, log level and log routing
+    setup_logging(debug)
+
+    # Set up the monitor
     mon = RssMonitor(
         elasticsearch_hosts=[host] if host else None,
         channel_index=cindex,
         item_index=iindex,
-        include_linked_page=include_linked_page)
+        include_linked_page=include_linked_page,
+        simulate=simulate)
 
-    #cmd_create_index(mon, debug, verbose)
-    #cmd_delete_index(mon, debug, verbose)
-    #cmd_list_channels(mon, debug, verbose, channels, since_date)
-    #cmd_add_channel(mon, debug, verbose, "digi", "http://feeds.allerinternett.no/articles/digi/rss.rss")
-    #cmd_add_channels_stdin(mon, debug, verbose)
-    #cmd_delete_channels(mon, debug, verbose, ["digi", "vg_sport"], delete_items)
-    #cmd_list_items(mon, debug, verbose, channels, since_date, limit)
-    #cmd_fetch_items(mon, debug, verbose, channels, force, simulate)
-    #cmd_delete_items(mon, debug, verbose, ["nakedsec"], before_date)
-    #cmd_fetch_items(mon, debug, verbose, ["nakedsec"], force, simulate)
-    #cmd_list_items(mon, debug, verbose, ["nakedsec"], since_date, limit)
-    cmd_config(host, cindex, iindex)
+    if   cmd == "help":
+        usage(rich=True)
+    elif cmd == "config":
+        cmd_config(host, cindex, iindex)
+    elif cmd == "create":
+        cmd_create_index(mon, debug, verbose, args[0] if args else None)
+    elif cmd == "delete":
+        if not confirmation:
+            print "Delete index must be confirmed with an extra safety switch: --yes"
+        else:
+            cmd_delete_index(mon, debug, verbose, args[0] if args else None)
+    elif cmd == "info":
+        cmd_list_channels(mon, debug, verbose, args, since_date)
+    elif cmd == "add":
+        if len(args) == 0:
+            cmd_add_channels_stdin(mon, debug, verbose)
+        else:
+            if len(args) < 2: usage("too few arguments")
+            elif len(args) > 2: usage("too many arguments")
+            name, url = args
+            cmd_add_channel(mon, debug, verbose, name, url)
+    elif cmd == "remove":
+        cmd_delete_channels(mon, debug, verbose, args, delete_items)
+    elif cmd == "list":
+        cmd_list_items(mon, debug, verbose, args, since_date, limit)
+    elif cmd == "fetch":
+        cmd_fetch_items(mon, debug, verbose, args, force, simulate)
+    elif cmd == "clean":
+        cmd_delete_items(mon, debug, verbose, args, before_date)
+    else:
+        usage("unknown command '%s'" % cmd)
 
-#     help_i  = "Which index to return documents from."
-#     help_t  = "Which type of document to return."
-#     help_l  = "The maximum number of documents to return. Will by default return all documents."
-#     help_f  = "Return display the specified field (forces 'field' format)."
-#     help_s  = "Returns all documents added after SINCE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
-#     help_b  = "Returns all documents added after BEFORE. Specified in the 'ago' format (1d, 3w, 1y, etc)."
-#     help_tf = "The field that contains the relavant date information.Default 'timefield' to slice on is '_timestamp'."
-#     help_fi = "Format for filter is, by example: 'category:politicians,party:democrats'."
-#     #help_fo = "Available formats for 'format': 'json' (default), 'id', 'field' (used by default if -f given)."
-#
-#     parser = argparse.ArgumentParser(usage="\n  %(prog)s -i index [-t type] [-f field] [-l limit] [more options]")
-#     parser._actions[0].help = argparse.SUPPRESS
-#     parser.add_argument("-i", "--index"    , help=help_i, required=True)
-#     parser.add_argument("-t", "--type"     , help=help_t)
-#     parser.add_argument("-l", "--limit"    , help=help_l, default=0, type=int)
-#     parser.add_argument("-f", "--field"    , help=help_f)
-#     parser.add_argument("-s", "--since"    , help=help_s)
-#     parser.add_argument("-b", "--before"   , help=help_b)
-#     parser.add_argument(      "--host"     , help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
-#     parser.add_argument(      "--timefield", help=help_tf, default="_timestamp")
-#     parser.add_argument(      "--filter"   , help=help_fi)
-#     #parser.add_argument(      "--format"   , help=help_fo, default="json")
-#     #parser.add_argument(      "--debug"    , action="store_true")
-#     parser.add_argument(      "--name"     , help="Process name.", default=None)
-#
-#     if len(sys.argv) == 1:
-#         parser.print_usage()
-#         sys.exit(0)
-#
-#     args = parser.parse_args()
-#
-#     # Time validation conversion and checks
-#     before = None
-#     since  = None
-#     if args.before:
-#         try:
-#             before = eslib.time.ago2date(args.before)
-#         except:
-#             print >> sys.stderr, "Illegal 'ago' time format to 'before' argument, '%s'" % args.before
-#             sys.exit(-1)
-#     if args.since:
-#         try:
-#             since = eslib.time.ago2date(args.since)
-#         except:
-#            print >> sys.stderr, "Illegal 'ago' time format to 'since' argument, '%s'" % args.since
-#            sys.exit(-1)
-#
-#     # Parse filter string
-#     filters = {}
-#     if args.filter:
-#         parts = [{part[0]:part[1]} for part in [filter.split(":") for filter in args.filter.split(",")]]
-#         for part in parts:
-#             filters.update(part)
-#
-#     # Set up and run this processor
-#     dp = ElasticsearchReader(args.name or eslib.prog.progname())
-#     dp.config.hosts        = [args.host] if args.host else []
-#     dp.config.index        = args.index
-#     dp.config.doctype      = args.type
-#     dp.config.field        = args.field
-#     dp.config.limit        = args.limit
-#     dp.config.filters      = filters
-#     dp.config.since        = since
-#     dp.config.before       = before
-#     dp.config.timefield    = args.timefield
-# #    dp.config.outputFormat = args.format
-#
-# #    if args.debug: dp.debuglevel = 0
-#
-#     w = FileWriter()
-#     w.subscribe(dp)
-#     dp.start()
-#     w.wait()
-
+    return
 
 if __name__ == "__main__": main()
