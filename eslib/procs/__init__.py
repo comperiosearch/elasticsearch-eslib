@@ -33,6 +33,7 @@ from .ProtocolConverter     import ProtocolConverter
 from .EntityExtractor       import EntityExtractor
 from .ProcessWrapper        import ProcessWrapper
 from .CLIReader             import CLIReader
+from .RssMonitor            import RssMonitor
 
 __all__ = (
     "ElasticsearchReader",
@@ -59,5 +60,6 @@ __all__ = (
     "ProtocolConverter",
     "EntityExtractor",
     "ProcessWrapper",
-    "CLIReader"
+    "CLIReader",
+    "RssMonitor"
 )
