@@ -6,10 +6,13 @@ __author__ = 'Hans Terje Bakke'
 # TODO: Test update_fields with new documents, and see if all fields are created or only those listed.
 # TODO: Also verify that only mentioned fields are changed in existing documents.
 
-import elasticsearch
 from Queue import Queue
 from threading import Lock
-import copy, time
+import copy
+import time
+
+import elasticsearch
+
 from ..Generator import Generator
 from .. import esdoc_logmsg
 
@@ -162,7 +165,7 @@ class ElasticsearchWriter(Generator):
             self.log.debug("Submitting full batch (%d)." % self.config.batchsize)
             self._send()
         elif self.config.batchtime and (time.time() - self._last_batch_time > self.config.batchtime):
-            self.log.info("Submitting partial batch due to batch timeout (%d)." % self._queue.qsize())
+            self.log.debug("Submitting partial batch due to batch timeout (%d)." % self._queue.qsize())
             self._send()
 
     #endregion Generator
