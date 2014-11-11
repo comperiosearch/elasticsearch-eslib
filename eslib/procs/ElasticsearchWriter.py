@@ -166,7 +166,6 @@ class ElasticsearchWriter(Generator):
             self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()
 
-
     #endregion Generator
 
     #region Utility methods

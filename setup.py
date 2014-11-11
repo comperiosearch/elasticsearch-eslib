@@ -17,6 +17,7 @@ if sys.argv[-1] == 'publish':
 # able to conditionally require this package for earlier versions or maybe time to ditch 2.2 and below support?
 requires = [
     'elasticsearch',
+    'elasticsearch-curator',
     'argparse',
     'pika', 'pyrabbit',   # for Rabbitmq
     'HTMLParser',
