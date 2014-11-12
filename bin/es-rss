@@ -297,7 +297,6 @@ def main():
     before_date = None
 
     # Parse command line input
-    print "**PARSING"
     if len(sys.argv) == 1: usage()
     try:
         optlist, args = getopt.gnu_getopt(
@@ -317,17 +316,15 @@ def main():
         if   o in ("-h", "--help")                      : usage(rich=True)
         elif o in ("-v", "--verbose")                   : verbose = True
         elif o in ("-d", "--debug")                     : debug = True
-        elif o in ("-e", "--elasticsearch", "--host")  : host = a
+        elif o in ("-e", "--elasticsearch", "--host")   : host = a
         elif o in ("-i", "--index")                     : cindex = a
-        elif o in ("-iindex", "--item_index")           :
-            print "**--iindex"
-            iindex = a
+        elif o in ("-iindex", "--item_index")           : iindex = a
         # Contextual options, but collected globally (because it's easier to program...)
         elif o in ("-c", "--cascading", "--items", "--delete_items", "--delete"): delete_items = True
         elif o in ("-p", "--peek", "--simulate")        : simulate = True
         elif o in ("-f", "--force")                     : force = True
-        elif o in ("--links")                           : include_linked_page = True
-        elif o in ("--nolinks")                         : include_linked_page = False
+        elif o in ("--links",)                          : include_linked_page = True
+        elif o in ("--nolinks",)                        : include_linked_page = False
         elif o in ("-l", "--limit")                     : limit = int(a)
         elif o in ("-s", "--since", "--since_date")     : since_str = a
         elif o in ("-b", "--before", "--before_date")   : before_str = a
