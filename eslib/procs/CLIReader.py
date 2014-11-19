@@ -3,6 +3,7 @@ import time
 import subprocess
 
 from ..Monitor import Monitor
+import logging
 
 class CLIReader(Monitor):
     """
@@ -29,13 +30,19 @@ class CLIReader(Monitor):
 
     def on_tick(self):
         if not self.last_get or (time.time() - self.last_get  > self.config.interval):
+            # Since the next call may crash, at least mark the last attempt as now,
+            # so we don't try again on every tick, but wait for the next interval.
+            self.last_get = time.time()
+
             p = subprocess.Popen(self.config.cmd, shell=False, stdout=subprocess.PIPE)
             p.wait()
             (output, err) = p.communicate()
             if output:
+                if self.doclog.isEnabledFor(logging.TRACE):
+                    self.doclog.trace("Output doc: %s" % str(output))
                 self._stdout.send(output)
-                self.log.info("The document: %s, was outputted" % str(output))
             if err:
+                self.log.error("Received message from subprocess on stderr: %s" % str(err))
                 self._stderr.send(err)
-                self.log.error("An error occured: %s" % str(err))
+
             self.last_get = time.time()
