@@ -34,6 +34,7 @@ class Connector(Terminal):
             self.queue.get_nowait()
             self.queue.task_done()
 
+    @property
     def pending(self):
         "Report number of pending items in queue."
         return self.queue.qsize()
