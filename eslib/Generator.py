@@ -26,4 +26,4 @@ class Generator(Processor):
     @property
     def end_tick_reason(self):
         "If 'aborted', 'stopping' or not 'running'. 'suspended' is not a reason to leave the tick; handle this yourself."
-        return self.aborted or self.stopping or not self.running
+        return self.aborted or self.stopping or self.restarting or not self.running
