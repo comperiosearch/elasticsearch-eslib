@@ -73,36 +73,53 @@ class MyEnd(Processor):
 
 #region Set up pipeline
 
+suspended = False
+
 def mgmt_hook(verb, path, data):
+    global suspended
     global ping, mon1, mon2, mid, end
 
     log.info("Call to mgmt_hook: %s %s: %s" % (verb, path, data))
+
+    procs = [ping, mon1, mon2, mid, end]
+
     if verb == "GET":
-        if path=="status":
-            res = ""
-            procs = [ping, mon1, mon2, mid, end]
-            for proc in procs:
-                res += "PROCESSOR  : %s\n" % proc.name
-                res += "  running  : %s\n" % proc.running
-                res += "  processed: %s\n" % proc.__dict__.get("count")
-                res += "  pending  : %d\n" % (proc.connectors["input"].pending if "input" in proc.connectors else 0)
-            return res
-        if path=="status_json":
+
+        if path == "status":
             res_procs = {}
             res = {"processors": res_procs}
-            procs = [ping, mon1, mon2, mid, end]
             for proc in procs:
                 res_procs[proc.name] = {
                     "running"  : proc.running,
+                    "suspended": proc.suspended,
                     "processed": proc.__dict__.get("count"),
                     "pending"  : (proc.connectors["input"].pending if "input" in proc.connectors else 0)
                 }
             return res
 
-    print "VERB=", verb
-    print "PATH=", path
-    print "DATA=", data
-    return "MGMT COMMAND RECEIVED OK"
+        if path == "suspend":
+            ping.suspend()
+            suspended = True
+            return {"suspended": suspended}
+
+        if path == "resume":
+            ping.resume()
+            suspended = False
+            return {"suspended": suspended}
+
+        if path.startswith("config/"):
+            cmd, procname, value = path.split("/")
+            found = None
+            for p in procs:
+                if p.name == procname:
+                    found = p
+                    break
+            if found:
+                p.config.configurable = value
+                p.restart()
+            return {"message": "%s.config.configurable changed to '%s' and reloaded." % (p.name, value)}
+
+    return {"error": "Unrecognized command '%s %s'." % (verb, path)}
 
 
 ping = Timer      (name="ping", actions=[(3, 3, "ping")])

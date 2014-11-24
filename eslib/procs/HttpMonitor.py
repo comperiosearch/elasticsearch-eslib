@@ -4,7 +4,7 @@ from ..Monitor import Monitor
 from SocketServer import TCPServer
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 from ..esdoc import tojson
-
+import json
 
 class _ServerHandlerClass(SimpleHTTPRequestHandler):
 

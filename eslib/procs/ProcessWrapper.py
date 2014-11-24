@@ -6,9 +6,9 @@ from select import select
 import codecs, json
 from ..esdoc import tojson
 
-from ..Monitor import Monitor
+from ..Generator import Generator
 
-class ProcessWrapper(Monitor):
+class ProcessWrapper(Generator):
     """
     Wrap a subprocess.
 

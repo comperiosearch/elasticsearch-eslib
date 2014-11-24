@@ -523,6 +523,24 @@ class Processor(Configurable):
             self._thread.join()
         self._thread = None
 
+    def restart(self):
+        if self.stopping or not self.running:
+            return
+        # Suspend all connectors
+        for connector in self.connectors.itervalues():
+            connector.suspend()
+
+        # TODO: This does not really cut it...
+        # TODO: Rather, we should have a 'restarting' flag that the run loop handles..
+        self.on_shutdown()
+        self._close()
+        self.on_open()
+        self.on_start()
+
+        # Resume all connectors
+        for connector in self.connectors.itervalues():
+            connector.resume()
+
     #endregion Operation management
 
     #region Send and receive data with external methods
