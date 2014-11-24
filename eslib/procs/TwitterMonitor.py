@@ -195,6 +195,7 @@ class TwitterMonitor(Monitor):
 
     def _force_reconnect(self):
             self._connected = False
+            self._connecting = True
             if self._connect_delay < 16000:
                 self._connect_delay += 250
             self.log.info("Forcing reconnect (%d/%d) in %.0f ms." % (self._connect_attempts, self.config.max_reconnect_attempts, self._connect_delay))
