@@ -34,6 +34,7 @@ from .EntityExtractor       import EntityExtractor
 from .ProcessWrapper        import ProcessWrapper
 from .CLIReader             import CLIReader
 from .RssMonitor            import RssMonitor
+from .DateFields            import DateFields
 
 __all__ = (
     "ElasticsearchReader",
@@ -61,5 +62,6 @@ __all__ = (
     "EntityExtractor",
     "ProcessWrapper",
     "CLIReader",
-    "RssMonitor"
+    "RssMonitor",
+    "DateFields"
 )
