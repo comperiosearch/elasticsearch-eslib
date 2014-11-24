@@ -8,12 +8,12 @@ from eslib.time import ago2date
 from time import sleep
 
 import logging
-LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) -5d: %(message)s')
+LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) 5d: %(message)s')
 #logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 console = logging.StreamHandler()
 console.setLevel(logging.TRACE)
-console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
+console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) 5d %(levelname) -10s %(message)s"))
 
 proclog = logging.getLogger("proclog")
 proclog.setLevel(logging.TRACE)

@@ -33,16 +33,17 @@ class Processor(Configurable):
         self._setup_logging()
 
         # Execution control status, needed by generators and monitors
-        self.accepting = False
-        self.stopping = False
-        self.running = False
-        self.suspended = False
-        self.aborted = False
-        self.keepalive = False  # True means that this processor will not be stopped automatically when a producer stops.
+        self.accepting  = False
+        self.stopping   = False
+        self.running    = False
+        self.suspended  = False
+        self.restarting = False
+        self.aborted    = False
+        self.keepalive  = False  # True means that this processor will not be stopped automatically when a producer stops.
 
         self._thread = None
-        self._runchan_count = 0 # Number of running producers, whether connector or local monitor/generator thread
-        self._initialized = False # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
+        self._runchan_count = 0  # Number of running producers, whether connector or local monitor/generator thread
+        self._initialized = False  # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
 
     def __str__(self):
         return "%s|%s" % (self.__class__.__name__, self.name)
@@ -50,6 +51,21 @@ class Processor(Configurable):
     @property
     def name(self):
         return self.config.name
+
+    @property
+    def status(self):
+        if self.aborted:
+            return "aborted"
+        elif self.restarting:
+            return "restarting"
+        elif self.stopping:
+            return "stopping"
+        elif self.running and self.suspended:
+            return "suspended"
+        elif self.running:
+            return "running"
+        else:
+            return "stopped"
 
     def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
         # Set up logging
@@ -292,8 +308,6 @@ class Processor(Configurable):
 
     #region Handlers for Generator/Monitor type Processor
 
-    # self.is_generator = True
-
     def on_startup (self):
         """
         This method is called at the beginning of the worker thread. No on_tick or other generator events
@@ -328,12 +342,12 @@ class Processor(Configurable):
                 time.sleep(self.sleep)
 
             if self.stopping:
-                if self._runchan_count == 1: # Now it is only us left...
+                if self.restarting or self._runchan_count == 1:  # restarting or it is only us left running...
                     try:
                         self.on_shutdown()
                     except Exception as e:
                         self.log.exception("Unhandled exception in on_shutdown() -- proceeding.")
-                    self.production_stopped() # Ready to close down
+                    self.production_stopped(self.restarting)  # Ready to close down
             elif not self.suspended:
                 try:
                     self.on_tick()
@@ -343,14 +357,15 @@ class Processor(Configurable):
         if self.aborted:
             # note: on_abort() should have been called already, or we should never have gotten here
             self._close()
-            self._runchan_count -= 1 # If stopped normally, it was decreased in call to production_stopped()
+            self._runchan_count -= 1  # If stopped normally, it was decreased in call to production_stopped()
 
     def start(self):
         "Start running (if not already so) and start accepting and/or generating new data. Cascading to all subscribers."
-
-        if self.stopping:
+        if self.stopping or self.restarting:
             raise Exception("Processor '%s' is stopping, cannot restart yet." % self.name)
+        self._start()
 
+    def _start(self):
         # Make sure we and all subscribers are properly initialized
         self._setup()
         # Accept incoming from connectors and tell subscribers to accept incoming
@@ -394,26 +409,28 @@ class Processor(Configurable):
             raise Exception("Processor '%s' is stopping. Refusing to accept new incoming again until fully stopped.")
 
         self.accepting = True
-        # Tell all connectors to accept
-        for connector in self.connectors.itervalues():
-            connector.accept_incoming()
-        # Tell all subscribers, cascading, to accept incoming
-        for subscriber in self._iter_subscribers():
-            subscriber._accept_incoming()
+        if not self.restarting:
+            # Tell all connectors to accept
+            for connector in self.connectors.itervalues():
+                connector.accept_incoming()
+            # Tell all subscribers, cascading, to accept incoming
+            for subscriber in self._iter_subscribers():
+                subscriber._accept_incoming()
 
     def _start_running(self):
 
         if self.running:
             return
 
-        self._runchan_count = 0  # Should not really be necessary if all is well..
-        # Tell all connectors to start running
-        for connector in self.connectors.itervalues():
-            connector.run()
-            self._runchan_count += 1
-        # Tell all subscribers to start running
-        for subscriber in self._iter_subscribers():
-            subscriber._start_running()
+        if not self.restarting:
+            self._runchan_count = 0  # Should not really be necessary if all is well..
+            # Tell all connectors to start running
+            for connector in self.connectors.itervalues():
+                connector.run()
+                self._runchan_count += 1
+            # Tell all subscribers to start running
+            for subscriber in self._iter_subscribers():
+                subscriber._start_running()
         # Start running this, if generator/monitor
         self.aborted = False
         self.stopping = False
@@ -423,37 +440,48 @@ class Processor(Configurable):
             self._thread = threading.Thread(target=self._run)
             self._thread.start()
 
+        if self.restarting:
+            # Resume all connectors
+            for connector in self.connectors.itervalues():
+                connector.resume()
+            self.restarting = False
+
+
     def stop(self):
         """
         Stop accepting new data, reading input and/or generating new data. Finish processing and write to output sockets.
         Cascade to subscribers once all data is processed.
-        :param bool cascading: Tell all subscribers to stop once this is done stopping.
         """
-
-        if self.stopping or not self.running:
+        if self.stopping or self.restarting or not self.running:
             return
+        self._stop()
 
-        #print "*** STOPPING %s" % self.name # DEBUG
-
+    def _stop(self):
         # Do not generate any more data or fetch any more from remote sources
         self.accepting = False
         self.stopping = True
-        # Continue processing input in connector queues, but do not accept more incoming data on the connectors
-        # Note: It is first when all connector queues are empty (and thus processed) that we can tell subscribers to stop.
-        for connector in self.connectors.itervalues():
-            connector.stop()
+        if self.restarting:
+            # Suspend all connectors
+            for connector in self.connectors.itervalues():
+                connector.suspend()
+        else:
+            # Continue processing input in connector queues, but do not accept more incoming data on the connectors
+            # Note: It is first when all connector queues are empty (and thus processed) that we can tell subscribers to stop.
+            for connector in self.connectors.itervalues():
+                connector.stop()
 
-    def production_stopped(self):
+    def production_stopped(self, restarting=False):
         self._runchan_count -= 1
-        if self._runchan_count == 0:
+        if restarting or self._runchan_count == 0:
             # We are all done... no longer generating, and no longer receiving
             self.stopping = False
             self.running = False
             self._close()
-            # Now we can finally tell subscribers to stop
-            for subscriber in self._iter_subscribers():
-                if not subscriber.keepalive:  # Honour 'keepalive', i.e. do not propagate stop-signal to subscriber
-                    subscriber.stop()
+            if not restarting:
+                # Now we can finally tell subscribers to stop
+                for subscriber in self._iter_subscribers():
+                    if not subscriber.keepalive:  # Honour 'keepalive', i.e. do not propagate stop-signal to subscriber
+                        subscriber.stop()
 
     def abort(self):
         "Abort all input reading and data processing immediately. Stop accepting new data. Empty queues and stop running."
@@ -470,6 +498,7 @@ class Processor(Configurable):
         self.accepting = False
         self.running = False
         self.stopping = False  # We will stop immediately
+        self.restarting = False
 
         try:
             self.on_abort()
@@ -514,14 +543,26 @@ class Processor(Configurable):
             connector.resume()
 
     def wait(self):
+        self._wait()
+
+    def _wait(self, restarting=False):
         "Wait for this processor to finish."
 
-        while self.running:
+        while self.running or (self.restarting and not restarting):
             time.sleep(0.1)  # wait 0.1 seconds
 
         if self._thread and self._thread.isAlive():
             self._thread.join()
         self._thread = None
+
+    def restart(self):
+        if self.stopping or not self.running:
+            return
+
+        self.restarting = True  # This will make stopping and staring behave differently
+        self._stop()
+        self._wait(True)
+        self._start()
 
     #endregion Operation management
 
