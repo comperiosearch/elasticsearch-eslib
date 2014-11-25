@@ -90,8 +90,7 @@ def mgmt_hook(verb, path, data):
             res = {"processors": res_procs}
             for proc in procs:
                 res_procs[proc.name] = {
-                    "running"  : proc.running,
-                    "suspended": proc.suspended,
+                    "status"  : proc.status,
                     "processed": proc.__dict__.get("count"),
                     "pending"  : (proc.connectors["input"].pending if "input" in proc.connectors else 0)
                 }
@@ -117,7 +116,9 @@ def mgmt_hook(verb, path, data):
             if found:
                 p.config.configurable = value
                 p.restart()
-            return {"message": "%s.config.configurable changed to '%s' and reloaded." % (p.name, value)}
+                return {"message": "%s.config.configurable changed to '%s' and reloaded." % (p.name, value)}
+            else:
+                return {"error": "Processor %s not found." % procname}
 
     return {"error": "Unrecognized command '%s %s'." % (verb, path)}
 
