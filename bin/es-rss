@@ -73,7 +73,8 @@ def cmd_add_channels_stdin(mon, debug, verbose):
         line = line.strip()
         args = line.split()
         if len(args) != 2:
-            print "Expected format 'name url'; skipping line."
+            print "Expected format 'name url'; skipping line:", line
+            continue
         channel, url = args
         cmd_add_channel(mon, debug, verbose, channel, url)
 
@@ -286,15 +287,15 @@ def main():
 
     # Apply environment variable overrides to defaults
     host   = os.environ.get("ESLIB_RSS_ELASTICSEARCH", None)
-    cindex = os.environ.get("ESLIB_RSS_INDEX", "rss")
-    iindex = os.environ.get("ESLIB_RSS_ITEM_INDEX", cindex)
-    if iindex == "":
-        iindex = None
+    env_cindex = os.environ.get("ESLIB_RSS_INDEX", "rss")
+    env_iindex = os.environ.get("ESLIB_RSS_ITEM_INDEX", None)
 
     since_str = None
     before_str = None
     since_date = None
     before_date = None
+    opt_cindex = None
+    opt_iindex = None
 
     # Parse command line input
     if len(sys.argv) == 1: usage()
@@ -317,8 +318,8 @@ def main():
         elif o in ("-v", "--verbose")                   : verbose = True
         elif o in ("-d", "--debug")                     : debug = True
         elif o in ("-e", "--elasticsearch", "--host")   : host = a
-        elif o in ("-i", "--index")                     : cindex = a
-        elif o in ("-iindex", "--item_index")           : iindex = a
+        elif o in ("-i", "--index")                     : opt_cindex = a
+        elif o in ("--iindex", "--item_index")           : opt_iindex = a
         # Contextual options, but collected globally (because it's easier to program...)
         elif o in ("-c", "--cascading", "--items", "--delete_items", "--delete"): delete_items = True
         elif o in ("-p", "--peek", "--simulate")        : simulate = True
@@ -332,6 +333,24 @@ def main():
     if len(args) < 1: usage("missing command")
     cmd = args[0]
     args = args[1:]  # Channels in most cases, and (name, url) in add channel case.
+
+    # Set the right indexes
+    cindex = None
+    iindex = None
+    if opt_cindex:
+        cindex = opt_cindex
+    else:
+        cindex = env_cindex
+    if opt_iindex == "":
+        iindex = None
+    elif opt_iindex is not None:
+        iindex = opt_iindex
+    elif env_iindex is None:
+        iindex = cindex
+    elif env_iindex == "":
+        iindex = None
+    else:
+        iindex = env_iindex
 
     # Time validation conversion and checks
     if before_str:
