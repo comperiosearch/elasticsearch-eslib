@@ -35,6 +35,7 @@ from .ProcessWrapper        import ProcessWrapper
 from .CLIReader             import CLIReader
 from .RssMonitor            import RssMonitor
 from .Timer                 import Timer
+from .DateFields            import DateFields
 
 __all__ = (
     "ElasticsearchReader",
@@ -64,4 +65,5 @@ __all__ = (
     "CLIReader",
     "RssMonitor",
     "Timer"
+    "DateFields"
 )
