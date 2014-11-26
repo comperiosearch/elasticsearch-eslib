@@ -11,7 +11,6 @@ from Queue import Queue
 from threading import Lock
 import copy, time
 from ..Generator import Generator
-from .. import esdoc_logmsg
 
 
 class ElasticsearchWriter(Generator):
@@ -62,9 +61,9 @@ class ElasticsearchWriter(Generator):
         doctype = self.config.doctype or document.get("_type")
 
         if not index:
-            self.doclog.error(esdoc_logmsg("Missing '_index' field in input and no override."))
+            self.doclog.error("Missing '_index' field in input and no override.")
         elif not doctype:
-            self.doclog(esdoc_logmsg("Missing '_type' field in input and no override."))
+            self.doclog("Missing '_type' field in input and no override.")
         else:
             # NOTE: This sends the original incoming 'document' as reference to _add()
             #       It only does a shallow copy of the original document and replace the meta data '_index' and '_type'

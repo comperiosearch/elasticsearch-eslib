@@ -18,7 +18,7 @@ from .Socket       import Socket
 from .Processor    import Processor
 from .Generator    import Generator
 from .Monitor      import Monitor
-from .Controller   import Controller
+from .Controller   import Controller, HttpController, PipelineController
 from .Configurable import Configurable, Config
 from .twitter      import Twitter
 
@@ -32,7 +32,7 @@ __all__ = (
     "Processor",
     "Generator",
     "Monitor",
-    "Controller",
+    "Controller", "HttpController", "PipelineController",
     "Configurable",
     "Twitter",
     "Config"
