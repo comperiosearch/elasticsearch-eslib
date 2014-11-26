@@ -11,7 +11,7 @@ Module containing time/date helpers.
 __all__ = ("duration_string", "date2iso", "ago2date")
 
 
-import re, datetime
+import re, datetime, dateutil, dateutil.parser
 
 
 def duration_string(timediff):
@@ -47,6 +47,28 @@ def iso2date(isostr):
         return datetime.datetime.strptime(isostr, "%Y-%m-%dT%H:%M:%S.%fZ")
     else:
         return datetime.datetime.strptime(isostr, "%Y-%m-%dT%H:%M:%SZ")
+
+def utcdate(obj):
+    "Convert string or datetime object to a datetime object in UTC."
+    dt = None
+    if type(obj) is datetime.datetime:
+        dt = datetime.datetime()
+    try:
+        dt = dateutil.parser.parse(obj)
+    except:
+        pass
+    if dt:
+        # Convert to UTC time and get rid of the offset
+        dt = dt - dt.utcoffset()
+        dt = dt.replace(tzinfo=None) #dateutil.tz.tzutc())
+    return dt
+
+def date_dict(date):
+    return {
+        "year": date.year, "month": date.month, "day": date.day,
+        "hour": date.hour, "minute": date.minute, "second": date.second,
+        "weekday": date.isoweekday(), "week": date.isocalendar()[1]
+    }
 
 
 _agoRegex = re.compile("^(?P<number>\d)+\s*(?P<unit>\w+)( ago)?$")

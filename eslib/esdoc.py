@@ -21,6 +21,7 @@ def _json_serializer_isodate(obj):
     if isinstance(obj, datetime):
         if obj.utcoffset() is not None:
             obj = obj - obj.utcoffset()
+            obj = obj.replace(tzinfo=None)
         s = date2iso(obj)
     return s
 
