@@ -1,6 +1,8 @@
-from eslib.service import Controller
+__author__ = 'Hans Terje Bakke'
 
-__author__ = 'htb'
+# TODO: Logging
+
+from .Controller import Controller
 
 
 class PipelineController(Controller):
