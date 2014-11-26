@@ -1,7 +1,7 @@
 __author__ = 'Hans Terje Bakke'
 
 from ..Monitor import Monitor
-from SocketServer import TCPServer
+from SocketServer import ThreadingTCPServer
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 from ..esdoc import tojson
 import json
@@ -67,6 +67,7 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
             res = self.server.owner._incoming_POST(path, data)
             self._respond(res)
 
+
 class HttpMonitor(Monitor):
     """
     Monitor incoming documents on a HTTP endpoint.
@@ -83,7 +84,7 @@ class HttpMonitor(Monitor):
         max_length        = 1024*1024     : Max length of incoming data via POST, in bytes.
     """
 
-    TCPServer.allow_reuse_address = True  # OBS: Class level setting.
+    ThreadingTCPServer.allow_reuse_address = True  # OBS: Class level setting.
 
     def __init__(self, hook=None, **kwargs):
         super(HttpMonitor, self).__init__(**kwargs)
@@ -100,7 +101,7 @@ class HttpMonitor(Monitor):
 
     def on_open(self):
         self.log.info("Starting HTTP listener on %s:%d" % (self.config.host, self.config.port))
-        self._server = TCPServer((self.config.host, self.config.port), _ServerHandlerClass, bind_and_activate=True)
+        self._server = ThreadingTCPServer((self.config.host, self.config.port), _ServerHandlerClass, bind_and_activate=True)
         self._server.owner = self
         self._server.timeout = 1.0  # Max 1 second blocking in _server.handle_request()
 
