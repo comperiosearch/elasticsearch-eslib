@@ -15,7 +15,7 @@ class ProtocolConverter(Processor):
         func            = None     # Mandatory! Must be a function returning a list (or generator) of zero or more
                                      documents complying with the output protocol.
     """
-    def __init__(self, func, input_protocol=None, output_protocol=None, **kwargs):
+    def __init__(self, func=None, input_protocol=None, output_protocol=None, **kwargs):
         super(ProtocolConverter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", input_protocol)
         self._output = self.create_socket("output", output_protocol)

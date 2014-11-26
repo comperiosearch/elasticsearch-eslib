@@ -556,13 +556,16 @@ class Processor(Configurable):
         self._thread = None
 
     def restart(self):
-        if self.stopping or not self.running:
+        if self.stopping:
             return
 
-        self.restarting = True  # This will make stopping and staring behave differently
-        self._stop()
-        self._wait(True)
-        self._start()
+        if not self.running:
+            self._start()
+        else:
+            self.restarting = True  # This will make stopping and staring behave differently
+            self._stop()
+            self._wait(True)
+            self._start()
 
     #endregion Operation management
 

@@ -18,7 +18,6 @@ from .Socket       import Socket
 from .Processor    import Processor
 from .Generator    import Generator
 from .Monitor      import Monitor
-from .Controller   import Controller
 from .Configurable import Configurable, Config
 from .twitter      import Twitter
 
@@ -32,7 +31,6 @@ __all__ = (
     "Processor",
     "Generator",
     "Monitor",
-    "Controller",
     "Configurable",
     "Twitter",
     "Config"
