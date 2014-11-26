@@ -62,6 +62,8 @@ class TestBlacklistFilter_str(unittest.TestCase):
 
 class TestBlacklistFilter_esdoc(unittest.TestCase):
 
+    # check == True means the document was NOT filtered out, i.e. it PASSED the filter
+
     def test_str_nohit(self):
         s = "I am marvellous"
         doc = {"_source": {"field1": s}}
@@ -72,7 +74,7 @@ class TestBlacklistFilter_esdoc(unittest.TestCase):
         check = p._check(doc)
 
         print "str_nohit (exp:False)=", check
-        self.assertFalse(check)
+        self.assertTrue(check)
 
     def test_str_hit_but_not_blacklisted(self):
         s = "I like girls."
@@ -85,7 +87,7 @@ class TestBlacklistFilter_esdoc(unittest.TestCase):
         check = p._check(doc)
 
         print "str_hit_but_not_blacklisted (exp:False)=", check
-        self.assertFalse(check)
+        self.assertTrue(check)
 
     def test_str_hit_and_blacklisted(self):
         s1 = "I like young girls."
