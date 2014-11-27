@@ -10,7 +10,11 @@ ok_date_no_tz = '2014-10-14T14:26:30'
 wrong_date = 2013
 wrong_date2 = '-120-13-142T25:61:61+30:00'
 
-ok_date_fields = {'week': 42, 'second': 30, 'weekday': 2, 'hour': 13, 'year': 2014, 'day': 14, 'minute': 26, 'month': 10}
+ok_date_fields = {
+    'year': 2014, 'month': 10, 'day': 14,
+    'hour': 13, 'minute': 26, 'second': 30,
+    'week': 42, 'weekday': 2
+}
 
 dict_wo_source = {'i': {'am': {'a': 'dict'}}}
 dict_w_source = {'_source': dict_wo_source}

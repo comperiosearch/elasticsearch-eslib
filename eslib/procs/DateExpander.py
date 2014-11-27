@@ -45,12 +45,16 @@ class DateExpander(Processor):
     def _process(self, doc):
         value = esdoc.getfield(doc, "_source." + self.config.source_field)
         if value is None:
-            self.doclog.warning("Document '%s' is missing field or value in '%s'." % (doc.get("_id"), self.config.source_field))
+            self.doclog.warning(
+                "Document '%s' is missing field or value in '%s'."
+                % (doc.get("_id"), self.config.source_field))
             return doc
 
         date = time.utcdate(value)
         if date is None:
-            self.doclog.warning("Document '%s' has non-date value in field '%s'." % (doc.get("_id"), self.config.source_field))
+            self.doclog.warning(
+                "Document '%s' has non-date value in field '%s'."
+                % (doc.get("_id"), self.config.source_field))
             return doc
 
         date_dict = time.date_dict(date)
