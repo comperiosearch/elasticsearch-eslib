@@ -1,11 +1,11 @@
 __author__ = 'Hans Terje Bakke'
 
 from ..Monitor import Monitor
+from ..time import utcdate
 import TwitterAPI
 import datetime, time
 from xml.etree import ElementTree as XML
 from requests.exceptions import ConnectionError
-import dateutil, dateutil.parser
 
 
 class TwitterMonitor(Monitor):
@@ -351,13 +351,7 @@ class TwitterMonitor(Monitor):
             except AttributeError:
                 pass
         if not dt and datestring_field in source:
-            try:
-                dt = dateutil.parser.parse(source[datestring_field])
-                if dt:
-                    dt = dt - dt.utcoffset()
-                    dt.replace(tzinfo=dateutil.tz.tzutc())
-            except ValueError:
-                pass
+            dt = utcdate(source[datestring_field])
         return dt
 
 
