@@ -208,7 +208,7 @@ class TestExecution(unittest.TestCase, Connections):
         p1.stop()
 
         c = Controller()
-        c.register(p1, p2)
+        c.register_procs(p1, p2)
         c.DUMP()
 
         self.assertTrue("p4.p3.p2.p1.hello1" in self.seq, "Expected p4.p3.p2.p1.hello1 to have been generated.")
@@ -283,7 +283,7 @@ class TestExecution(unittest.TestCase, Connections):
         time.sleep(10)
 
         c = Controller()
-        c.register(g1, g2, g3, r1, r2, f1, f12, f2)
+        c.register_procs(g1, g2, g3, r1, r2, f1, f12, f2)
         c.DUMP()
 
         self.assertTrue(not (g1.running and g2.running and g3.running), "All generators should be stopped.")

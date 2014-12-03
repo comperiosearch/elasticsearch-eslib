@@ -54,7 +54,7 @@ class TwitterUserGetter(Generator):
         try:
             id_ = int(doc)
         except ValueError:
-            self.log.exception("Could not parse id: %s to int" % doc)
+            self.doclog.exception("Could not parse id: %s to int" % doc)
         else:
             self._queue.append(str(id_))
 
@@ -78,7 +78,7 @@ class TwitterUserGetter(Generator):
         Gets users from twitter and outputs to a socket.
         """
         num = len(self._queue)
-        self.log.info("Getting %i users from Twitter" % num)
+        self.log.debug("Getting %i users from Twitter" % num)
         resp = self.twitter.get_users(uids=self._queue[:num])
         self._queue = self._queue[num:]
         for raw_user in resp:
@@ -88,6 +88,3 @@ class TwitterUserGetter(Generator):
                 self.log.exception(type_error)
             else:
                 self._output.send(user)
-                self.log.info(
-                    "Sent %s to output: %s" % (str(user), self._output.name)
-                )

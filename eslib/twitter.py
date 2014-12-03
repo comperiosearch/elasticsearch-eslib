@@ -88,7 +88,7 @@ class Twitter(Configurable):
         rqs_per_minute = (self.limits[protocol] / 15)
         wait_time = (60/rqs_per_minute) - time_since_last + 1 # padding
         if wait_time > 0:
-            print("waiting for {0} seconds".format(wait_time))
+            #print("waiting for {0} seconds".format(wait_time))
             time.sleep(wait_time)
 
         self.last_call[protocol] = time.time()

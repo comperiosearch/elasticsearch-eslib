@@ -63,7 +63,7 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
             self._respond_error("Too large data bulk dropped by server. Length = %d exceeding max length = %d." % (length, max_length))
         else:
             path = self.path[1:]
-            data = self.rfile.read(length)#.decode('utf-8')
+            data = self.rfile.read(length).decode('utf-8')
             res = self.server.owner._incoming_POST(path, data)
             self._respond(res)
 

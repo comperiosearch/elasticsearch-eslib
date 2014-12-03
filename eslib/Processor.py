@@ -464,6 +464,13 @@ class Processor(Configurable):
             # Suspend all connectors
             for connector in self.connectors.itervalues():
                 connector.suspend()
+            if not self._thread:
+                # Since finalizing the stopping process will not be done after
+                # connectors stop (since they are not stopped on restart, but
+                # merely suspended, we have to shut down here.
+                self.stopping = False
+                self.running = False
+                self._close()
         else:
             # Continue processing input in connector queues, but do not accept more incoming data on the connectors
             # Note: It is first when all connector queues are empty (and thus processed) that we can tell subscribers to stop.

@@ -93,7 +93,9 @@ class EntityExtractor(Processor):
                     if e:
                         extracted.extend(e)
             entities = self._merge(extracted)
-            self.output_entities.send(entities)
+
+            if extracted:
+                self.output_entities.send(extracted) ##entities)
 
 
     def _merge(self, extracted, entities=None):

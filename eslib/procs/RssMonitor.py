@@ -578,8 +578,11 @@ class RssMonitor(Monitor):
         channel = feed["channel"]
         items = feed["items"]
 
-        if not url == feed["url"]:
-            self.log.warning("Registered URL and URL in channel meta differ: Our='%s', Remote='%s'." % (url, feed["url"]))
+        feed_url = feed.get("url")
+        if feed_url is None:
+            self.log.error("FIELD 'url' MISSING IN METADATA FOR CHANNEL '%s', CHANNEL OBJECT: %s" % (channel_name, channel))
+        elif not url == feed_url:
+            self.log.warning("Registered URL and URL in metadata for channel '%s' differ: Our='%s', Remote='%s'." % (channel_name, url, feed["url"]))
 
         # Create channel info part
         cinfo = {"name": channel_name, "url": url, "updated": self._get_channel_updated_iso_string(channel_name, channel)}
