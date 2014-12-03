@@ -1,3 +1,0 @@
-{ "c": "har tre linjer",
-"og": "de er i json-format",
-"her er": "den siste"}

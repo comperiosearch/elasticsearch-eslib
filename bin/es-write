@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+
+from eslib.procs import ElasticsearchWriter, FileReader
+import eslib.prog
+import eslib.time
+import argparse, sys
+
+
+def main():
+    help_i  = "Which index to write documents to."
+    help_t  = "Which type to set on document (overrides incoming type)."
+
+    parser = argparse.ArgumentParser(usage="\n  %(prog)s -i index [-t type] [-f field] [-l limit] [more options]")
+    parser._actions[0].help = argparse.SUPPRESS
+    parser.add_argument("-i", "--index"    , help=help_i, required=True)
+    parser.add_argument("-t", "--type"     , help=help_t)
+    parser.add_argument(      "--host"     , help="Elasticsearch host, format 'host:port' or just 'host'.", default=None)
+    #parser.add_argument(      "--debug"    , action="store_true")
+    parser.add_argument(      "--name"     , help="Process name.", default=None)
+
+    if len(sys.argv) == 1:
+        parser.print_usage()
+        sys.exit(0)
+
+    args = parser.parse_args()
+
+    # Set up and run this processor
+    w = ElasticsearchWriter(
+        name = args.name or eslib.prog.progname(),
+        hosts        = [args.host] if args.host else [],
+        index        = args.index,
+        doctype      = args.type,
+        batchsize    = 1000,
+        batchtime    = 60.0
+    )
+
+#    if args.debug: w.debuglevel = 0
+
+    r = FileReader()
+    w.subscribe(r)
+    r.start()
+    w.wait()
+
+
+if __name__ == "__main__": main()
