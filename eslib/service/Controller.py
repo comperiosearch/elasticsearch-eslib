@@ -4,6 +4,7 @@ __author__ = 'Hans Terje Bakke'
 
 # TODO: Logging
 
+import logging
 import time
 from ..Configurable import Configurable
 
@@ -12,8 +13,36 @@ class Controller(Configurable):
     def __init__(self, **kwargs):
         super(Controller, self).__init__(**kwargs)
 
+        self.config.set_default(name=self.__class__.__name__)
+
+        self._setup_logging()
+
         self._running = False
         self._registered_procs = []
+
+    def __str__(self):
+        return "%s|%s" % (self.__class__.__name__, self.name)
+
+    @property
+    def name(self):
+        return self.config.name
+
+    def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
+        # Set up logging
+        parts = []
+        if not self.__module__ == "__main__": parts.append(self.__module__)
+        className = self.__class__.__name__
+        parts.append(className)
+
+        name = self.name
+        if name:
+            if name.endswith(".py"):
+                name = name[:-3]
+            if not name == className:
+                parts.append(name)
+        fullPath = ".".join(parts)
+        #print "FULL=[%s]" % fullPath
+        self.doclog  = logging.getLogger("servicelog.%s"  % fullPath)
 
     #region Debugging
 
@@ -29,13 +58,13 @@ class Controller(Configurable):
                 subscribers += len(p.connections)
             print fmt % (item.__class__.__name__, item.name, item.running, item.stopping, item.accepting, item.aborted, item.suspended, producers, subscribers, item.keepalive, item.count)
 
-    def register(self, *procs):
+    def register_procs(self, *procs):
         "Register a processor as part of the controller. (For debugging.)"
         for proc in procs:
             self._registered_procs.append(proc)
         return len(procs)
 
-    def unregister(self, *procs):
+    def unregister_procs(self, *procs):
         "Unregister a processor as part of the controller. (For debugging.)"
         registered = 0
         for proc in procs:

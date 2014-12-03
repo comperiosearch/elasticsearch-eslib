@@ -9,30 +9,36 @@ import json
 
 class HttpController(Controller):
 
+    config_keys = []
+
     def __init__(self, **kwargs):
         super(HttpController, self).__init__(**kwargs)
 
         self.config.set_default(
-            mgmt_host = "localhost",
-            mgmt_port = "4444"
+            mgmt_listener_host = "localhost:4444",
+            # A management server we can register with, that will manage this process through the 'mgmt_listener_host'
+            mgmt_host          = None
         )
 
         self._receiver = None
         self._routes = {}
 
         # Add default management routes to functions
-        self.add_route("POST"    , "shutdown" , self._mgmt_shutdown)
-        self.add_route("GET"     , "status"   , self._mgmt_status)
-        self.add_route("POST"    , "configure", self._mgmt_configure)
-        self.add_route("GET|POST", "start"    , self._mgmt_start)
-        self.add_route("GET|POST", "restart"  , self._mgmt_restart)
-        self.add_route("GET|POST", "stop"     , self._mgmt_stop)
-        self.add_route("GET|POST", "abort"    , self._mgmt_abort)
-        self.add_route("GET|POST", "suspend"  , self._mgmt_suspend)
-        self.add_route("GET|POST", "resume"   , self._mgmt_resume)
+        self.add_route("GET"     , "id"        , self._mgmt_id)
+        self.add_route("GET|POST", "register"  , self._mgmt_register)
+        self.add_route("GET|POST", "unregister", self._mgmt_unregister)
+        self.add_route("GET|POST", "shutdown"  , self._mgmt_shutdown)
+        self.add_route("GET"     , "status"    , self._mgmt_status)
+        self.add_route("POST"    , "configure" , self._mgmt_configure)
+        self.add_route("GET|POST", "start"     , self._mgmt_start)
+        self.add_route("GET|POST", "restart"   , self._mgmt_restart)
+        self.add_route("GET|POST", "stop"      , self._mgmt_stop)
+        self.add_route("GET|POST", "abort"     , self._mgmt_abort)
+        self.add_route("GET|POST", "suspend"   , self._mgmt_suspend)
+        self.add_route("GET|POST", "resume"    , self._mgmt_resume)
 
-        self._receiver = HttpMonitor(name="receiver", hook=self._hook, host=self.config.mgmt_host, port=self.config.mgmt_port)
-        self.register(self._receiver)
+        self._receiver = HttpMonitor(name="receiver", hook=self._hook)
+        self.register_procs(self._receiver)
 
     #region Debugging
 
@@ -48,8 +54,19 @@ class HttpController(Controller):
         "Start running the controller itself. (Not the document processors.)"
         if self._running:
             return False  # Not started; was already running, or failed
-        self._receiver.config.host = self.config.mgmt_host
-        self._receiver.config.port = self.config.mgmt_port
+
+        # Set the host address
+        a = self.config.mgmt_listener_host.split(":")
+        if len(a) > 0:
+            self._receiver.config.host = a[0]
+        if len(a) == 2:
+            try:
+                self._receiver.config.port = int(a[1])
+            except Exception as e:
+                return False  # Port was not an int
+        else:
+            self._receiver.config.port = self.DEFAULT_PORT
+
         try:
             self._receiver.start()
             self._running = True
@@ -85,6 +102,32 @@ class HttpController(Controller):
 
     #endregion Controller management overrides
 
+    #region Registration with remote management service
+
+    @staticmethod
+    def _register(mgmt_host, id, mgmt_listener_host, config_keys):
+        # TODO: Not implemented
+        return False
+
+    @staticmethod
+    def _unregister(mgmt_host, id):
+        # TODO: Not implemented
+        return False
+
+    def register(self):
+        if not self.config.mgmt_host:
+            return False
+        # TODO: try/except/log
+        return self._register(self.config.mgmt_host, self.name, self.config.mgmt_listener_host, self.config_keys)
+
+    def unregister(self):
+        if not self.config.mgmt_host:
+            return False
+        # TODO: try/except/log
+        return self._unregister(self.config.mgmt_host, self.name)
+
+    #endregion
+
     #region Routing and Route management
 
     def add_route(self, verbs, path, func):
@@ -96,7 +139,7 @@ class HttpController(Controller):
             self._routes[key] = func
 
     def _hook(self, verb, path, data, format="application/json"):
-        print "VERB=[%s], PATH=[%s], DATA=[%s]" % (verb, path, data)
+        #print "VERB=[%s], PATH=[%s], DATA=[%s]" % (verb, path, data)
 
         key = "%s_%s" % (verb.upper(), path.lower())
 
@@ -113,7 +156,7 @@ class HttpController(Controller):
         else:
             payload = data
         try:
-            res = func(payload, args, kwargs)
+            res = func(payload, *args, **kwargs)
             return res
         except Exception as e:
             return {"error": "Unhandled exception: %s: %s" % (e.__class__.__name__, e)}
@@ -121,6 +164,21 @@ class HttpController(Controller):
     #endregion Routing and Route management
 
     #region Command handlers
+
+    def _mgmt_id(self, payload, *args, **kwargs):
+        return {"name": self.name}
+
+    def _mgmt_register(self, payload, *args, **kwargs):
+        if self.register():
+            return {"message": "Registered with management service."}
+        else:
+            return {"warning": "Not registered with management service."}
+
+    def _mgmt_unregister(self, payload, *args, **kwargs):
+        if self.unregister():
+            return {"message": "Unregistered from management service."}
+        else:
+            return {"warning": "Not unregistered from management service."}
 
     def _mgmt_shutdown(self, payload, *args, **kwargs):
         if self.shutdown(wait=False):

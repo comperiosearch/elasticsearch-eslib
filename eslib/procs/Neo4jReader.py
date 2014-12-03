@@ -4,7 +4,7 @@ from ..Generator import Generator
 from ..neo4j import Neo4j
 
 from itertools import izip
-import time
+import time, logging
 
 class Neo4jReader(Generator):
     """
@@ -30,7 +30,8 @@ class Neo4jReader(Generator):
     def __init__(self, **kwargs):
         super(Neo4jReader, self).__init__(**kwargs)
         self.create_connector(self._incoming_id, "id", "str", "Incoming IDs to check.")
-        self._output = self.create_socket("ids", "str", "Outputs IDs that lack properties.")
+        self._missing = self.create_socket("missing", "str", "Outputs IDs that lack properties.")
+        #self._missing = self.create_socket("output", "???", "Outputs data retrived, one document per ID.")
 
         self.config.set_default(
             batchsize = 20,
@@ -109,7 +110,8 @@ class Neo4jReader(Generator):
         """
         for uid, result in izip(ids, resp.json()["results"]):
             if not result["data"]:
-                self._output.send(uid)
-                self.log.info("uid %s does not have properties" % str(uid))
+                self._missing.send(uid)
+                if self.doclog.isEnabledFor(logging.TRACE):
+                    self.doclog.trace("uid %s does not have properties" % uid)
             else:
                 self._has_properties.add(uid)

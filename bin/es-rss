@@ -101,11 +101,12 @@ def cmd_list_channels(mon, debug, verbose, channels, since_date):
             count_str = "?"
         else:
             count_str = str(count)
+            total += count
 
         if verbose:
             print "%s (%s)" % (name, count_str)
             if channel:
-                fields = [ "version", "url", "title", "link",  "updated", "description", \
+                fields = [ "version", "url", "title", "link",  "updated", "description",
                            "language", "generator", "lastFetch" ]
                 for f in fields:
                     if f in channel:

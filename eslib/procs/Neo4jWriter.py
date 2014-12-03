@@ -1,7 +1,7 @@
 __author__ = 'mats'
 
 from itertools import izip
-import time
+import time, logging
 
 from ..Generator import Generator
 from ..neo4j import Neo4j
@@ -75,13 +75,14 @@ class Neo4jWriter(Generator):
             to_id = document["to"]
             edge_type = document["type"]
         except KeyError:
-            self.log.exception("Unable to parse document: %s" % str(document))
+            self.doclog.exception("Unable to parse document: %s" % str(document))
         else:
             query = self._neo4j.get_edge_query(from_id, edge_type, to_id)
             self._edge_queue.append(query)
 
     def _incoming_user(self, document):
-        self.doclog.trace("Incoming user '%s'." % str(document))
+        if self.doclog.isEnabledFor(logging.TRACE):
+            self.doclog.trace("Incoming user '%s' ('%s')." % document["screen_name"], document["id"])
         query, params = self._neo4j.get_node_merge_query(document)
         self._user_queue.append((query, params))
 
@@ -118,7 +119,7 @@ class Neo4jWriter(Generator):
         
         rq = self._neo4j._build_rq(self._edge_queue[:num_edges])
         self._neo4j.commit(rq)
-        self.log.info("Committed %i edges." % num_edges)
+        self.log.debug("Committed %i edges." % num_edges)
         self._edge_queue = self._edge_queue[num_edges:]
         self._last_edge_commit = time.time()
     
@@ -133,6 +134,6 @@ class Neo4jWriter(Generator):
 
         rq = self._neo4j._build_rq(users, params)
         self._neo4j.commit(rq)
-        self.log.info("Committed %i users" % num_users)
+        self.log.debug("Committed %i users" % num_users)
         self.user_queue = self._user_queue[num_users:]
         self.last_user_commit = time.time()

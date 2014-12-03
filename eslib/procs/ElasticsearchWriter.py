@@ -63,7 +63,7 @@ class ElasticsearchWriter(Generator):
         if not index:
             self.doclog.error("Missing '_index' field in input and no override.")
         elif not doctype:
-            self.doclog("Missing '_type' field in input and no override.")
+            self.doclog.error("Missing '_type' field in input and no override.")
         else:
             # NOTE: This sends the original incoming 'document' as reference to _add()
             #       It only does a shallow copy of the original document and replace the meta data '_index' and '_type'
@@ -155,13 +155,13 @@ class ElasticsearchWriter(Generator):
             self._send()
 
     def on_tick(self):
-        if not self.config.batchsize and not self.config.batchtime:
+        if self._queue.qsize() and not self.config.batchsize and not self.config.batchtime:
             self.log.trace("Submitting single document.")
             self._send()
         elif self.config.batchsize and (self._queue.qsize() >= self.config.batchsize):
             self.log.debug("Submitting full batch (%d)." % self.config.batchsize)
             self._send()
-        elif self.config.batchtime and (time.time() - self._last_batch_time > self.config.batchtime):
+        elif self.config.batchtime and self._queue.qsize() and (time.time() - self._last_batch_time > self.config.batchtime):
             self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()
 
