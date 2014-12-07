@@ -11,6 +11,10 @@ class Config(object):
             if not key in self.__dict__:
                 self.__dict__[key] = val
 
+    def set(self, **kwargs):
+        for key,val in kwargs.iteritems():
+            self.__dict__[key] = val
+
     def get_default_attributes(self):
         return self.defaults
 

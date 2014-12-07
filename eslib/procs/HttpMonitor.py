@@ -8,6 +8,15 @@ import json
 
 class _ServerHandlerClass(SimpleHTTPRequestHandler):
 
+    # Override end_headers() to allow cross-domain requests
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        SimpleHTTPRequestHandler.end_headers(self)
+
+    # Overload to make this thing shut up!!
+    def log_message(self, format, *args):
+        pass
+
     def _respond_error(self, message, code=None):
         self.send_error(code or 500, message or "Unspecified server error")
         self.end_headers()
@@ -47,7 +56,7 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
         res = self.server.owner._incoming_GET(path)
         self._respond(res)
 
-    def do_POST(self):
+    def _do_VERB_that_takes_data(self, verb):
 
         # Note: We ignore content type (requirement would be "application/json" or whatever..), and assume it is JSON.
 
@@ -55,18 +64,24 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
         max_length = owner.config.max_length
 
         length = int(self.headers.get('Content-Length') or 0)
-        owner.doclog.debug("POST: Incoming document from '%s', length=%d." % (self.client_address, length))
+        owner.doclog.debug("%s: Incoming document from '%s', length=%d." % (verb, self.client_address, length))
 
         if max_length and length > max_length:
             owner.doclog.debug()
-            owner.doclog.warning("POST: Incoming document of size %d exceeded max length of %d." % (length, max_length))
+            owner.doclog.warning("%s: Incoming document of size %d exceeded max length of %d." % (verb, length, max_length))
             self._respond_error("Too large data bulk dropped by server. Length = %d exceeding max length = %d." % (length, max_length))
         else:
             path = self.path[1:]
             data = self.rfile.read(length).decode('utf-8')
-            res = self.server.owner._incoming_POST(path, data)
+            res = self.server.owner._incoming_WITH_DATA(verb, path, data)
             self._respond(res)
 
+    def do_PUT(self):
+        self._do_VERB_that_takes_data("PUT")
+    def do_POST(self):
+        self._do_VERB_that_takes_data("POST")
+    def do_DELETE(self):
+        self._do_VERB_that_takes_data("DELETE")
 
 class HttpMonitor(Monitor):
     """
@@ -123,7 +138,7 @@ class HttpMonitor(Monitor):
 
         return self._call_hook("GET", path, None)
 
-    def _incoming_POST(self, path, data):
+    def _incoming_WITH_DATA(self, verb, path, data):
         if self.suspended:
             return "Server suspended; incoming data ignored."
 
@@ -142,7 +157,7 @@ class HttpMonitor(Monitor):
             self.count += 1
             self.output.send(doc)
 
-        return self._call_hook("POST", path, data)
+        return self._call_hook(verb, path, data)
 
     def _call_hook(self, http_verb, path, data):
         if self.hook:

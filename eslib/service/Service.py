@@ -9,9 +9,9 @@ import time
 from ..Configurable import Configurable
 
 
-class Controller(Configurable):
+class Service(Configurable):
     def __init__(self, **kwargs):
-        super(Controller, self).__init__(**kwargs)
+        super(Service, self).__init__(**kwargs)
 
         self.config.set_default(name=self.__class__.__name__)
 
@@ -42,7 +42,7 @@ class Controller(Configurable):
                 parts.append(name)
         fullPath = ".".join(parts)
         #print "FULL=[%s]" % fullPath
-        self.doclog  = logging.getLogger("servicelog.%s"  % fullPath)
+        self.log = logging.getLogger("servicelog.%s"  % fullPath)
 
     #region Debugging
 
@@ -77,8 +77,21 @@ class Controller(Configurable):
 
     #region Controller management commands
 
+    def configure(self, credentials, config, global_config):
+        """
+        Configure the controller from configs.
+        :param dict credentials:
+        :param dict config:
+        :param dict global_config:
+        :return:
+        """
+        return self.on_configure(credentials, config, global_config)
+
     def run(self, wait=False):
         "Start running the controller itself. (Not the document processors.)"
+
+        self.on_setup()
+
         self._running = True
         if wait:
             while self._running:
@@ -126,13 +139,23 @@ class Controller(Configurable):
     def resume(self):
         return self.on_resume()
 
-    def configure(self, config, restart=True):
-        return self.on_configure(config)
+    def update(self, config, restart=True):
+        return self.on_update(config)
 
     def status(self, *procs):
         return self.on_status()
 
     #endregion Pipeline management commands
+
+    #region Setup methods for override
+
+    def on_configure(self, credentials, config, global_config):
+        return True  # For when the service is set up from static config dicts
+
+    def on_setup(self):
+        return True  # Create pipeline elements based on static config
+
+    #endregion Setup methods for override
 
     #region Event handlers for override
 
@@ -150,7 +173,7 @@ class Controller(Configurable):
         return False
     def on_resume(self):
         return False
-    def on_configure(self, config):
+    def on_update(self, config):
         return False
 
     #endregion Event handlers for override

@@ -79,7 +79,8 @@ class EntityExtractor(Processor):
             merged_doc = esdoc.shallowputfield(doc, "_source." + self.config.target, target)
 
             entities = self._merge(extracted, target)
-            self.output_entities.send(entities)
+            if extracted:
+                self.output_entities.send(extracted) ##entities)
             self.output_esdoc.send(merged_doc)
 
     def _incoming_str(self, doc):

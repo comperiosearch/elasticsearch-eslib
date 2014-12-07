@@ -2,12 +2,12 @@ __author__ = 'Hans Terje Bakke'
 
 # TODO: Logging
 
-from .Controller import Controller
+from .Service import Service
 
 
-class PipelineController(Controller):
+class PipelineService(Service):
     def __init__(self, **kwargs):
-        super(PipelineController, self).__init__(**kwargs)
+        super(PipelineService, self).__init__(**kwargs)
 
         self.head = None
         self.tail = None

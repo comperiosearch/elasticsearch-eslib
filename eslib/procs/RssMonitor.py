@@ -53,15 +53,6 @@ es_default_mapping_item = {
         "comments"     : {"type": "string"   , "index": "no"          , "include_in_all": False},
         "categories"   : {"type": "string"   , "index": "not_analyzed", "include_in_all": False},
         "location"     : {"type": "geo_point", "index": "analyzed"    , "include_in_all": False},
-        "enclosures" :
-        {
-            "properties" : {
-                "url"    : {"type": "string", "index": "no"          , "include_in_all": False},
-                "type"   : {"type": "string", "index": "not_analyzed", "include_in_all": False},
-                "length" : {"type": "long"  , "index": "no"          , "include_in_all": False}
-            }
-        },
-
         "page"         : {"type": "string"  , "index": "analyzed"     , "include_in_all": True}
     }
 }
@@ -645,7 +636,6 @@ class RssMonitor(Monitor):
                 self._add_if(iinfo, i, "summary", "description")
 
             # Note: Skip "location" for now (in ES mapping)
-            # Note: Skip "enclosures" (with "url", "type", "length") for now (in ES mapping)
 
             # Build the esdoc
             doc = {"_id": self._getUUID(rid), "_index": self._item_index, "_type": self.DOCTYPE_ITEM, "_source": iinfo}

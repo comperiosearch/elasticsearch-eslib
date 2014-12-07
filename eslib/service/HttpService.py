@@ -2,34 +2,68 @@ __author__ = 'Hans Terje Bakke'
 
 # TODO: Logging
 
-from .Controller import Controller
+from .Service import Service
 from ..procs.HttpMonitor import HttpMonitor
-import json
+import json, requests
 
 
-class HttpController(Controller):
+class HttpService(Service):
+    """
+    Common static config:
+        name
+        mgmt_endpoint
+        mgmt_host
+
+    Communication with manager:
+
+        POST register
+            name
+            callback
+        =>
+            session_token
+            assigned_port
+
+        POST unregister
+
+    Callback interface expects the following messages:
+
+        GET  info
+        POST register     # External debug command to register with the manager
+        POST unregister
+        POST shutdown
+        GET  status
+        POST update       # causes (re)start
+        POST start
+        POST stop
+        POST abort
+        POST suspend
+        POST resume
+    """
 
     config_keys = []
 
     def __init__(self, **kwargs):
-        super(HttpController, self).__init__(**kwargs)
+        super(HttpService, self).__init__(**kwargs)
 
         self.config.set_default(
-            mgmt_listener_host = "localhost:4444",
-            # A management server we can register with, that will manage this process through the 'mgmt_listener_host'
-            mgmt_host          = None
+            # A management server we can register with, that will manage this process through the 'mgmt_endpoint'
+            mgmt_host     = None,
+            # The host:port endpoint where this service will listen for management commands
+            mgmt_endpoint = "localhost:4444"
         )
 
         self._receiver = None
+        self._mgmt_endpoint = None
         self._routes = {}
 
         # Add default management routes to functions
-        self.add_route("GET"     , "id"        , self._mgmt_id)
+        self.add_route("GET"     , "info"      , self._mgmt_info)
+        self.add_route("GET"     , "help"      , self._mgmt_help)
+        self.add_route("GET"     , "status"    , self._mgmt_status)
         self.add_route("GET|POST", "register"  , self._mgmt_register)
         self.add_route("GET|POST", "unregister", self._mgmt_unregister)
-        self.add_route("GET|POST", "shutdown"  , self._mgmt_shutdown)
-        self.add_route("GET"     , "status"    , self._mgmt_status)
-        self.add_route("POST"    , "configure" , self._mgmt_configure)
+        self.add_route("POST"    , "shutdown"  , self._mgmt_shutdown)
+        self.add_route("POST"    , "update"    , self._mgmt_update)
         self.add_route("GET|POST", "start"     , self._mgmt_start)
         self.add_route("GET|POST", "restart"   , self._mgmt_restart)
         self.add_route("GET|POST", "stop"      , self._mgmt_stop)
@@ -55,8 +89,10 @@ class HttpController(Controller):
         if self._running:
             return False  # Not started; was already running, or failed
 
+        self.on_setup()
+
         # Set the host address
-        a = self.config.mgmt_listener_host.split(":")
+        a = self.config.mgmt_endpoint.split(":")
         if len(a) > 0:
             self._receiver.config.host = a[0]
         if len(a) == 2:
@@ -65,7 +101,7 @@ class HttpController(Controller):
             except Exception as e:
                 return False  # Port was not an int
         else:
-            self._receiver.config.port = self.DEFAULT_PORT
+            self._receiver.config.port = self._assigned_port
 
         try:
             self._receiver.start()
@@ -104,27 +140,55 @@ class HttpController(Controller):
 
     #region Registration with remote management service
 
-    @staticmethod
-    def _register(mgmt_host, id, mgmt_listener_host, config_keys):
-        # TODO: Not implemented
-        return False
-
-    @staticmethod
-    def _unregister(mgmt_host, id):
-        # TODO: Not implemented
-        return False
-
     def register(self):
         if not self.config.mgmt_host:
             return False
+
         # TODO: try/except/log
-        return self._register(self.config.mgmt_host, self.name, self.config.mgmt_listener_host, self.config_keys)
+        a = self.config.mgmt_endpoint.split(":")
+        host = a[0]
+        port = 0 if len(a) != 2 else int(a[1])
+        # If port number is missing in the callback, a number will be assigned by the manager
+        req = json.dumps({'id': self.name, 'host': host, 'port': port, "config_keys": self.config_keys})
+        res = requests.post("http://%s/register" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
+        jres = json.loads(res.content)
+
+        err = jres.get("error")
+        if err:
+            self.log.error("Service registration failed: %s" % err)
+            self._mgmt_endpoint = None
+        else:
+            # Use host and port returned from manager
+            self._mgmt_endpoint = "%s:%d" % (jres["host"], jres["port"])
+
+        #host, port = self.config.mgmt_endpoint.split(":")
+        #req = json.dumps({'id': self.name, 'host': host, "port": port, "config_keys": self.config_keys})
+        #res = requests.post("http://%s/register_service" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
+        #jres = json.loads(res.content)
+
+        return True
 
     def unregister(self):
         if not self.config.mgmt_host:
             return False
         # TODO: try/except/log
-        return self._unregister(self.config.mgmt_host, self.name)
+        req = json.dumps({'id': self.name})
+        res = requests.delete("http://%s/unregister" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
+        jres = json.loads(res.content)
+
+        err = jres.get("error")
+        if err:
+            self.log.error("Service unregister failed: %s" % err)
+        else:
+            # Clear knowledge of management endpoint we got from manager
+            self._mgmt_endpoint = None
+
+        #host, port = self.config.mgmt_endpoint.split(":")
+        #req = json.dumps({'id': self.name, 'host': host, "port": port})
+        #res = requests.delete("http://%s/unregister_service" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
+        ##jres = json.loads(res.content)
+
+        return True
 
     #endregion
 
@@ -159,14 +223,21 @@ class HttpController(Controller):
             res = func(payload, *args, **kwargs)
             return res
         except Exception as e:
+            self.log.exception("Unhandled exception.")
             return {"error": "Unhandled exception: %s: %s" % (e.__class__.__name__, e)}
 
     #endregion Routing and Route management
 
     #region Command handlers
 
-    def _mgmt_id(self, payload, *args, **kwargs):
-        return {"name": self.name}
+    def _mgmt_info(self, payload, *args, **kwargs):
+        return {
+            "name": self.name,
+            "host": self._mgmt_endpoint or self.config.mgmt_endpoint,
+        }
+
+    def _mgmt_help(self, payload, *args, **kwargs):
+        return {"routes": self._routes.keys()}
 
     def _mgmt_register(self, payload, *args, **kwargs):
         if self.register():
@@ -225,13 +296,13 @@ class HttpController(Controller):
         else:
             return {"warning": "Processing was not resumed."}
 
-    def _mgmt_configure(self, payload, *args, **kwargs):
-        if self.configure(payload):
+    def _mgmt_update(self, payload, *args, **kwargs):
+        if self.update(payload):
             if self.restart():
-                return {"message": "Processing (re)configured and (re)started."}
+                return {"message": "Processing update and (re)started."}
             else:
-                return {"warning": "Processing was not (re)started and (re)configuring."}
+                return {"warning": "Processing was not updated and (re)configuring."}
         else:
-            return {"warning": "Processing was not (re)configured."}
+            return {"warning": "Processing was not updated."}
 
     #endregion Command handlers

@@ -59,7 +59,9 @@ def utcdate(obj):
         pass
     if dt:
         # Convert to UTC time and get rid of the offset
-        dt = dt - dt.utcoffset()
+        utcoffs = dt.utcoffset()
+        if utcoffs:
+            dt = dt - utcoffs
         dt = dt.replace(tzinfo=None) #dateutil.tz.tzutc())
     return dt
 
