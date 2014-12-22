@@ -8,12 +8,12 @@ Base classes for wrapping document processing processors into processing graphs/
 """
 
 
-from .Controller            import Controller
-from .HttpController        import HttpController
-from .PipelineController    import PipelineController
+from .Service            import Service
+from .HttpService        import HttpService
+from .PipelineService    import PipelineService
 
 __all__ = (
-    "Controller",
-    "HttpController",
-    "PipelineController"
+    "Service",
+    "HttpService",
+    "PipelineService"
 )

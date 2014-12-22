@@ -2,7 +2,7 @@ import unittest, time
 from test_connections import Connections
 from eslib import Processor, Generator
 from eslib.procs import Timer
-from eslib.service import Controller
+from eslib.service import Service
 
 
 class MyGenerator(Generator):
@@ -207,7 +207,7 @@ class TestExecution(unittest.TestCase, Connections):
         p2.put("hello2")
         p1.stop()
 
-        c = Controller()
+        c = Service()
         c.register_procs(p1, p2)
         c.DUMP()
 
@@ -282,7 +282,7 @@ class TestExecution(unittest.TestCase, Connections):
         g3.start()
         time.sleep(10)
 
-        c = Controller()
+        c = Service()
         c.register_procs(g1, g2, g3, r1, r2, f1, f12, f2)
         c.DUMP()
 

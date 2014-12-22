@@ -360,6 +360,7 @@ class TwitterMonitor(Monitor):
 
         now = datetime.datetime.utcnow()
 
+        print raw
         tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
 
         ts = tweet["_source"] = {"id": raw["id_str"] }  # id repeated intentionally

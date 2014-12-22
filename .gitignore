@@ -4,6 +4,7 @@
 
 # Folders
 tmp/
+HTBTEST/
 
 # C extensions
 *.so

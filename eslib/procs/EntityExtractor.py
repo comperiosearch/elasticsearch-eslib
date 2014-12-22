@@ -43,6 +43,12 @@ class EntityExtractor(Processor):
         target              = "entities"  : Which section ("field") to write the extracted entity information to.
         entities            = {}          : The entities to look for and how. See format above.
     """
+
+    _regex_email      = re.compile(r"([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})", re.UNICODE|re.IGNORECASE)
+    _regex_creditcard = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
+    _regex_exact_format = r"\b(%s)\b"
+    _regex_exact_flags  = re.DOTALL|re.IGNORECASE|re.UNICODE|re.MULTILINE
+
     def __init__(self, **kwargs):
         super(EntityExtractor, self).__init__(**kwargs)
         m = self.create_connector(self._incoming_esdoc, "input", "esdoc", "Incoming 'esdoc'.", is_default=True)
@@ -56,9 +62,21 @@ class EntityExtractor(Processor):
             target    = "entities"
         )
 
-        self._regex_email      = re.compile(r"([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})", re.UNICODE|re.IGNORECASE)
-        self._regex_creditcard = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
+        self._regex_exact = {}
 
+    def on_open(self):
+        # Create a dictionary of all regexes for exact matching
+        for conf in self.config.entities or []:
+            for match in conf.get("match") or []:
+                t = match.get("type")
+                if t == "exact":
+                    pattern = match.get("pattern")
+                    if pattern and not pattern in self._regex_exact:
+                        self._regex_exact[pattern] =\
+                            re.compile(
+                                self._regex_exact_format % pattern,
+                                flags=self._regex_exact_flags
+                            )
 
     def _incoming_esdoc(self, doc):
         if self.has_output:
@@ -79,7 +97,8 @@ class EntityExtractor(Processor):
             merged_doc = esdoc.shallowputfield(doc, "_source." + self.config.target, target)
 
             entities = self._merge(extracted, target)
-            self.output_entities.send(entities)
+            if extracted:
+                self.output_entities.send(extracted) ##entities)
             self.output_esdoc.send(merged_doc)
 
     def _incoming_str(self, doc):
@@ -162,14 +181,21 @@ class EntityExtractor(Processor):
     def _extract_exact(self, pattern, text):
         "An extremely simple implementation for now.."
 
-        i = text.lower().find(pattern.lower())
-        if i >= 0:
-            i_to = i + len(pattern)
+        for match in self._regex_exact[pattern].finditer(text):
             yield (
-                text[i:i_to],
-                (i, i_to),
-                1.0  # Match score, disregarding case mismatch
+                match.group(),
+                match.span(),
+                1.0,  # Score
             )
+
+        # i = text.lower().find(pattern.lower())
+        # if i >= 0:
+        #     i_to = i + len(pattern)
+        #     yield (
+        #         text[i:i_to],
+        #         (i, i_to),
+        #         1.0  # Match score, disregarding case mismatch
+        #     )
 
     def _extract_email(self, text):
 
