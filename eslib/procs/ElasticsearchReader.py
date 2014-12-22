@@ -112,14 +112,20 @@ class ElasticsearchReader(Generator):
             return
 
         self.log.info("Fetching initial scan batch from Elasticsearch.")
-        res = self._es.search(
-            index=self.config.index,
-            doc_type = self.config.doctype,
-            scroll=self.config.scroll_ttl,
-            size=self.config.size,
-            search_type=("scan" if self.config.scan else None),
-            body=body
+        try:
+            res = self._es.search(
+                index=self.config.index,
+                doc_type = self.config.doctype,
+                scroll=self.config.scroll_ttl,
+                size=self.config.size,
+                search_type=("scan" if self.config.scan else None),
+                body=body
             )
+        except Exception as e:
+            self.log.critical("Initial search (scan) failed. Aborting. %s: %s" % (e.__class__.__name__, e))
+            self.abort()
+            return
+
         self._scroll_id = res["_scroll_id"]
         remaining = res["hits"]["total"]
 
