@@ -21,7 +21,11 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         username          = guest      :
         password          = guest      :
         virtual_host      = None       :
-        queue             = "default"  :
+        exchange          = None       :
+        consuming         = True       : Consume from the queue, rather than to listen on an
+                                         exclusive queue that will be deleted when disconnect.
+                                         Non-consuming behaviour only works with an 'exchange'.
+        queue             = "default"  : Not used if 'exchange' is specified.
 
         max_reconnects    = 3          :
         reconnect_timeout = 3          :
@@ -54,7 +58,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
     #region Generator stuff
 
     def _start_consuming(self):
-        self._consumer_tag = self._channel.basic_consume(self._callback, queue=self.config.queue, no_ack=True)
+        self._consumer_tag = self._channel.basic_consume(self._callback, queue=self._queue_name, no_ack=True)
 
     def _stop_consuming(self):
         if self._channel:

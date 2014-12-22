@@ -25,7 +25,15 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         username          = guest      :
         password          = guest      :
         virtual_host      = None       :
-        queue             = "default"  :
+        exchange          = None       : If specified, data is written to this 'exchange', and also
+                                         persisted on a durable queue '<exchange>_shared'. Clients can
+                                         ask to listen to the exchange on this queue ('consumable'
+                                         behaviour, the default), or to listen to a live stream on an
+                                         exclusive queue that is a copy of all data meant only for that
+                                         listener. Clients connected to the shared queue will consume data
+                                         from it, thus splitting workload (intended) or competing for the
+                                         same data (unintended).
+        queue             = "default"  : Not used if 'exchange' is specified.
 
         max_reconnects    = 3          :
         reconnect_timeout = 3          :

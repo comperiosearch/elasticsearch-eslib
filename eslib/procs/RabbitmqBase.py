@@ -2,6 +2,7 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Configurable import Configurable
 import pyrabbit.api as rabbit
+from pyrabbit.http import HTTPError
 import pika
 import time
 
@@ -16,7 +17,9 @@ class RabbitmqBase(Configurable):
             username     = None,
             password     = None,
             virtual_host = None,
-            queue        = "default"
+            queue        = "default",
+            exchange     = None,
+            consuming    = True
         )
 
         self.config.max_reconnects    = 3
@@ -25,6 +28,8 @@ class RabbitmqBase(Configurable):
         # Pika connection and channel
         self._connection = None
         self._channel = None
+        # Queue name assigned by server
+        self._queue_name = None
 
     #region Admin
 
@@ -37,32 +42,57 @@ class RabbitmqBase(Configurable):
         return (
             "%s:%d" % (self.config.host, self.config.admin_port),
             vhost or self.config.virtual_host,
-            name or self.config.queue
+            name or self._queue_name or self.config.queue
         )
 
-    def create_queue(self, vhost=None, name=None):
+    def delete_exchange(self, name=None, vhost=None):
+        exchange = name or self.config.exchange
+        if not exchange:
+            return
+        (h, vh, q) = self._get_addr(vhost, name)
+        client = rabbit.Client(h, self.config.username, self.config.password)
+        try:
+            client.delete_exchange(vh, exchange)
+        except HTTPError as e:
+            if e.status == 404:
+               self.log.debug("Could not delete exchange '%s', not found." % q)
+
+    def create_queue(self, name=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, name)
         client = rabbit.Client(h, self.config.username, self.config.password)
         client.create_queue(vh, q)
 
-    def delete_queue(self, vhost=None, name=None):
+    def delete_queue(self, name=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, name)
         client = rabbit.Client(h, self.config.username, self.config.password)
-        client.delete_queue(vh, q)
+        try:
+            client.delete_queue(vh, q)
+        except HTTPError as e:
+            if e.status == 404:
+               self.log.debug("Could not delete queue '%s', not found." % q)
 
-    def purge_queue(self, vhost=None, name=None):
+    def purge_queue(self, name=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, name)
         client = rabbit.Client(h, self.config.username, self.config.password)
-        client.purge_queue(vh, q)
+        try:
+            client.purge_queue(vh, q)
+        except HTTPError as e:
+            if e.status == 404:
+               self.log.debug("Could not purge queue '%s', not found." % q)
 
-    def get_queues(self, vhost=None, *args):
+    def get_queue(self, name=None, vhost=None):
+        (h, vh, q) = self._get_addr(vhost, name)
+        client = rabbit.Client(h, self.config.username, self.config.password)
+        return client.get_queue(vh, q)
+
+    def get_queues(self, queues=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, None)
         client = rabbit.Client(h, self.config.username, self.config.password)
-        queues = [q for q in client.get_queues() if not args or q["name"] in args]
-        return queues
+        qq = [q for q in client.get_queues(vh) if not queues or q["name"] in queues]
+        return qq
 
-    def DUMP_QUEUES(self, vhost=None, *args):
-        queues = self.get_queues(vhost, *args)
+    def DUMP_QUEUES(self, queues=None, vhost=None):
+        queues = self.get_queues(vhost, queues)
         # Some potentially interesting stuff:
         # idle_since (date as string)
         # messages_unacknowledged
@@ -102,10 +132,31 @@ class RabbitmqBase(Configurable):
             virtual_host=self.config.virtual_host,
             heartbeat_interval=60))
         self._channel = self._connection.channel()
-        # Make sure the queue exists
-        self._channel.queue_declare(queue=self.config.queue, durable=True)
+        # Make sure the exchange exists (if any)
+        if self.config.exchange:
+            self._channel.exchange_declare(exchange=self.config.exchange, type="fanout")
+
+            # Make sure one durable queue exists
+            result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
+            # If this is a writer or a shared/consuming reader, this is the queue we keep track of
+
+            # Otherwise, use this exclusive queue that will be deleted when we close the connection:
+            if not self.config.consuming:
+                # This queue will be deleted when we close the connection.
+                # TODO: Perhaps create the ID ("queue") ourselves so it is easier to see which exchange it belongs to?
+                result = self._channel.queue_declare(exclusive=True)
+
+            # Bind queue to exchange
+            self._queue_name = result.method.queue
+            self._channel.queue_bind(exchange=self.config.exchange, queue=self._queue_name)
+        else:
+            # Make sure the queue exists
+            result = self._channel.queue_declare(queue=self.config.queue, durable=True)
+            self._queue_name = result.method.queue
+
 
     def _close_connection(self):
+        self._queue_name = None
         if self._connection:
             try:
                 self._channel.close()
@@ -154,7 +205,11 @@ class RabbitmqBase(Configurable):
         try_again = True
         while not ok and try_again:
             try:
-                self._channel.basic_publish(exchange="", routing_key=self.config.queue, body=data, properties=properties)
+                self._channel.basic_publish(
+                    exchange=self.config.exchange or "",
+                    routing_key=self._queue_name,  # Fanout exchange should ignore this
+                    body=data,
+                    properties=properties)
                 ok = True
             except pika.exceptions.ConnectionClosed as e:
                 if try_again:
