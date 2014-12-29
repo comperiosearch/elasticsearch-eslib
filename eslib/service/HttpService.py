@@ -298,10 +298,7 @@ class HttpService(Service):
 
     def _mgmt_update(self, payload, *args, **kwargs):
         if self.update(payload):
-            if self.restart():
-                return {"message": "Processing update and (re)started."}
-            else:
-                return {"warning": "Processing was not updated and (re)configuring."}
+            return {"message": "Processing updated."}
         else:
             return {"warning": "Processing was not updated."}
 

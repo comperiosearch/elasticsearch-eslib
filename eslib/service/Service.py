@@ -44,6 +44,9 @@ class Service(Configurable):
         #print "FULL=[%s]" % fullPath
         self.log = logging.getLogger("servicelog.%s"  % fullPath)
 
+        self.log.className = className
+        self.log.instanceName = name
+
     #region Debugging
 
     def DUMP(self):
@@ -139,7 +142,7 @@ class Service(Configurable):
     def resume(self):
         return self.on_resume()
 
-    def update(self, config, restart=True):
+    def update(self, config):
         return self.on_update(config)
 
     def status(self, *procs):
@@ -174,7 +177,7 @@ class Service(Configurable):
     def on_resume(self):
         return False
     def on_update(self, config):
-        return False
+        return True  # No update is an ok update
 
     #endregion Event handlers for override
 

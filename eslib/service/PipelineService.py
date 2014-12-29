@@ -22,8 +22,10 @@ class PipelineService(Service):
         return True  # TODO
 
     def on_restart(self):
-        self.head.restart()
-        return True  # TODO
+        if not self.head.running:
+            self.head.start()
+        else:
+            return True
 
     def on_stop(self):
         self.head.stop()
@@ -42,5 +44,12 @@ class PipelineService(Service):
     def on_resume(self):
         self.head.resume()
         return True  # TODO
+
+    def on_update(self, config):
+        # Auto-start on update
+        if not self.head.running:
+            self.head.start()
+        else:
+            return True
 
     #endregion Controller overrides@
