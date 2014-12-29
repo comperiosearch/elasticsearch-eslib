@@ -4,11 +4,6 @@ import unittest
 from eslib.procs import PatternRemover
 from eslib import esdoc
 
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-
 class TestPatternRemover(unittest.TestCase):
 
     def test_str(self):

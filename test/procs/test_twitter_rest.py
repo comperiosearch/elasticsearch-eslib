@@ -8,7 +8,8 @@ import itertools
 from mock import Mock
 from dateutil.parser import parse
 from eslib.procs import TwitterUserGetter, TwitterFollowerGetter
-from eslib import Twitter, Config
+from eslib.procs.twitter import Twitter
+from eslib import Config
 
 
 MOCK_RESPONSE = {'lang': u'en',

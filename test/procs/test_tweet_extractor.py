@@ -1,13 +1,8 @@
 # -*- coding: utf-8 -*-
-import os
 
+import os
 import unittest, json
 from eslib.procs import TwitterMonitor, TweetExtractor
-
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
 
 class TestTwitterMonitor(unittest.TestCase):
 
@@ -54,7 +49,7 @@ class TestTwitterMonitor(unittest.TestCase):
         self.assertTrue(tweet["_source"]["user"]["lang"] == "en")
         self.assertTrue(tweet["_source"]["user"]["name"] == "mark fester")
         self.assertFalse("description" in tweet["_source"]["user"])
-        self.assertTrue(str(tweet["_source"]["user"]["created_at"]) == "2013-11-26 14:21:35+00:00")
+        self.assertTrue(str(tweet["_source"]["user"]["created_at"]) == "2013-11-26 14:21:35")
 
         # Entities
         # // TODO

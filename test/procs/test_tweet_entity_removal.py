@@ -5,11 +5,6 @@ import unittest, json
 from eslib.procs import TweetEntityRemover
 from eslib import esdoc
 
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-
 class TestTweetEntityRemoval(unittest.TestCase):
 
     def test_all(self):

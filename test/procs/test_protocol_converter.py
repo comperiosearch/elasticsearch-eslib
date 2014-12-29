@@ -3,10 +3,6 @@
 import unittest
 from eslib.procs import ProtocolConverter
 
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
 class TestProtocolConverter(unittest.TestCase):
 
     def test_func_one_lambda(self):

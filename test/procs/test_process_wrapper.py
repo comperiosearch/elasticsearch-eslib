@@ -6,7 +6,7 @@ from time import sleep
 import signal
 
 import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
+LOG_FORMAT = '%(levelname) -10s %(className) -15s %(instanceName) -15s %(funcName) -15s %(lineno) -5d: %(message)s'
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 class TestProtocolWrapper(unittest.TestCase):

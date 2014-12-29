@@ -5,7 +5,7 @@ import time
 
 import requests
 
-from .Configurable import Configurable
+from ..Configurable import Configurable
 
 
 class Neo4j(Configurable):

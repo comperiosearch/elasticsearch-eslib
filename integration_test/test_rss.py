@@ -1,27 +1,16 @@
 # -*- coding: utf-8 -*-
 
+import eslib
 import unittest
+from elasticsearch.client.indices import IndicesClient
 from eslib.procs import RssMonitor, ElasticsearchWriter
 from eslib import Processor
 from eslib import debug
 from eslib.time import ago2date
 from time import sleep
+from eslib import prog
 
-import logging
-LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) 5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-console = logging.StreamHandler()
-console.setLevel(logging.TRACE)
-console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) 5d %(levelname) -10s %(message)s"))
-
-proclog = logging.getLogger("proclog")
-proclog.setLevel(logging.TRACE)
-proclog.addHandler(console)
-
-doclog  = logging.getLogger("doclog")
-doclog.setLevel(logging.TRACE)
-doclog.addHandler(console)
+prog.initlogs()
 
 # NOTE: The following integration tests are expected to be executed in sequence,
 #       and there must exist an Elasticsearch server to store the data.
@@ -29,17 +18,18 @@ doclog.addHandler(console)
 #       And there must be time inbetween for indexing to take place.
 
 elasticsearch_host = "localhost:9200"
+elasticsearch_index = "rss_test"
 
 class TestRSS(unittest.TestCase):
 
     def test_000_delete_index_just_in_case(self):
         # Make this the first step, just in case
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
         deleted = p.delete_index()
         print "deleted =", deleted
 
     def test_001_config(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
         self.assertFalse(p.config.simulate)
         self.assertEqual(p.config.channel_index, "rss")
         self.assertIsNone(p.config.item_index)
@@ -48,12 +38,13 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(p._item_index, "rss_test")
 
     def test_002_create_index(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
         ok = p.create_index()
         self.assertTrue(ok)
 
     def test_003_add_channels(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         n = p.add_channels(
             ("digi", "http://feeds.allerinternett.no/articles/digi/rss.rss"),
             ("norsis", "https://norsis.no/feed"),
@@ -63,7 +54,8 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(n, 3);
 
     def test_004_list_channels_all(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         channels = p.list_channels()
         for channel in channels:
             print "--- channel ---"
@@ -73,7 +65,8 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(len(channels), 3)
 
     def test_005_list_channels_two(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         channels = p.list_channels(["digi", "norsis"])
         for channel in channels:
             print "--- channel ---"
@@ -83,14 +76,16 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(len(channels), 2)
 
     def test_006_delete_channels_too_many(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         n = p.delete_channels(["bull", "vg_sport", "shit"])
         print "tot =", n
         self.assertEqual(n, 1)
 
     def fetch_items(self, force=False):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test",
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index,
                        include_linked_page=False)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         items = p.fetch_items(force=force, simulate=False)
         count = 0
         for item in items:
@@ -114,7 +109,8 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(n, 30)
 
     def list_items(self, since_date=None, limit=10, channel_names=None):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         items = p.list_items(since_date=since_date, limit=limit, channel_names=channel_names)
         count = 0
         for item in items:
@@ -143,18 +139,21 @@ class TestRSS(unittest.TestCase):
 
     def test_014_delete_items_digi(self):
         p = RssMonitor(index="rss_test", simulate=True)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         n = p.delete_items(["digi"])
         print "tot =", n
         self.assertEqual(n, 20)
 
     def test_015_delete_items_before_date(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         n = p.delete_items(before_date=ago2date("3d"))
         print "tot =", n
         self.assertLess(n, 10)
 
     def test_016_delete_channel_recreate_items_remain(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
 
         deleted = p.delete_channels(["norsis"])
         print "deleted =", deleted
@@ -170,7 +169,8 @@ class TestRSS(unittest.TestCase):
         self.assertGreater(count, 0);
 
     def test_017_delete_channel_with_items_recreate_items_gone(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
 
         deleted = p.delete_channels(["norsis"], delete_items=True)
         print "deleted =", deleted
@@ -186,13 +186,15 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(count, 0);
 
     def test_018_delete_channels(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         n = p.delete_channels()
         print "deleted =", n
         self.assertEqual(n, 2)
 
     def test_019_delete_index(self):
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index="rss_test")
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index)
+        IndicesClient(p._get_es()).refresh(elasticsearch_index)
         ok = p.delete_index()
         self.assertTrue(ok)
 
@@ -205,8 +207,7 @@ class TestRSS_monitor(unittest.TestCase):
         w = Processor()
         w.create_connector(lambda doc: doc, "end")
 
-        index = "rss_test2"
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=index, interval=10)  # 10 seconds
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index, interval=10)  # 10 seconds
 
         print "Deleting potential old index, just in case"
         deleted = p.delete_index()
@@ -255,8 +256,7 @@ class TestRSS_monitor(unittest.TestCase):
 
     def test_monitor_pipeline_write(self):
 
-        index = "rss_test2"
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=index, interval=10)  # 10 seconds
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index, interval=10)  # 10 seconds
 
         print "Deleting potential old index, just in case"
         deleted = p.delete_index()
@@ -303,8 +303,7 @@ class TestRSS_monitor(unittest.TestCase):
 
     def test_monitor_direct_write(self):
 
-        index = "rss_test2"
-        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=index, interval=10)  # 10 seconds
+        p = RssMonitor(elasticsearch_hosts=[elasticsearch_host], index=elasticsearch_index, interval=10)  # 10 seconds
 
         print "Deleting potential old index, just in case"
         deleted = p.delete_index()

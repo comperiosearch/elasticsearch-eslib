@@ -1,26 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import eslib
 import unittest
 from eslib.procs import RabbitmqMonitor, RabbitmqWriter, FileWriter
 from time import sleep
+from eslib import prog
 
-#region logging setup
-import logging
-LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) 5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-console = logging.StreamHandler()
-console.setLevel(logging.TRACE)
-console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) 5d %(levelname) -10s %(message)s"))
-
-proclog = logging.getLogger("proclog")
-proclog.setLevel(logging.TRACE)
-proclog.addHandler(console)
-
-doclog  = logging.getLogger("doclog")
-doclog.setLevel(logging.TRACE)
-doclog.addHandler(console)
-#endregion logging setup
+prog.initlogs()
 
 # NOTE: This requires a rabbit mq server to connect to with appropriate accesses
 

@@ -3,11 +3,6 @@
 import unittest
 from eslib.procs import BlacklistFilter
 
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-
 class TestBlacklistFilter_str(unittest.TestCase):
 
     def test_str_nohit(self):
