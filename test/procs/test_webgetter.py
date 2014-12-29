@@ -3,11 +3,6 @@ from eslib.procs import WebGetter
 from eslib import debug
 import random, time
 
-import logging
-LOG_FORMAT = ('%(levelname) -10s %(name) -55s %(funcName) -30s %(lineno) -5d: %(message)s')
-#logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-
-
 res = []
 
 class TestWebGetter(unittest.TestCase):

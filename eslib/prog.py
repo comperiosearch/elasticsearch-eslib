@@ -33,12 +33,19 @@ def initlogs(config_file=None):
     else:
         console = logging.StreamHandler()
         console.setLevel(logging.TRACE)
-        console.setFormatter(logging.Formatter("%(lastname)s: %(message)s"))
+        LOG_FORMAT = '%(firstName) -20s %(levelname) -10s %(className) -15s %(instanceName) -15s %(funcName) -15s %(lineno) -5d: %(message)s'
+        console.setFormatter(logging.Formatter(LOG_FORMAT))
 
         proclog = logging.getLogger("proclog")
         proclog.setLevel(logging.TRACE)
+        proclog.propagate = False
         proclog.addHandler(console)
 
         doclog  = logging.getLogger("doclog")
         doclog.setLevel(logging.TRACE)
+        doclog.propagate = False
         doclog.addHandler(console)
+
+        rootlog = logging.getLogger()
+        rootlog.setLevel(logging.WARNING)
+        rootlog.addHandler(console)

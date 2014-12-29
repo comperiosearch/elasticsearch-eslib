@@ -4,7 +4,7 @@ from itertools import izip
 import time, logging
 
 from ..Generator import Generator
-from ..neo4j import Neo4j
+from .neo4j import Neo4j
 
 
 class Neo4jWriter(Generator):

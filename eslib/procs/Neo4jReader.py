@@ -1,7 +1,7 @@
 __author__ = 'mats'
 
 from ..Generator import Generator
-from ..neo4j import Neo4j
+from .neo4j import Neo4j
 
 from itertools import izip
 import time, logging

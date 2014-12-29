@@ -85,6 +85,9 @@ class Processor(Configurable):
         self.doclog  = logging.getLogger("doclog.%s"  % fullPath)
         self.log     = logging.getLogger("proclog.%s" % fullPath)
 
+        self.log.className = self.doclog.className = className
+        self.log.instanceName = self.doclog.instanceName = name
+
     def _iter_subscribers(self):
         for socket in self.sockets.itervalues():
             for connector in socket.connections:

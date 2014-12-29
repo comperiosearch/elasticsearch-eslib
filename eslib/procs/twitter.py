@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from .Configurable import Configurable
+from ..Configurable import Configurable
 from TwitterAPI import TwitterAPI, TwitterResponse
 from dateutil.parser import parse
 

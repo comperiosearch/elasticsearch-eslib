@@ -1,7 +1,7 @@
 __author__ = 'mats'
 
 from ..Generator import Generator
-from ..twitter import Twitter
+from .twitter import Twitter
 
 import time
 

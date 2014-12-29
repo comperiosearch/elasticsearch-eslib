@@ -19,7 +19,6 @@ from .Processor    import Processor
 from .Generator    import Generator
 from .Monitor      import Monitor
 from .Configurable import Configurable, Config
-from .twitter      import Twitter
 
 
 __all__ = (
@@ -32,7 +31,6 @@ __all__ = (
     "Generator",
     "Monitor",
     "Configurable",
-    "Twitter",
     "Config"
 )
 
@@ -54,30 +52,20 @@ sys.stdout = codecs.getwriter(_encoding_stdout)(sys.stdout)
 import logging
 import logging.config
 
-# Python 3 way:
-# Add firstname and lastname to log record, where logger name is like "firstname.bla.bla.lastname"
-#old_factory = logging.getLogRecordFactory()
-#def new_factory(*args, **kwargs):
-#    record = old_factory(*args, **kwargs)
-#    record.firstname = record.name.split(".")[0]
-#    record.lastname = record.name.split(".")[-1]
-#    record.names = record.name.split(".")
-#    return record
-#logging.setLogRecordFactory(new_factory)
-
-# Python 2 way:
-class _MyLogRecord(logging.LogRecord):
-    def __init__(self, name, level, fn, lno, msg, args, exc_info, func):
-        logging.LogRecord.__init__(self, name, level, fn, lno, msg, args, exc_info, func)
-        self.firstname = self.name.split(".")[0]
-        self.lastname = self.name.split(".")[-1]
-        self.names = self.name.split(".")
-
-class _MyLogger(logging.getLoggerClass()):
+class _ExtendedLogger(logging.getLoggerClass()):
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None):
-        return _MyLogRecord(name, level, fn, lno, msg, args, exc_info, func)
+        rec = logging.LogRecord(name, level, fn, lno, msg, args, exc_info, func)
 
-logging.setLoggerClass(_MyLogger)
+        rec.className = self.className if hasattr(self, 'className') else None
+        rec.instanceName = self.instanceName if hasattr(self, 'instanceName') else None
+
+        rec.firstName = name.split(".")[0]
+        rec.lastName = name.split(".")[-1]
+        rec.names = name.split(".")
+
+        return rec
+
+logging.setLoggerClass(_ExtendedLogger)
 
 
 def _log_status(self, message, *args, **kws):
@@ -112,15 +100,5 @@ logging.Logger.status  = _log_status
 logging.Logger.verbose = _log_verbose
 logging.Logger.trace   = _log_trace
 logging.Logger.debugn  = _log_debug_n
-
-def esdoc_logmsg(self, doc, message):
-    """
-    :type doc: dict
-    :type message: str
-    """
-    id      = doc.get("_id")
-    index   = doc.get("_index")
-    doctype = doc.get("_type")
-    return "/%s/%s/%s: %s" % (index, doctype, id)
 
 #endregion Logging stuff
