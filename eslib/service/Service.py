@@ -27,25 +27,13 @@ class Service(Configurable):
     def name(self):
         return self.config.name
 
-    def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
-        # Set up logging
-        parts = []
-        if not self.__module__ == "__main__": parts.append(self.__module__)
-        className = self.__class__.__name__
-        parts.append(className)
+    def _setup_logging(self):
+        serviceName = self.name
 
-        name = self.name
-        if name:
-            if name.endswith(".py"):
-                name = name[:-3]
-            if not name == className:
-                parts.append(name)
-        fullPath = ".".join(parts)
-        #print "FULL=[%s]" % fullPath
-        self.log = logging.getLogger("servicelog.%s"  % fullPath)
-
-        self.log.className = className
-        self.log.instanceName = name
+        self.log = logging.getLogger("servicelog.%s"  % serviceName)
+        self.log.serviceName  = serviceName
+        self.log.className    = self.__class__.__name__
+        self.log.instanceName = serviceName
 
     #region Debugging
 

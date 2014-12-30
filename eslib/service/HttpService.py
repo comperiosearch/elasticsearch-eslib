@@ -71,7 +71,7 @@ class HttpService(Service):
         self.add_route("GET|POST", "suspend"   , self._mgmt_suspend)
         self.add_route("GET|POST", "resume"    , self._mgmt_resume)
 
-        self._receiver = HttpMonitor(name="receiver", hook=self._hook)
+        self._receiver = HttpMonitor(service=self, name="receiver", hook=self._hook)
         self.register_procs(self._receiver)
 
     #region Debugging

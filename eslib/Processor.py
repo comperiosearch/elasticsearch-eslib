@@ -20,7 +20,12 @@ class Processor(Configurable):
         super(Processor, self).__init__(**kwargs)
         self.sleep = 0.001
 
-        self.config.set_default(name=self.__class__.__name__)
+        self.config.set_default(
+            name    = self.__class__.__name__,
+            service = None
+        )
+
+        self._setup_logging()
 
         self.is_generator = False
 
@@ -29,8 +34,6 @@ class Processor(Configurable):
         self.connectors = {}
         self.default_connector = None
         self.default_socket    = None
-
-        self._setup_logging()
 
         # Execution control status, needed by generators and monitors
         self.accepting  = False
@@ -68,25 +71,33 @@ class Processor(Configurable):
             return "stopped"
 
     def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
-        # Set up logging
-        parts = []
-        if not self.__module__ == "__main__": parts.append(self.__module__)
-        className = self.__class__.__name__
-        parts.append(className)
+        # # Set up logging
+        # parts = []
+        # if not self.__module__ == "__main__": parts.append(self.__module__)
+        # className = self.__class__.__name__
+        # parts.append(className)
+        #
+        # name = self.name
+        # if name:
+        #     if name.endswith(".py"):
+        #         name = name[:-3]
+        #     if not name == className:
+        #         parts.append(name)
+        # fullPath = ".".join(parts)
+        # #print "FULL=[%s]" % fullPath
 
-        name = self.name
-        if name:
-            if name.endswith(".py"):
-                name = name[:-3]
-            if not name == className:
-                parts.append(name)
-        fullPath = ".".join(parts)
-        #print "FULL=[%s]" % fullPath
+        serviceName = "UNKNOWN"
+        if self.config.service:
+            serviceName = self.config.service.name
+
+        fullPath = ".".join([serviceName, self.name])
+
         self.doclog  = logging.getLogger("doclog.%s"  % fullPath)
         self.log     = logging.getLogger("proclog.%s" % fullPath)
 
-        self.log.className = self.doclog.className = className
-        self.log.instanceName = self.doclog.instanceName = name
+        self.log.serviceName  = self.doclog.serviceName  = serviceName
+        self.log.className    = self.doclog.className    = self.__class__.__name__
+        self.log.instanceName = self.doclog.instanceName = self.name
 
     def _iter_subscribers(self):
         for socket in self.sockets.itervalues():

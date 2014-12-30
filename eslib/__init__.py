@@ -56,6 +56,7 @@ class _ExtendedLogger(logging.getLoggerClass()):
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None):
         rec = logging.LogRecord(name, level, fn, lno, msg, args, exc_info, func)
 
+        rec.serviceName = self.serviceName if hasattr(self, 'serviceName') else None
         rec.className = self.className if hasattr(self, 'className') else None
         rec.instanceName = self.instanceName if hasattr(self, 'instanceName') else None
 
