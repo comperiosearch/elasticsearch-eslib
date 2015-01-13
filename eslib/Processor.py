@@ -13,6 +13,41 @@ from .TerminalInfo import TerminalInfo
 from .Connector import Connector
 from .Socket import Socket
 
+class ProcessorStatistics(object):
+    def __init__(self, owner):
+        """
+        :param Processor owner:
+        """
+        self.processor = owner
+
+        self.input_count      = 0  # Number delivered to processor methods by connectors
+        self.output_count     = 0  # Number written to output sockets
+        self.pending_count    = 0  # Currently pending processing; sum of input and internal processing queues; incl. waiting for write
+        self.processed_count  = 0
+        self.started_time     = 0
+        self.ended_time       = 0
+        self.elapsed_time     = 0
+        self.eta_time         = 0  # Estimated time to finished
+        self.processing_time  = 0  # Time inside connector target method, generator tick method or shutdown method
+        self.iteration_number = 0  # Number of times processor has been started
+        self.processing_velocity_hour   = 0
+        self.processing_velocity_minute = 0
+        self.processing_velocity_second = 0
+        self.pending_growth_hour   = 0
+        self.pending_growth_minute = 0
+        self.pending_growth_second = 0
+
+        # These are not particular to the document processor, but to the entire process
+        self.thread_count     = 0
+        self.max_thread_count = 0  # PER PROCESS
+        self.memory_used      = 0  # PER PROCESS
+        self.max_memory_used  = 0  # PER PROCESS
+
+
+#TODO: CALLBACK chains: 'stopped', 'aborted'
+#TODO: RESOLVE BOTTLENECKS
+#DOCUMENT STATISTICS, CALLBACK CHAINS, BOTTLENECKS
+
 class Processor(Configurable):
     "Base class for workflow processing object."
 

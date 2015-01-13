@@ -29,7 +29,7 @@ from .PatternRemover        import PatternRemover
 from .HtmlRemover           import HtmlRemover
 from .BlacklistFilter       import BlacklistFilter
 from .Throttle              import Throttle
-from .Transformer     import Transformer
+from .Transformer           import Transformer
 from .EntityExtractor       import EntityExtractor
 from .ProcessWrapper        import ProcessWrapper
 from .CLIReader             import CLIReader
