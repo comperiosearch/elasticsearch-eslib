@@ -8,9 +8,10 @@ Base classes for wrapping document processing processors into processing graphs/
 """
 
 
-from .Service            import Service
+from .Service            import Service, status
 from .HttpService        import HttpService
 from .PipelineService    import PipelineService
+
 
 __all__ = (
     "Service",

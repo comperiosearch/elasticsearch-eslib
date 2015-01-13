@@ -48,14 +48,14 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(body)
 
-    def do_GET(self):
-        "Treat URL path below root as a document of 'str' type."
-        # Use path as data
-        path = self.path[1:]
-        self.server.owner.doclog.debug("GET : Incoming document from '%s', length=%d." % (self.client_address, len(path)))
-        res = self.server.owner._incoming_GET(path)
-        self._respond(res)
-
+    # def do_GET(self):
+    #     "Treat URL path below root as a document of 'str' type."
+    #     # Use path as data
+    #     path = self.path
+    #     self.server.owner.doclog.debug("GET : Incoming document from '%s', length=%d." % (self.client_address, len(path)))
+    #     res = self.server.owner._incoming_GET(self, "GET", path, path)
+    #     self._respond(res)
+    #
     def _do_VERB_that_takes_data(self, verb):
 
         # Note: We ignore content type (requirement would be "application/json" or whatever..), and assume it is JSON.
@@ -71,17 +71,20 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
             owner.doclog.warning("%s: Incoming document of size %d exceeded max length of %d." % (verb, length, max_length))
             self._respond_error("Too large data bulk dropped by server. Length = %d exceeding max length = %d." % (length, max_length))
         else:
-            path = self.path[1:]
+            path = self.path#[1:]
             data = self.rfile.read(length).decode('utf-8')
-            res = self.server.owner._incoming_WITH_DATA(verb, path, data)
+            res = self.server.owner._incoming_WITH_DATA(self, verb, path, data)
             self._respond(res)
 
+    def do_GET(self):
+        self._do_VERB_that_takes_data("GET")
     def do_PUT(self):
         self._do_VERB_that_takes_data("PUT")
     def do_POST(self):
         self._do_VERB_that_takes_data("POST")
     def do_DELETE(self):
         self._do_VERB_that_takes_data("DELETE")
+
 
 class HttpMonitor(Monitor):
     """
@@ -125,44 +128,41 @@ class HttpMonitor(Monitor):
         self._server.server_close()
         self._server = None
 
-    def _incoming_GET(self, path):
+    def _incoming_WITH_DATA(self, request_handler, verb, path, data):
         if self.suspended:
             return "Server suspended; incoming data ignored."
 
-        #if not path:
-        #    return "Missing data."
-
-        self.total += 1
-        self.count += 1
-        self.output.send(path)
-
-        return self._call_hook("GET", path, None)
-
-    def _incoming_WITH_DATA(self, verb, path, data):
-        if self.suspended:
-            return "Server suspended; incoming data ignored."
-
-        #if not data:
-        #    return "Missing data."
-
-        if data:
-            # TODO: Check for content type application/json before trying to deserialize json
-            try:
-                doc = json.loads(data)
-            except Exception as e:
-                self.doclog.error("Failed to parse incoming data as JSON: " + e.message)
-                return "Failed to parse data as JSON."
-
+        if verb == "GET":
             self.total += 1
             self.count += 1
-            self.output.send(doc)
+            # For GET, use path as document
+            if self.output.has_output:
+                self.output.send(path[1:])
 
-        return self._call_hook(verb, path, data)
+        data_obj = None
+        if data:
+            if request_handler.headers.gettype() == "application/json":
+                try:
+                    data_obj = json.loads(data)
+                except Exception as e:
+                    self.doclog.error("Failed to parse incoming data as JSON: " + e.message)
+                    return "Failed to parse data as JSON."
+            else:
+                data_obj = data
 
-    def _call_hook(self, http_verb, path, data):
+        if verb != "GET":
+            self.total += 1
+            self.count += 1
+            if self.output.has_output:
+                # For non-GET, use data as document
+                self.output.send(data_obj)
+
+        return self._call_hook(request_handler, verb, path, data_obj)
+
+    def _call_hook(self, request_handler, http_verb, path, data):
         if self.hook:
             try:
-                return self.hook(http_verb, path, data)
+                return self.hook(request_handler, http_verb, path, data)
             except Exception as e:
                 self.log.exception("Failed to call hook: %s: %s" % (e.__class__.__name__, e))
 

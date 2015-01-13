@@ -129,7 +129,7 @@ class ElasticsearchReader(Generator):
         self._scroll_id = res["_scroll_id"]
         remaining = res["hits"]["total"]
 
-        self.total = remaining # NOTE: Or should this be cut at self.config.limit, if set?
+        self.total = remaining if not self.config.limit else self.config.limit
         self.count = 0
 
         # DEBUG:
@@ -152,14 +152,14 @@ class ElasticsearchReader(Generator):
                 for hit in hits:
                     if self.end_tick_reason:
                         return
+                    self.output.send(hit)
                     self.count += 1
-                    if self.config.limit and self.count > self.config.limit:
+                    if self.config.limit and self.count >= self.config.limit:
                         if (remaining > 0):
                             self._release_scroll_context()
                         self._es = None
                         self.stop()
                         return
-                    self.output.send(hit)
 
         # Since we finished properly, no need to delete this on server
         self._scroll_id = None

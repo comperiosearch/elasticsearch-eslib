@@ -31,8 +31,27 @@ __all__ = (
     "Generator",
     "Monitor",
     "Configurable",
-    "Config"
+    "Config",
+
+    "unique"
 )
+
+#region Core stuff
+
+def unique(seq, idfun=None):
+   # order preserving
+   if idfun is None:
+       def idfun(x): return x
+   seen = {}
+   result = []
+   for item in seq:
+       marker = idfun(item)
+       if marker in seen: continue
+       seen[marker] = 1
+       result.append(item)
+   return result
+
+#endregion
 
 
 #region Encoding of stdin/stdout

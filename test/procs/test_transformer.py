@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-from eslib.procs import ProtocolConverter
+from eslib.procs import Transformer
 
 class TestProtocolConverter(unittest.TestCase):
 
@@ -9,7 +9,7 @@ class TestProtocolConverter(unittest.TestCase):
 
         csv2list = lambda doc: [",".join(doc)]
 
-        p = ProtocolConverter(func=csv2list, input_protocol="list", output_protocol="csv")
+        p = Transformer(func=csv2list, input_protocol="list", output_protocol="csv")
 
         output = []
         p.add_callback(lambda doc: output.append(doc))
@@ -30,7 +30,7 @@ class TestProtocolConverter(unittest.TestCase):
 
     def test_func_multi_yield(self):
 
-        p = ProtocolConverter(func=self.yieldfunc, input_protocol="str", output_protocol="str")
+        p = Transformer(func=self.yieldfunc, input_protocol="str", output_protocol="str")
 
         output = []
         p.add_callback(lambda doc: output.append(doc))
@@ -56,7 +56,7 @@ class TestProtocolConverter(unittest.TestCase):
             yield doc["to"]
 
     def test_graph_edge_convertion(self):
-        p = ProtocolConverter(func=self.edge2ids, input_protocol="str", output_protocol="str")
+        p = Transformer(func=self.edge2ids, input_protocol="str", output_protocol="str")
 
         output = []
         p.add_callback(lambda doc: output.append(doc))

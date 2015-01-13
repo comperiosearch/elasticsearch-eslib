@@ -52,7 +52,7 @@ def utcdate(obj):
     "Convert string or datetime object to a datetime object in UTC."
     dt = None
     if type(obj) is datetime.datetime:
-        dt = datetime.datetime()
+        dt = obj
     try:
         dt = dateutil.parser.parse(obj)
     except:

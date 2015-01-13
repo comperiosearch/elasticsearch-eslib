@@ -36,6 +36,11 @@ def initlogs(config_file=None):
         LOG_FORMAT = '%(firstName) -20s %(levelname) -10s %(className) -15s %(instanceName) -15s %(funcName) -15s %(lineno) -5d: %(message)s'
         console.setFormatter(logging.Formatter(LOG_FORMAT))
 
+        servicelog = logging.getLogger("servicelog")
+        servicelog.setLevel(logging.TRACE)
+        servicelog.propagate = False
+        servicelog.addHandler(console)
+
         proclog = logging.getLogger("proclog")
         proclog.setLevel(logging.TRACE)
         proclog.propagate = False

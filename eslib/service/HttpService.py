@@ -1,10 +1,21 @@
 __author__ = 'Hans Terje Bakke'
 
-# TODO: Logging
-
-from .Service import Service
+from .Service import Service, ServiceOperationError
+from .UrlParamParser import UrlParamParser
 from ..procs.HttpMonitor import HttpMonitor
 import json, requests
+
+
+class Route(object):
+    def __init__(self, func, verb, path_specification=None, param_specifications=None):
+        self.func = func
+        self.verb = verb
+        self.path = path_specification
+        self.params = param_specifications
+        self.parser = UrlParamParser(path_specification=path_specification, param_specifications=param_specifications)
+
+    def parse(self, url):
+        return self.parser.parse(url)
 
 
 class HttpService(Service):
@@ -54,22 +65,24 @@ class HttpService(Service):
 
         self._receiver = None
         self._mgmt_endpoint = None
-        self._routes = {}
+        self._routes = []
+
+        self.log.debug("Setting up routes.")
 
         # Add default management routes to functions
-        self.add_route("GET"     , "info"      , self._mgmt_info)
-        self.add_route("GET"     , "help"      , self._mgmt_help)
-        self.add_route("GET"     , "status"    , self._mgmt_status)
-        self.add_route("GET|POST", "register"  , self._mgmt_register)
-        self.add_route("GET|POST", "unregister", self._mgmt_unregister)
-        self.add_route("POST"    , "shutdown"  , self._mgmt_shutdown)
-        self.add_route("POST"    , "update"    , self._mgmt_update)
-        self.add_route("GET|POST", "start"     , self._mgmt_start)
-        self.add_route("GET|POST", "restart"   , self._mgmt_restart)
-        self.add_route("GET|POST", "stop"      , self._mgmt_stop)
-        self.add_route("GET|POST", "abort"     , self._mgmt_abort)
-        self.add_route("GET|POST", "suspend"   , self._mgmt_suspend)
-        self.add_route("GET|POST", "resume"    , self._mgmt_resume)
+        self.add_route(self._mgmt_info      , "GET"     , "/info"      , None)
+        self.add_route(self._mgmt_help      , "GET"     , "/help"      , None)
+        self.add_route(self._mgmt_status    , "GET"     , "/status"    , None)
+        self.add_route(self._mgmt_register  , "GET|POST", "/register"  , None)
+        self.add_route(self._mgmt_unregister, "GET|POST", "/unregister", None)
+        self.add_route(self._mgmt_shutdown  , "POST"    , "/shutdown"  , None)
+        self.add_route(self._mgmt_update    , "POST"    , "/update"    , None)
+        self.add_route(self._mgmt_start     , "GET|POST", "/start"     , None)
+        self.add_route(self._mgmt_restart   , "GET|POST", "/restart"   , None)
+        self.add_route(self._mgmt_stop      , "GET|POST", "/stop"      , None)
+        self.add_route(self._mgmt_abort     , "GET|POST", "/abort"     , None)
+        self.add_route(self._mgmt_suspend   , "GET|POST", "/suspend"   , None)
+        self.add_route(self._mgmt_resume    , "GET|POST", "/resume"    , None)
 
         self._receiver = HttpMonitor(service=self, name="receiver", hook=self._hook)
         self.register_procs(self._receiver)
@@ -77,20 +90,15 @@ class HttpService(Service):
     #region Debugging
 
     def DUMP_ROUTES(self):
-        for route in self._routes.keys():
-            print route
+        print "%-6s %-20s %s" % ("VERB", "ROUTE", "QUERY PARAMETERS")
+        for route in self._routes:
+            print "%-6s %-20s %s" % (route.verb, route.path, route.params)
 
     #endregion Debugging
 
-    #region Controller management overrides
+    #region Service management overrides
 
-    def run(self, wait=False):
-        "Start running the controller itself. (Not the document processors.)"
-        if self._running:
-            return False  # Not started; was already running, or failed
-
-        self.on_setup()
-
+    def on_run(self):
         # Set the host address
         a = self.config.mgmt_endpoint.split(":")
         if len(a) > 0:
@@ -103,40 +111,32 @@ class HttpService(Service):
         else:
             self._receiver.config.port = self._assigned_port
 
+        self.log.info("Starting service management listener.")
+
         try:
             self._receiver.start()
-            self._running = True
         except Exception as e:
+            self.log.critical("Service managemnet listener failed to start.")
             return False  # Not started; failed
 
-        if wait:
-            self._receiver.wait()
-        return True  # Started; and potentially stopped again, in case we waited here
-
-    def shutdown(self, wait=True):
-        "Shut down the controller, including document processors."
-        if not self._running:
-            return False  # Not shut down; was not running
-        if not self._stop():
-            return False  # Not stopped properly
-
-        # Stop the receiver
-        self._receiver.stop()
-        # Note: We cannot wait for this with HttpMonitor, because it will enter a deadlock.
-        # (It will not finish unless the request has finished, and the request will not finish unless
-        # we return from here.)
-        if wait:
-            self._receiver.wait()
-        self._running = False
         return True
 
-    def wait(self):
-        "Wait until controller is shut down."
-        if not self._running:
-            return
-        self._receiver.wait()
+    def on_shutdown(self, wait):
+        # Stop the receiver
+        self.log.info("Stopping service management listener.")
+        self._receiver.stop()
+        return True
 
-    #endregion Controller management overrides
+    def on_wait(self):
+        # Note: We cannot use shutdown(wait=True) with HttpMonitor, because it will enter a deadlock.
+        # (It will not finish unless the request has finished, and the request will not finish unless
+        # we return from here.)
+        self.log.debug("Waiting for service management listener to stop.")
+        self._receiver.wait()
+        self.log.info("Service management listener stopped.")
+        return True  # Shut down successfully
+
+    #endregion Service management overrides
 
     #region Registration with remote management service
 
@@ -194,33 +194,33 @@ class HttpService(Service):
 
     #region Routing and Route management
 
-    def add_route(self, verbs, path, func):
+    def add_route(self, func, verbs, path, params):
         "Add a route from an incoming REST request to a function. Multiple verbs can be specified with pipe character."
-        if path and path.startswith("/"):
-            path = path [1:]
         for verb in verbs.split("|"):
-            key = "%s_%s" % (verb.strip().upper(), path.lower())
-            self._routes[key] = func
+            self._routes.append(Route(func, verb, path, params))
 
-    def _hook(self, verb, path, data, format="application/json"):
-        #print "VERB=[%s], PATH=[%s], DATA=[%s]" % (verb, path, data)
+    def get_route(self, verb, path):
+        for route in self._routes:
+            if route.verb == verb:
+                params = route.parse(path)
+                if params is not None:
+                    return route, params
+        return None, None
 
-        key = "%s_%s" % (verb.upper(), path.lower())
+    def _hook(self, request_handler, verb, path, data): #, format="application/json"):
 
-        func = self._routes.get(key)
-        # TODO: BETTER MATCHING AND PARSING INTO *args and **kwargs
-        args = []
-        kwargs = {}
+        route, params = self.get_route(verb, path)
 
-        if not func:
-            return {"error": "No route for '%s'." % key}
-        payload = None
-        if data and format == "application/json":
-            payload = json.loads(data)
-        else:
-            payload = data
+        if not route:
+            return {"error": "No route for '%s'." % path}
+
+        payload = data
+        # if data and format == "application/json":
+        #     payload = json.loads(data)
+
         try:
-            res = func(payload, *args, **kwargs)
+            # res = func(payload, *args, **kwargs)
+            res = route.func(request_handler, payload, **params)
             return res
         except Exception as e:
             self.log.exception("Unhandled exception.")

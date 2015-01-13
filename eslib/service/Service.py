@@ -1,12 +1,23 @@
-from __future__ import absolute_import
-
 __author__ = 'Hans Terje Bakke'
-
-# TODO: Logging
 
 import logging
 import time
 from ..Configurable import Configurable
+
+class ServiceOperationError(Exception):
+    def __init__(self, *args, **kwargs):
+        super(ServiceOperationError, self).__init__(self, *args, **kwargs)
+
+# Service states
+class status(object):
+    PENDING    = "pending"        # service running, but waiting for metadata configuration
+    IDLE       = "idle"           # service running, but not processing documents
+    PROCESSING = "processing"     # document processing currently in progress
+    STOPPING   = "stopping"       # processing is stopping
+    ABORTED    = "aborted"        # document processing aborted
+    FAILED     = "failed"         # service failure, no longer running
+    CLOSING    = "shutting_down"  # service is shutting down
+    DEAD       = "dead"           # service has been shut down (or was never started)
 
 
 class Service(Configurable):
@@ -18,14 +29,48 @@ class Service(Configurable):
         self._setup_logging()
 
         self._running = False
+        self._failed = False
+        self._processing = False
+        self._processing_aborted = False
+        self._processing_stopping = False
+        self._closing = False
+
+        self._metadata_initialized = False
         self._registered_procs = []
 
+        # Overriding classes should set this to True if the service needs metadata
+        self.requires_metadata = False
+
     def __str__(self):
-        return "%s|%s" % (self.__class__.__name__, self.name)
+        return "%s|%s (%s)" % (self.__class__.__name__, self.name, self.status)
 
     @property
     def name(self):
         return self.config.name
+
+    @property
+    def status(self):
+        if self._failed:
+            return status.FAILED
+        if not self._running:
+            return status.DEAD
+        if self._closing:
+            return status.CLOSING
+        if self._processing_aborted:
+            return status.ABORTED
+        if self._processing_stopping:
+            return status.STOPPING
+        if self.processing:
+            return status.PROCESSING
+        if self.requires_metadata and not self._metadata_initialized:
+            return status.PENDING
+        return status.IDLE
+
+    @property
+    def processing(self):
+        if not self._processing:
+            return False
+        return self.is_processing()  # TODO: What the hell to do if this call fails??
 
     def _setup_logging(self):
         serviceName = self.name
@@ -66,7 +111,7 @@ class Service(Configurable):
 
     #endregion Debugging
 
-    #region Controller management commands
+    #region Service management commands
 
     def configure(self, credentials, config, global_config):
         """
@@ -78,65 +123,148 @@ class Service(Configurable):
         """
         return self.on_configure(credentials, config, global_config)
 
+    def _call_failable(self, func):
+        try:
+            ok = func()
+        except:
+            ok = False
+        if not ok:
+            self._failed = True
+            return False
+        return True
+
     def run(self, wait=False):
         "Start running the controller itself. (Not the document processors.)"
 
-        self.on_setup()
+        if self._running:
+            raise ServiceOperationError("Service is already running.")
+            #return False  # Not started; was already running, or failed
+
+        self._failed = False
+        self._processing_aborted = False
+        self._processing = False
+
+        self.log.info("Setting up processors.")
+        if not self._call_failable(self.on_setup):
+            self.log.critical("Setup failed.")
+            return False
+
+        if not self._call_failable(self.on_run):
+            self.log.critical("Startup failed.")
+            return False
 
         self._running = True
+        self.log.status("Service running.")
+
         if wait:
-            while self._running:
-                time.sleep(0.1)
+            self.log.info("Waiting until service is shut down.")
+            if not self._call_failable(self.on_wait):
+                return False
+            self.log.status("Service stopped.")
         return True  # Started; and potentially stopped again, in case we waited here
 
-    def shutdown(self):
+    def shutdown(self, wait=True):
         "Shut down the controller, including document processors."
+
         if not self._running:
-            return False  # Not shut down; was not running
-        self._stop()
+            raise ServiceOperationError("Service is not running.")
+            #return False  # Not started; was already running, or failed
+        if self._closing:
+            raise ServiceOperationError("Service is already shutting down.")
+            #return False  # Not started; was already running, or failed
+
+        self._closing = True
+
+        if self.processing:
+            if not self._stop_processing():
+                self.log.error("Processing failed to stop; service not shut down.")
+                self._closing = False
+                return False
+
+        ok = self._call_failable(self.on_shutdown)
+        if ok and wait and not self._running:
+            self.log.info("Waiting until service is shut down.")
+            ok = self._call_failable(self.on_wait)
+
+        if ok:
+            self.log.status("Service shut down.")
+        else:
+            # Something went wrong during shutdown. Leave run loop and mark as failed.
+            self.log.error("Service shut down with error during shut down process.")
+
+        self._closing = False
         self._running = False
-        return True  # Shut down successfully
+        return ok
 
     def wait(self):
         "Wait until controller is shut down."
+
         if not self._running:
             return False  # Not shut down; was not running
-        while self._running:
+
+        self.log.info("Waiting until service is shut down.")
+        ok = self._call_failable(self.on_wait)
+        if ok:
+            self.log.status("Service shut down.")
+        else:
+            # Something went wrong during shutdown. Leave run loop and mark as failed.
+            self.log.error("Service shut down with error during shut down process.")
+
+        self._closing = False
+        self._running = False
+        return ok
+
+    #endregion Service management commands
+
+    #region Processing management commands
+
+    def start_processing(self):
+        # TODO
+        ok = self.on_start_processing()
+        self._processing = True
+        return ok
+
+    def restart_processing(self):
+        # TODO
+        return self.on_restart_processing()
+
+    def stop_processing(self):
+        if not self._processing:
+            raise ServiceOperationError("Service is not processing.")
+            #return False  # Not started; was already running, or failed
+        return self._stop_processing()
+
+    def _stop_processing(self):
+        self.log.info("Stopping processing.")
+        self._stopping = True
+        ok = self.on_stop_processing()
+        print "ON_STOP_PROCESSING RETURNS=", ok
+        self._stopping = False
+        return ok
+
+    def wait_processing(self):
+        # TODO
+        while self.processing:
             time.sleep(0.1)
-        return True  # Shut down successfully
+        return True
 
-    #endregion Controller management commands
+    def abort_processing(self):
+        # TODO
+        return self.on_abort_processing()
 
-    #region Pipeline management commands
+    def suspend_processing(self):
+        # TODO
+        return self.on_suspend_processing()
 
-    def start(self):
-        return self.on_start()
+    def resume_processing(self):
+        # TODO
+        return self.on_resume_processing()
 
-    def restart(self):
-        return self.on_restart()
+    def update_metadata(self, metadata):
+        # TODO
+        return self.on_update_metadata(metadata)
 
-    def stop(self):
-        return self._stop()
-
-    def _stop(self):
-        return self.on_stop()
-
-    def abort(self):
-        return self.on_abort()
-
-    def suspend(self):
-        return self.on_suspend()
-
-    def resume(self):
-        return self.on_resume()
-
-    def update(self, config):
-        return self.on_update(config)
-
-    def status(self, *procs):
-        return self.on_status()
-
-    #endregion Pipeline management commands
+    #endregion Processing management commands
 
     #region Setup methods for override
 
@@ -148,25 +276,42 @@ class Service(Configurable):
 
     #endregion Setup methods for override
 
-    #region Event handlers for override
+    #region Service management methods for override
 
-    def on_status(self):
-        return "none"
-    def on_start(self):
+    def on_run(self):
+        return True
+
+    def on_shutdown(self):
+        return True
+
+    def on_wait(self):
+        while self._running:
+            time.sleep(0.1)
+        return True
+
+    #endregion Service management methods for override
+
+    #region Processing management methods for override
+
+    def is_processing(self):
+        "Evaluate whether processing is in progress."
         return False
-    def on_restart(self):
-        return False
-    def on_stop(self):
-        return False
-    def on_abort(self):
-        return False
-    def on_suspend(self):
-        return False
-    def on_resume(self):
-        return False
-    def on_update(self, config):
+
+    def on_start_processing(self):
+        return True
+    def on_restart_processing(self):
+        return True
+    def on_stop_processing(self):
+        return True
+    def on_abort_processing(self):
+        return True
+    def on_suspend_processing(self):
+        return True
+    def on_resume_processing(self):
+        return True
+    def on_update_metadata(self, metadata):
         return True  # No update is an ok update
 
-    #endregion Event handlers for override
+    #endregion Processing management methods for override
 
 

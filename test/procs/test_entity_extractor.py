@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
-__author__ = 'Eivind Eidheim Elseth'
+__author__ = 'Hans Terje Bakke'
 
 import unittest
 from eslib.procs.EntityExtractor import EntityExtractor
 from eslib import esdoc
+from eslib import unique
 
 
 class TestEntityExtractor(unittest.TestCase):
@@ -73,20 +74,20 @@ class TestEntityExtractor(unittest.TestCase):
 
 
     def _verify(self, entities):
-        webpage = entities["webpage"]
-        targets = entities["targets"]
-        emails = entities["emails"]
-        creditcards = entities["creditcards"]
+        webpages    = unique([x["name"] for x in entities["webpage"]])
+        targets     = unique([x["name"] for x in entities["targets"]])
+        emails      = unique([x["name"] for x in entities["emails"]])
+        creditcards = unique([x["name"] for x in entities["creditcards"]])
 
-        print "WEBPAGE:",webpage.keys()
-        print "TARGETS:",targets.keys()
-        print "EMAILS :",emails.keys()
-        print "CREDITC:",creditcards.keys()
+        print "WEBPAGE:", webpages
+        print "TARGETS:", targets
+        print "EMAILS :", emails
+        print "CREDITC:", creditcards
 
-        self.assertEqual(['nrk'], webpage.keys())
-        self.assertEqual(['comperio', 'IBM'], targets.keys())
-        self.assertEqual(['hans.terje.bakke@gmail.com', 'balle.klorin@wesenlund.no'], emails.keys())
-        self.assertEqual(['1234.5678.9876.5432'], creditcards.keys())
+        self.assertEqual(['nrk'], webpages)
+        self.assertEqual(['comperio', 'IBM'], targets)
+        self.assertEqual(['hans.terje.bakke@gmail.com', 'balle.klorin@wesenlund.no'], emails)
+        self.assertEqual(['1234.5678.9876.5432'], creditcards)
 
     def test_merge(self):
         ex = EntityExtractor()
