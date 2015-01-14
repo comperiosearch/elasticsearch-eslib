@@ -398,6 +398,47 @@ class TestExecution(unittest.TestCase, Connections):
 
         print "** all done"
 
+    def test_callbacks(self):
+        started = []
+        stopped = []
+        aborted = []
+        gen = MyGenerator()
+        gen.stop_at = 2
+        p1 = MyInOut(name="p1")
+        p2 = MyInOut(name="p2")
+        p3 = MyInOut(name="p3")
+        p1.subscribe(gen)
+        p2.subscribe(p1)
+        p3.subscribe(p2)
+        p1.event_started.append(lambda: started.append("p1"))
+        p3.event_started.append(lambda: started.append("p3"))
+        p1.event_stopped.append(lambda: stopped.append("p1"))
+        p3.event_stopped.append(lambda: stopped.append("p3"))
+        p1.event_aborted.append(lambda: aborted.append("p1"))
+        p3.event_aborted.append(lambda: aborted.append("p3"))
+
+        gen.start()
+        gen.wait()
+
+        print "STARTED=", started
+        print "STOPPED=", stopped
+        print "ABORTED=", aborted
+
+        self.assertEqual(['p3', 'p1'], started)
+        self.assertEqual(['p1', 'p3'], stopped)
+        self.assertEqual([], aborted)
+
+        started = []
+        stopped = []
+        aborted = []
+
+        gen.start()
+        gen.abort()
+        gen.wait()
+
+        self.assertEqual(['p3', 'p1'], started)
+        self.assertEqual([], stopped)
+        self.assertEqual(['p1', 'p3'], aborted)
 
 from threading import Lock
 

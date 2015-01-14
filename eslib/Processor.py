@@ -64,6 +64,11 @@ class Processor(Configurable):
 
         self.is_generator = False
 
+        # Callback events
+        self._event_started = []
+        self._event_stopped = []
+        self._event_aborted = []
+
         # Terminals
         self.sockets    = {}
         self.connectors = {}
@@ -105,22 +110,7 @@ class Processor(Configurable):
         else:
             return "stopped"
 
-    def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
-        # # Set up logging
-        # parts = []
-        # if not self.__module__ == "__main__": parts.append(self.__module__)
-        # className = self.__class__.__name__
-        # parts.append(className)
-        #
-        # name = self.name
-        # if name:
-        #     if name.endswith(".py"):
-        #         name = name[:-3]
-        #     if not name == className:
-        #         parts.append(name)
-        # fullPath = ".".join(parts)
-        # #print "FULL=[%s]" % fullPath
-
+    def _setup_logging(self):
         serviceName = "UNKNOWN"
         if self.config.service:
             serviceName = self.config.service.name
@@ -345,6 +335,37 @@ class Processor(Configurable):
 
     #endregion Connection management
 
+    #region Event callbacks
+
+    @property
+    def event_started(self):
+        """
+        List of methods to be called after the processor has successfully started.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_started
+
+    @property
+    def event_stopped(self):
+        """
+        List of methods to be called after the processor has successfully stopped/completed.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_stopped
+
+    @property
+    def event_aborted(self):
+        """
+        List of methods to be called after the processor has been aborted.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_aborted
+
+    #endregion Event callbacks
+
     #region Handlers for all processors types
 
     def on_open    (self): pass
@@ -449,6 +470,20 @@ class Processor(Configurable):
         self._initialized = False
         # Note: Do NOT tell subscribers to close. They will do this themselves after they have been stopped or aborted.
 
+        # Notify everyone subscribing to 'event_stopped' or 'event_aborted' events
+        if self.aborted:
+            for func in self.event_aborted:
+                try:
+                    func()
+                except Exception as e:
+                    self.log.exception("Unhandled exception in an event handler for 'aborted'.")
+        else:
+            for func in self.event_stopped:
+                try:
+                    func()
+                except Exception as e:
+                    self.log.exception("Unhandled exception in an event handler for 'stopped'.")
+
     def _accept_incoming(self):
 
         if self.accepting:
@@ -478,6 +513,7 @@ class Processor(Configurable):
                 connector.run()
                 self._runchan_count += 1
             # Tell all subscribers to start running
+            # Note: We make sure the receivers are running before we start pushing data to them.
             for subscriber in self._iter_subscribers():
                 subscriber._start_running()
         # Start running this, if generator/monitor
@@ -495,6 +531,12 @@ class Processor(Configurable):
                 connector.resume()
             self.restarting = False
 
+        # Notify everyone subscribing to 'event_started' events
+        for func in self.event_started:
+            try:
+                func()
+            except Exception as e:
+                self.log.exception("Unhandled exception in an event handler for 'started'.")
 
     def stop(self):
         """
