@@ -32,19 +32,19 @@ class TestService(Service):
         return self._pc.running
 
     # on_start_processing (should be ran async)
-    def on_start_processing(self):
+    def on_processing_start(self):
         self._timer.start()
         time.sleep(1)  # Simulate that it takes some time
         return True
 
-    def on_stop_processing(self):
+    def on_processing_stop(self):
         self._timer.stop()
         #self._pc.wait()
         time.sleep(1)  # Simulate that it takes some time
         return True
 
     # on_abort_processing
-    def on_abort_processing(self):
+    def on_processing_abort(self):
         self._timer.abort()
         self._pc.stop()
         return True
@@ -73,34 +73,34 @@ class TestTestService(unittest.TestCase):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
 
         print "Starting service"
-        print "Asserting '%s' (not started)" % status.DEAD
-        self.assertEqual(p.status, status.DEAD)
+        print "Asserting '%s' (not started)" % status.DOWN
+        self.assertEqual(p.status, status.DOWN)
 
         p.run()
-        # This does not require config, thus going straight from 'dead' to 'idle'
+        # This does not require config, thus going straight from 'down' to 'idle'
         print "Asserting '%s'" % status.IDLE
         self.assertEqual(p.status, status.IDLE)
 
         print "Shutting down"
         p.shutdown(wait=True)
-        print "Asserting '%s' (shut down)" % status.DEAD
-        self.assertEqual(p.status, status.DEAD)
+        print "Asserting '%s' (shut down)" % status.DOWN
+        self.assertEqual(p.status, status.DOWN)
 
 
     def test_lifecycle(self):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
 
         print "Starting service"
-        print "Asserting '%s' (not started)" % status.DEAD
-        self.assertEqual(status.DEAD, p.status)
+        print "Asserting '%s' (not started)" % status.DOWN
+        self.assertEqual(status.DOWN, p.status)
 
         p.run()
-        # This does not require config, thus going straight from 'dead' to 'idle'
+        # This does not require config, thus going straight from 'down' to 'idle'
         print "Asserting '%s'" % status.IDLE
         self.assertEqual(status.IDLE, p.status)
 
         print "Starting processing"
-        p.start_processing()
+        p.processing_start()
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
@@ -126,7 +126,7 @@ class TestTestService(unittest.TestCase):
         # self.assertEqual(status.ABORTED, p.status)
         #
         print "Starting processing"
-        p.start_processing()
+        p.processing_start()
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
@@ -138,44 +138,44 @@ class TestTestService(unittest.TestCase):
 
         p.wait()
         print "Asserting '%s' (shut down)"
-        self.assertEqual(status.DEAD, p.status)
+        self.assertEqual(status.DOWN, p.status)
 
     def test_lifecycle_ending_service(self):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
 
         print "Starting service"
-        print "Asserting '%s' (not started)" % status.DEAD
-        self.assertEqual(status.DEAD, p.status)
+        print "Asserting '%s' (not started)" % status.DOWN
+        self.assertEqual(status.DOWN, p.status)
 
         p.run()
-        # This does not require config, thus going straight from 'dead' to 'idle'
+        # This does not require config, thus going straight from 'down' to 'idle'
         print "Asserting '%s'" % status.IDLE
         self.assertEqual(status.IDLE, p.status)
 
         print "Starting processing (take 1)"
-        p.start_processing()
+        p.processing_start()
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
         print "Waiting for processing to finish (take 1)"
-        p.wait_processing()
+        p.processing_wait()
         print "Asserting '%s' (stopped)" % status.IDLE
         self.assertEqual(status.IDLE, p.status)
 
         print "Starting processing (take 2)"
-        p.start_processing()
+        p.processing_start()
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
         print "Waiting for processing to finish (take 2)"
-        p.wait_processing()
+        p.processing_wait()
         print "Asserting '%s' (stopped)" % status.IDLE
         self.assertEqual(status.IDLE, p.status)
 
         print "Shutting down (waiting)"
         p.shutdown(wait=True)
-        print "Asserting '%s' (shut down)" % status.DEAD
-        self.assertEqual(status.DEAD, p.status)
+        print "Asserting '%s' (shut down)" % status.DOWN
+        self.assertEqual(status.DOWN, p.status)
 
 # TODO: TEST BREAK BY KEYBOARD INTERRUPT
 

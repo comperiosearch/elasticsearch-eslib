@@ -33,7 +33,7 @@ def initlogs(config_file=None):
     else:
         console = logging.StreamHandler()
         console.setLevel(logging.TRACE)
-        LOG_FORMAT = '%(firstName) -20s %(levelname) -10s %(className) -15s %(instanceName) -15s %(funcName) -15s %(lineno) -5d: %(message)s'
+        LOG_FORMAT = '%(firstName) -20s %(levelname) -10s %(className) -20s %(instanceName) -20s %(funcName) -25s %(lineno) -5d: %(message)s'
         console.setFormatter(logging.Formatter(LOG_FORMAT))
 
         servicelog = logging.getLogger("servicelog")

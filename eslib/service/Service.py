@@ -1,7 +1,7 @@
 __author__ = 'Hans Terje Bakke'
 
 import logging
-import time
+import time, os
 from ..Configurable import Configurable
 
 class ServiceOperationError(Exception):
@@ -13,14 +13,20 @@ class status(object):
     PENDING    = "pending"        # service running, but waiting for metadata configuration
     IDLE       = "idle"           # service running, but not processing documents
     PROCESSING = "processing"     # document processing currently in progress
+    SUSPENDED  = "suspended"      # document processing currently suspended
     STOPPING   = "stopping"       # processing is stopping
     ABORTED    = "aborted"        # document processing aborted
     FAILED     = "failed"         # service failure, no longer running
     CLOSING    = "shutting_down"  # service is shutting down
-    DEAD       = "dead"           # service has been shut down (or was never started)
+    DOWN       = "down"           # service has been shut down (or was never started)
+    DEAD       = "DEAD"           # service OS process is not even running
 
 
 class Service(Configurable):
+
+    # Class level properties
+    config_keys = []
+
     def __init__(self, **kwargs):
         super(Service, self).__init__(**kwargs)
 
@@ -45,6 +51,10 @@ class Service(Configurable):
         return "%s|%s (%s)" % (self.__class__.__name__, self.name, self.status)
 
     @property
+    def pid(self):
+        return os.getpid()
+
+    @property
     def name(self):
         return self.config.name
 
@@ -53,13 +63,15 @@ class Service(Configurable):
         if self._failed:
             return status.FAILED
         if not self._running:
-            return status.DEAD
+            return status.DOWN
         if self._closing:
             return status.CLOSING
         if self._processing_aborted:
             return status.ABORTED
         if self._processing_stopping:
             return status.STOPPING
+        if self.processing_suspended:
+            return status.SUSPENDED
         if self.processing:
             return status.PROCESSING
         if self.requires_metadata and not self._metadata_initialized:
@@ -71,6 +83,10 @@ class Service(Configurable):
         if not self._processing:
             return False
         return self.is_processing()  # TODO: What the hell to do if this call fails??
+
+    @property
+    def processing_suspended(self):
+        return self.is_suspended()  # TODO: What the hell to do if this call fails??
 
     def _setup_logging(self):
         serviceName = self.name
@@ -95,13 +111,13 @@ class Service(Configurable):
             print fmt % (item.__class__.__name__, item.name, item.running, item.stopping, item.accepting, item.aborted, item.suspended, producers, subscribers, item.keepalive, item.count)
 
     def register_procs(self, *procs):
-        "Register a processor as part of the controller. (For debugging.)"
+        "Register a processor as part of the service. (For debugging.)"
         for proc in procs:
             self._registered_procs.append(proc)
         return len(procs)
 
     def unregister_procs(self, *procs):
-        "Unregister a processor as part of the controller. (For debugging.)"
+        "Unregister a processor as part of the service. (For debugging.)"
         registered = 0
         for proc in procs:
             if proc in self._registered_procs:
@@ -126,7 +142,8 @@ class Service(Configurable):
     def _call_failable(self, func):
         try:
             ok = func()
-        except:
+        except Exception as e:
+            self.log.exception("Exception in wrapped function '%s'." % func.__name__)
             ok = False
         if not ok:
             self._failed = True
@@ -167,16 +184,16 @@ class Service(Configurable):
         "Shut down the controller, including document processors."
 
         if not self._running:
-            raise ServiceOperationError("Service is not running.")
-            #return False  # Not started; was already running, or failed
+            #raise ServiceOperationError("Service is not running.")
+            return False  # Not shut down; was already shut down, or failed
         if self._closing:
-            raise ServiceOperationError("Service is already shutting down.")
-            #return False  # Not started; was already running, or failed
+            #raise ServiceOperationError("Service is already shutting down.")
+            return False  # Not shut down; was already closing
 
         self._closing = True
 
         if self.processing:
-            if not self._stop_processing():
+            if not self.processing_stop():
                 self.log.error("Processing failed to stop; service not shut down.")
                 self._closing = False
                 return False
@@ -218,47 +235,124 @@ class Service(Configurable):
 
     #region Processing management commands
 
-    def start_processing(self):
-        # TODO
-        ok = self.on_start_processing()
-        self._processing = True
+    def processing_start(self, raise_on_error=False):
+        if self.processing:
+            if raise_on_error:
+                raise ServiceOperationError("Service is already processing.")
+            else:
+                return False  # Not started; was already running
+        self.log.info("Starting processing.")
+        ok = self.on_processing_start()
+        if ok:
+            self._processing = True
+            self._processing_aborted = False
+            self.log.status("Processing started.")
+        elif raise_on_error:
+            raise ServiceOperationError("Processing failed to start.")
         return ok
 
-    def restart_processing(self):
-        # TODO
-        return self.on_restart_processing()
+    def processing_restart(self, raise_on_error=False):
+        ok = False
+        if self.processing:
+            # Note: There is currently no self._processing_restarting flag
+            self.log.info("Restarting processing.")
+            ok = self.on_processing_restart()
+            if ok:
+                self.log.status("Processing restarted.")
+            elif raise_on_error:
+                raise ServiceOperationError("Processing failed to restart.")
+        else:
+            self.log.info("Starting processing.")
+            ok = self.on_processing_start()
+            if ok:
+                self._processing = True
+                self._processing_aborted = False
+                self.log.status("Processing started.")
+            elif raise_on_error:
+                raise ServiceOperationError("Processing failed to start.")
+        return ok
 
-    def stop_processing(self):
-        if not self._processing:
-            raise ServiceOperationError("Service is not processing.")
-            #return False  # Not started; was already running, or failed
-        return self._stop_processing()
-
-    def _stop_processing(self):
+    def processing_stop(self, raise_on_error=False):
+        if not self.processing:
+            if raise_on_error:
+                raise ServiceOperationError("Service is not processing.")
+            else:
+                return False  # Not stopped; was not running
         self.log.info("Stopping processing.")
-        self._stopping = True
-        ok = self.on_stop_processing()
-        print "ON_STOP_PROCESSING RETURNS=", ok
-        self._stopping = False
+        self._processing_stopping = True
+        ok = self.on_processing_stop()
+        # It is no longer stopping regardless of whether it succeeds (with 'ok') or not:
+        self._processing_stopping = False
+        if ok:
+            self.log.status("Processing stopped.")
+        elif raise_on_error:
+            raise ServiceOperationError("Processing failed to start.")
         return ok
 
-    def wait_processing(self):
-        # TODO
+    def processing_abort(self, raise_on_error=False):
+        if not self.processing:
+            if raise_on_error:
+                raise ServiceOperationError("Service is not processing.")
+            else:
+                return False  # Not aborted; was not running
+        self.log.info("Aborting processing.")
+        ok = self.on_processing_aborting()
+        if ok:
+            self._processing_stopping = False
+            self._processing_aborted = True
+        if ok:
+            self.log.status("Processing aborted.")
+        elif raise_on_error:
+            raise ServiceOperationError("Processing was not aborted.")
+        return ok
+
+    def processing_suspend(self, raise_on_error=False):
+        if self.processing_suspended:
+            if raise_on_error:
+                raise ServiceOperationError("Service is already suspended.")
+            else:
+                return False  # Not suspended; was already suspended
+        if self._processing_stopping:
+            if raise_on_error:
+                raise ServiceOperationError("Service is in the process of stopping.")
+            else:
+                return False  # Not suspended; is currently stopping
+        if not self.processing:
+            if raise_on_error:
+                raise ServiceOperationError("Service is not processing.")
+            else:
+                return False  # Not suspended; was not processing
+        self.log.info("Suspending processing.")
+        ok = self.on_processing_suspend()
+        if ok:
+            self.log.status("Processing suspended.")
+        elif raise_on_error:
+            raise ServiceOperationError("Processing failed to suspend.")
+        return ok
+
+    def processing_resume(self, raise_on_error=False):
+        if not self.processing_suspended:
+            if raise_on_error:
+                raise ServiceOperationError("Service was not suspended.")
+            else:
+                return False  # Not suspended; was already suspended
+        if not self.processing:
+            if raise_on_error:
+                raise ServiceOperationError("Service is not processing; nothing to resume.")
+            else:
+                return False  # Not suspended; was not processing
+        self.log.info("Resuming processing.")
+        ok = self.on_processing_resume()
+        if ok:
+            self.log.status("Processing resumed.")
+        elif raise_on_error:
+            raise ServiceOperationError("Processing failed to resume.")
+        return ok
+
+    def processing_wait(self, raise_on_error=False):
         while self.processing:
             time.sleep(0.1)
         return True
-
-    def abort_processing(self):
-        # TODO
-        return self.on_abort_processing()
-
-    def suspend_processing(self):
-        # TODO
-        return self.on_suspend_processing()
-
-    def resume_processing(self):
-        # TODO
-        return self.on_resume_processing()
 
     def update_metadata(self, metadata):
         # TODO
@@ -297,17 +391,21 @@ class Service(Configurable):
         "Evaluate whether processing is in progress."
         return False
 
-    def on_start_processing(self):
+    def is_suspended(self):
+        "Evaluate whether processing is suspended."
+        return False
+
+    def on_processing_start(self):
         return True
-    def on_restart_processing(self):
+    def on_processing_restart(self):
         return True
-    def on_stop_processing(self):
+    def on_processing_stop(self):
         return True
-    def on_abort_processing(self):
+    def on_processing_abort(self):
         return True
-    def on_suspend_processing(self):
+    def on_processing_suspend(self):
         return True
-    def on_resume_processing(self):
+    def on_processing_resume(self):
         return True
     def on_update_metadata(self, metadata):
         return True  # No update is an ok update

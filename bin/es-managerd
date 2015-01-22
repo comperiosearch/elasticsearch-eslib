@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from eslib.service import ServiceManager
+
+# TODO: SET UP AND RUN WITH CODE FROM es-run-service.py
+# TODO: ALSO BREAK OUT LOTS OF CODE IN es-run-service.py TO LIBRARY CLASS
+
+import eslib.prog
+eslib.prog.initlogs()
+
+service = ServiceManager(management_endpoint="localhost:5000")
+
+autostart = False #True
+
+try:
+    service.run(wait=False)
+    if autostart:
+        service.start()  # Starts the pipeline
+    service.wait()
+except KeyboardInterrupt:
+    service.shutdown()  # Waits until everything is finished

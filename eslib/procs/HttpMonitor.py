@@ -4,7 +4,7 @@ from ..Monitor import Monitor
 from SocketServer import ThreadingTCPServer
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 from ..esdoc import tojson
-import json
+import json, logging
 
 class _ServerHandlerClass(SimpleHTTPRequestHandler):
 
@@ -64,7 +64,8 @@ class _ServerHandlerClass(SimpleHTTPRequestHandler):
         max_length = owner.config.max_length
 
         length = int(self.headers.get('Content-Length') or 0)
-        owner.doclog.debug("%s: Incoming document from '%s', length=%d." % (verb, self.client_address, length))
+        if owner.doclog.isEnabledFor(logging.TRACE):
+            owner.doclog.trace("%s: Incoming document from '%s', length=%d." % (verb, self.client_address, length))
 
         if max_length and length > max_length:
             owner.doclog.debug()
