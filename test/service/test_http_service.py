@@ -5,7 +5,6 @@ ENDPOINT = "localhost:4000"
 import unittest
 from eslib.service import Service, HttpService, status
 from eslib.procs import Timer, Transformer
-#from eslib.service import HttpService
 import requests, time, threading
 
 import eslib.prog
@@ -15,18 +14,23 @@ class TestService(Service):
     def __init__(self, **kwargs):
         super(TestService, self).__init__(**kwargs)
 
+        self.ending = False
         self.requires_metadata = False
 
     def on_setup(self):
         self._timer = Timer(service=self, actions=[(3, 3, "ping")])
         self._pc = Transformer(service=self, func=self._func)
         self._pc.subscribe(self._timer)
+
+        self.register_procs(self._timer, self._pc)
+
         return True
 
     def _func(self, doc):
         print doc
-        print "FUNC STOP"
-        self._timer.stop()
+        if self.ending:
+           print "FUNC STOP"
+           self._timer.stop()
 
     def is_processing(self):
         return self._pc.running
@@ -38,9 +42,9 @@ class TestService(Service):
         return True
 
     def on_processing_stop(self):
-        self._timer.stop()
-        #self._pc.wait()
         time.sleep(1)  # Simulate that it takes some time
+        self._timer.stop()
+        self._pc.wait()
         return True
 
     # on_abort_processing
@@ -71,6 +75,7 @@ class TestTestService(unittest.TestCase):
 
     def test_run_shutdown(self):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
+        p.ending = False
 
         print "Starting service"
         print "Asserting '%s' (not started)" % status.DOWN
@@ -86,9 +91,9 @@ class TestTestService(unittest.TestCase):
         print "Asserting '%s' (shut down)" % status.DOWN
         self.assertEqual(p.status, status.DOWN)
 
-
     def test_lifecycle(self):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
+        p.ending = False
 
         print "Starting service"
         print "Asserting '%s' (not started)" % status.DOWN
@@ -104,44 +109,49 @@ class TestTestService(unittest.TestCase):
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
-        # time.sleep(1)
-        # print "Stopping processing"
-        # p.stop_processing(wait=False)
-        # print "Asserting '%s'" % status.STOPPING
-        # self.assertEqual(status.STOPPING, p.status)
+        time.sleep(1)
+        print "Stopping processing"
+        p.processing_stop()
+        time.sleep(0.1)
+        print "Asserting '%s'" % status.STOPPING
+        self.assertEqual(status.STOPPING, p.status)
 
-        # p.wait_processing()
-        # print "Asserting '%s' (stopped)" % status.IDLE
-        # self.assertEqual(status.IDLE, p.status)
-        #
-        # print "Starting processing"
-        # p.start_processing()
-        # print "Asserting '%s'" % status.PROCESSING
-        # self.assertEqual(status.PROCESSING, p.status)
-        #
-        # time.sleep(1)
-        # print "Aborting processing"
-        # p.abort_processing()
-        # print "Asserting '%s'" % status.ABORTED
-        # self.assertEqual(status.ABORTED, p.status)
-        #
+        print "Waiting for processing to stop"
+        p.processing_wait()
+        print "Asserting '%s' (stopped)" % status.IDLE
+        self.assertEqual(status.IDLE, p.status)
+
+        print "Starting processing"
+        p.processing_start()
+        print "Asserting '%s'" % status.PROCESSING
+        self.assertEqual(status.PROCESSING, p.status)
+
+        time.sleep(1)
+        print "Aborting processing"
+        p.processing_abort()
+        print "Asserting '%s'" % status.ABORTED
+        self.assertEqual(status.ABORTED, p.status)
+
         print "Starting processing"
         p.processing_start()
         print "Asserting '%s'" % status.PROCESSING
         self.assertEqual(status.PROCESSING, p.status)
 
         print "Shutting down"
-        threading.Thread(target=lambda : p.shutdown()).start()
+        p.shutdown()
+        #threading.Thread(target=lambda : p.shutdown()).start()
         time.sleep(0.1)
         print "Asserting '%s'" % status.CLOSING
         self.assertEqual(status.CLOSING, p.status)
 
+        print "Waiting for shutdown"
         p.wait()
-        print "Asserting '%s' (shut down)"
+        print "Asserting '%s' (shut down)" % status.DOWN
         self.assertEqual(status.DOWN, p.status)
 
     def test_lifecycle_ending_service(self):
         p = TestService()#mgmt_endpoint=ENDPOINT)  # localhost:4444 by default
+        p.ending = True
 
         print "Starting service"
         print "Asserting '%s' (not started)" % status.DOWN
@@ -176,8 +186,6 @@ class TestTestService(unittest.TestCase):
         p.shutdown(wait=True)
         print "Asserting '%s' (shut down)" % status.DOWN
         self.assertEqual(status.DOWN, p.status)
-
-# TODO: TEST BREAK BY KEYBOARD INTERRUPT
 
 def main():
     unittest.main()

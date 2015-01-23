@@ -423,7 +423,10 @@ class ServiceManager(HttpService,):
     def _mgmt_service_shutdown(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
         self.log.debug("called: shutdown service(s) [%s]" % ", ".join(ids))
-        return self._shutdown_services(ids)
+        return self._shutdown_services(
+            ids,
+            payload.get("wait") or False
+        )
 
     def _mgmt_service_kill(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
@@ -441,7 +444,10 @@ class ServiceManager(HttpService,):
     def _mgmt_processing_stop(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
         self.log.debug("called: stop service(s) [%s]" % ", ".join(ids))
-        return self._stop_processing(ids)
+        return self._stop_processing(
+            ids,
+            payload.get("wait") or False
+        )
 
     def _mgmt_processing_abort(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
@@ -613,9 +619,9 @@ class ServiceManager(HttpService,):
     def _run_services(self, ids):
         return {"error": "TODO"}  # TODO
 
-    def _shutdown_services(self, ids):
+    def _shutdown_services(self, ids, wait):
         # Since it has the same inner code as a processing operation:
-        return self._processing_operation(ids, "delete", "shutdown", "shut down", "shut down", [status.IDLE, status.ABORTED, status.PROCESSING, status.SUSPENDED])
+        return self._processing_operation(ids, "delete", "shutdown", "shut down", "shut down", [status.IDLE, status.ABORTED, status.PROCESSING, status.SUSPENDED], wait)
 
     def _kill_services(self, ids, force):
         # This is only for extreme cases.
@@ -664,7 +670,7 @@ class ServiceManager(HttpService,):
             ret["message"] = "Processes killed: [%s]" % ", ".join(succeeded)
         return ret
 
-    def _processing_operation(self, ids, remote_verb, remote_command, infinitive_str, past_tense_str, required_status_list):
+    def _processing_operation(self, ids, remote_verb, remote_command, infinitive_str, past_tense_str, required_status_list, wait=None):
         succeeded = []
         failed = []
         for id in ids:
@@ -683,7 +689,10 @@ class ServiceManager(HttpService,):
                 error = None
                 try:
                     addr = "%s:%d" % (service.host, service.port)
-                    content = self.remote(addr, remote_verb, remote_command)
+                    data = None
+                    if wait is not None:
+                        data = {"wait": wait}
+                    content = self.remote(addr, remote_verb, remote_command, data)
                     error = content.get("error")
                 except Exception as e:
                     error = str(e)
@@ -704,8 +713,8 @@ class ServiceManager(HttpService,):
     def _start_processing(self, ids):
         return self._processing_operation(ids, "post", "start", "start", "started", [status.IDLE, status.ABORTED])
 
-    def _stop_processing(self, ids):
-        return self._processing_operation(ids, "post", "stop", "stop", "stopped", [status.PROCESSING, status.PENDING, status.SUSPENDED])
+    def _stop_processing(self, ids, wait):
+        return self._processing_operation(ids, "post", "stop", "stop", "stopped", [status.PROCESSING, status.PENDING, status.SUSPENDED], wait)
 
     def _abort_processing(self, ids):
         return self._processing_operation(ids, "post", "abort", "abort", "aborted", [status.PROCESSING, status.PENDING, status.SUSPENDED, status.STOPPING])

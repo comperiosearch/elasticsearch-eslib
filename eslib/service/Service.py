@@ -1,7 +1,7 @@
 __author__ = 'Hans Terje Bakke'
 
 import logging
-import time, os
+import time, os, threading
 from ..Configurable import Configurable
 
 class ServiceOperationError(Exception):
@@ -82,6 +82,8 @@ class Service(Configurable):
     def processing(self):
         if not self._processing:
             return False
+        if self._processing_stopping:
+            return True  # Still considered to be working with the items..
         return self.is_processing()  # TODO: What the hell to do if this call fails??
 
     @property
@@ -180,7 +182,7 @@ class Service(Configurable):
             self.log.status("Service stopped.")
         return True  # Started; and potentially stopped again, in case we waited here
 
-    def shutdown(self, wait=True):
+    def shutdown(self, wait=False):
         "Shut down the controller, including document processors."
 
         if not self._running:
@@ -190,19 +192,27 @@ class Service(Configurable):
             #raise ServiceOperationError("Service is already shutting down.")
             return False  # Not shut down; was already closing
 
+        if wait:
+            if not self._shutdown():
+                return False
+            return self.wait()
+        else:
+            thread = threading.Thread(target=self._shutdown)
+            thread.daemon = False  # Program shall not exit while this thread is running
+            thread.start()
+            # no waiting
+            return True  # It is shutting down
+
+    def _shutdown(self):
         self._closing = True
 
         if self.processing:
-            if not self.processing_stop():
+            if not self._processing_stop():
                 self.log.error("Processing failed to stop; service not shut down.")
                 self._closing = False
                 return False
 
         ok = self._call_failable(self.on_shutdown)
-        if ok and wait and not self._running:
-            self.log.info("Waiting until service is shut down.")
-            ok = self._call_failable(self.on_wait)
-
         if ok:
             self.log.status("Service shut down.")
         else:
@@ -217,19 +227,16 @@ class Service(Configurable):
         "Wait until controller is shut down."
 
         if not self._running:
-            return False  # Not shut down; was not running
+            return True
 
-        self.log.info("Waiting until service is shut down.")
-        ok = self._call_failable(self.on_wait)
-        if ok:
-            self.log.status("Service shut down.")
-        else:
-            # Something went wrong during shutdown. Leave run loop and mark as failed.
-            self.log.error("Service shut down with error during shut down process.")
-
-        self._closing = False
-        self._running = False
-        return ok
+        self.log.debug("Waiting until service is shut down.")
+        if not self._call_failable(self.on_wait):
+            self.log.warning("Call to on_wait failed!")
+            return False
+        while self._running:
+            time.sleep(0.1)
+        # Note: _closing and _running should have been set to False by the shutdown thread
+        return True
 
     #endregion Service management commands
 
@@ -251,9 +258,13 @@ class Service(Configurable):
             raise ServiceOperationError("Processing failed to start.")
         return ok
 
-    def processing_restart(self, raise_on_error=False):
+    def processing_restart(self, wait=False, raise_on_error=False):
+        # NOTE: 'wait' is currently not used
+
         ok = False
         if self.processing:
+            # RESTART
+
             # Note: There is currently no self._processing_restarting flag
             self.log.info("Restarting processing.")
             ok = self.on_processing_restart()
@@ -261,7 +272,10 @@ class Service(Configurable):
                 self.log.status("Processing restarted.")
             elif raise_on_error:
                 raise ServiceOperationError("Processing failed to restart.")
+            return ok
         else:
+            # START
+
             self.log.info("Starting processing.")
             ok = self.on_processing_start()
             if ok:
@@ -272,12 +286,29 @@ class Service(Configurable):
                 raise ServiceOperationError("Processing failed to start.")
         return ok
 
-    def processing_stop(self, raise_on_error=False):
+    def processing_stop(self, wait=False, raise_on_error=False):
         if not self.processing:
             if raise_on_error:
                 raise ServiceOperationError("Service is not processing.")
             else:
                 return False  # Not stopped; was not running
+
+        if wait:
+            ok = self._processing_stop(raise_on_error)
+            if ok:
+                ok = self.processing_wait()
+            if not ok and raise_on_error:
+                raise ServiceOperationError("Service failed to stop.")
+            return ok
+        else:
+            thread = threading.Thread(target=self._processing_stop)
+            thread.daemon = False  # Program shall not exit while this thread is running
+            thread.start()
+            # no waiting
+            return True  # It is shutting down
+
+    def _processing_stop(self, raise_on_error=False):
+
         self.log.info("Stopping processing.")
         self._processing_stopping = True
         ok = self.on_processing_stop()
@@ -285,8 +316,8 @@ class Service(Configurable):
         self._processing_stopping = False
         if ok:
             self.log.status("Processing stopped.")
-        elif raise_on_error:
-            raise ServiceOperationError("Processing failed to start.")
+        else:
+            self.log.error("Processing failed to stop.")
         return ok
 
     def processing_abort(self, raise_on_error=False):
@@ -296,7 +327,7 @@ class Service(Configurable):
             else:
                 return False  # Not aborted; was not running
         self.log.info("Aborting processing.")
-        ok = self.on_processing_aborting()
+        ok = self.on_processing_abort()
         if ok:
             self._processing_stopping = False
             self._processing_aborted = True
@@ -350,6 +381,9 @@ class Service(Configurable):
         return ok
 
     def processing_wait(self, raise_on_error=False):
+        if not self.processing:
+            return True
+        self.log.debug("Waiting until service has stopped processing.")
         while self.processing:
             time.sleep(0.1)
         return True

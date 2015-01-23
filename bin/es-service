@@ -113,10 +113,11 @@ def cmd_remove(host, format, name, auto_stop):
 def cmd_run(host, format, names):
     pass
 
-# shutdown [options] <names...>
-def cmd_shutdown(host, format, names):
+# shutdown [options] [--wait] <names...>
+def cmd_shutdown(host, format, names, wait):
     data = {
         "ids"   : names,
+        "wait"  : wait,
     }
     res = remote(host, "delete", "shutdown", data)
     if format: return dump_formatted(format, res)
@@ -147,10 +148,11 @@ def cmd_start(host, format, names):
     if error:
         print >>sys.stderr, "Error starting processing for service(s) %s: %s" % (names, error)
 
-# stop [options] <names...>
-def cmd_stop(host, format, names):
+# stop [options] [--wait] <names...>
+def cmd_stop(host, format, names, wait):
     data = {
         "ids"   : names,
+        "wait"  : wait
     }
     res = remote(host, "post", "processing_stop", data)
     if format: return dump_formatted(format, res)
@@ -208,11 +210,11 @@ Usage:
   %(prog)s remove   [options] [--stop] <name>
 
   %(prog)s run      [options] <names...>
-  %(prog)s shutdown [options] <names...>
+  %(prog)s shutdown [options] [--wait] <names...>
   %(prog)s kill     [options] [--force] <names...>
 
   %(prog)s start    [options] <names...>
-  %(prog)s stop     [options] <names...>
+  %(prog)s stop     [options] [--wait] <names...>
   %(prog)s abort    [options] <names...>
   %(prog)s suspend  [options] <names...>
   %(prog)s resume   [options] <names...>
@@ -289,11 +291,12 @@ Common options:
     parser_run = subparsers.add_parser("run", description=desc, parents=[parser_common])
     parser_run._actions[0].help = argparse.SUPPRESS
     parser_run.add_argument("names", type=str, nargs="+")
-    # shutdown [options] <names...>
+    # shutdown [options] [--wait] <names...>
     desc = "Stop processing and shut down service."
     parser_shutdown = subparsers.add_parser("shutdown", description=desc, parents=[parser_common])
     parser_shutdown._actions[0].help = argparse.SUPPRESS
     parser_shutdown.add_argument("names", type=str, nargs="+")
+    parser_shutdown.add_argument("--wait", action="store_true")
     # kill [options] [--force] <names...>
     desc = "Kill OS process. Meant for cleaning up dead/hanging processes."
     parser_kill = subparsers.add_parser("kill", description=desc, parents=[parser_common])
@@ -306,11 +309,12 @@ Common options:
     parser_start = subparsers.add_parser("start", description=desc, parents=[parser_common])
     parser_start._actions[0].help = argparse.SUPPRESS
     parser_start.add_argument("names", type=str, nargs="+")
-    # stop [options] <names...>
+    # stop [options] [--wait] <names...>
     desc = "Stop document processing."
     parser_stop = subparsers.add_parser("stop", description=desc, parents=[parser_common])
     parser_stop._actions[0].help = argparse.SUPPRESS
     parser_stop.add_argument("names", type=str, nargs="+")
+    parser_stop.add_argument("--wait", action="store_true")
     # abort [options] <names...>
     desc = "Abort document processing."
     parser_abort = subparsers.add_parser("abort", description=desc, parents=[parser_common])
@@ -351,10 +355,10 @@ Common options:
     elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.type[0], args.config_tag, args.server, args.auto_start)
     elif args.command == "remove"    : cmd_remove  (host, format, args.name[0], args.auto_stop)
     elif args.command == "run"       : cmd_run     (host, format, args.names)
-    elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names)
+    elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.wait)
     elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.force)
     elif args.command == "start"     : cmd_start   (host, format, args.names)
-    elif args.command == "stop"      : cmd_stop    (host, format, args.names)
+    elif args.command == "stop"      : cmd_stop    (host, format, args.names, args.wait)
     elif args.command == "abort"     : cmd_abort   (host, format, args.names)
     elif args.command == "suspend"   : cmd_suspend (host, format, args.names)
     elif args.command == "resume"    : cmd_resume  (host, format, args.names)

@@ -247,14 +247,20 @@ class HttpService(Service):
         self.log.debug("called: status")
         return {"status": self.status}
 
+    # args: (bool)wait
     def _mgmt_shutdown(self, request_handler, payload, **kwargs):
         self.log.debug("called: shutdown")
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
         if self.shutdown():
-            return {"message": "Shutting down."}
+            if wait:
+                return {"message": "Service shut down."}
+            else:
+                return {"message": "Service shutting down."}
         else:
             return {"error": "Not shut down."}
 
-    # TODO
     def _mgmt_start(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_start")
         if self.processing_start():
@@ -262,23 +268,34 @@ class HttpService(Service):
         else:
             return {"error": "Processing was not started."}
 
-    # TODO
+    # args: (bool)wait
     def _mgmt_restart(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_restart")
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
         if self.processing_restart():
-            return {"message": "Processing restarted."}
+            if wait:
+                return {"message": "Processing (re)started."}
+            else:
+                return {"message": "Processing (re)starting."}
         else:
             return {"error": "Processing not started."}
 
-    # TODO
+    # args: (bool)wait
     def _mgmt_stop(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_stop")
-        if self.processing_stop():
-            return {"message": "Processing stopped."}
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
+        if self.processing_stop(wait=wait):
+            if wait:
+                return {"message": "Processing stopped."}
+            else:
+                return {"message": "Processing stopping."}
         else:
             return {"error": "Processing was not stopped."}
 
-    # TODO
     def _mgmt_abort(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_abort")
         if self.processing_abort():
@@ -286,7 +303,6 @@ class HttpService(Service):
         else:
             return {"error": "Processing was not aborted."}
 
-    # TODO
     def _mgmt_suspend(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_suspend")
         if self.processing_suspend():
@@ -294,7 +310,6 @@ class HttpService(Service):
         else:
             return {"error": "Processing was not suspended."}
 
-    # TODO
     def _mgmt_resume(self, request_handler, payload, **kwargs):
         self.log.debug("called: processing_resume")
         if self.processing_resume():

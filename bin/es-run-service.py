@@ -134,6 +134,12 @@ def run_service(
 
     console_mode = not daemon_mode
 
+    if not run_dir:
+        run_dir = os.environ.get("ESLIB_SERVICE_DIR")
+    if not run_dir:
+        print >> sys.stderr, "CRITICAL: Missing run_dir; cannot continue."
+        sys.exit(1)
+
     config_path      = "/".join([run_dir, "config", "services.yaml"])
     credentials_path = "/".join([run_dir, "config", "credentials.yaml"])
     log_config_path  = "/".join([run_dir, "config", "logging.yaml"])
@@ -156,6 +162,9 @@ def run_service(
         with open("pid", "wt") as pidfile:
             print >> pidfile, os.getpid()
 
+    # Change process name
+    setproctitle("es-run-service %s" % service_name)
+
     reload = True
     while reload: # Only exceptions and 'reload' set to false will get us out of here
 
@@ -170,7 +179,10 @@ def run_service(
         if not top:
             print >> sys.stderr, "Either run directory, service_package or file path must be specified."
         service_type = _find_type(top, service_type_name)
-        setproctitle("es-run-service %s" % service_name)
+        if not service_type:
+            # No service, no logger, so we have to print this to stderr:
+            print >> sys.stderr, "Failed to evaluate service type '%s'." % service_type_name
+            exit(1)
 
         # Load config files
         with open(credentials_path, "r") as f:
@@ -195,8 +207,10 @@ def run_service(
         if endpoint:
             service.config.management_endpoint = endpoint
 
+        # TODO: Do we *really* have to demonize every reload iteration?? File loggers are not working if we do this outside the reload loop
         if daemon_mode:
             print "Daemonizing... redirecting stdout and stderr."
+            is_daemonized = True
             # The daemon needs to preserve logging to files
             preserve = []
             loggers = list(logging.Logger.manager.loggerDict.values())
@@ -219,6 +233,8 @@ def run_service(
         else:
             service.log.status("--- STARTING SERVICE ---")
             reload = ServiceRunner(service, daemon_mode).run()
+
+        service.log.status("--- SERVICE STOPPED ---")
 
         if reload:
             service.log.info("Reloading service.")
@@ -262,6 +278,8 @@ Run dir expects directories with content in
         <python package with services>
 
 and writes pid and log output to log/.
+
+Default run_dir can be set with environment variable ESLIB_SERVICE_DIR.
 """
     parser_desc = "Runner for eslib document processing services."
     parser = argparse.ArgumentParser(description=parser_desc)
