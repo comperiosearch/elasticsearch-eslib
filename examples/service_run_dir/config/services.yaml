@@ -1,0 +1,20 @@
+# Manager
+
+manager:
+  name                : "manager"
+  management_endpoint : "localhost:5000"
+
+  elasticsearch_hosts : ["localhost:9200"]
+  elasticsearch_index : "management"
+  dynamic_port_ranges : [["localhost", 5010, 5019]]
+
+# Dummy
+
+dummy:
+  manager_endpoint    : "localhost:5000"
+  #management_endpoint : "localhost:5008"
+  management_endpoint : "localhost"
+
+  name                : "dummy"
+  frequency           : 3
+  lifespan            : 120

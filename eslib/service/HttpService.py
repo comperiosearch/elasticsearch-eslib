@@ -62,7 +62,7 @@ class HttpService(Service):
         POST resume
     """
 
-    config_keys = []
+    metadata_keys = []
 
     def __init__(self, **kwargs):
         super(HttpService, self).__init__(**kwargs)
@@ -86,6 +86,7 @@ class HttpService(Service):
         self.add_route(self._mgmt_hello     , "GET"         , "/hello"     , None)
         self.add_route(self._mgmt_help      , "GET"         , "/help"      , None)
         self.add_route(self._mgmt_status    , "GET"         , "/status"    , None)
+        self.add_route(self._mgmt_stats     , "GET"         , "/stats"     , None)
 
         self.add_route(self._mgmt_shutdown  , "DELETE"      , "/shutdown"  , None)
         self.add_route(self._mgmt_start     , "GET|PUT|POST", "/start"     , None)
@@ -130,10 +131,14 @@ class HttpService(Service):
         data = self._build_hello_message(self.config.management_endpoint)
         if self.config.manager_endpoint:
             # Say hello to manager, asking for a port number if we're missing one
-            content = self.remote(self.config.manager_endpoint, "post", "hello", data=data)
-            error = content.get("error")
-            if error:
-                self.log.error("Error from server: %s" % error)
+            try:
+                content = self.remote(self.config.manager_endpoint, "post", "hello", data=data)
+                error = content.get("error")
+                if error:
+                    self.log.error("Error from manager: %s" % error)
+                    return False
+            except Exception as e:
+                self.log.error("Communication with manager failed for 'hello' message: %s" % e)
                 return False
             data["port"] = content["port"]
             self._metadata = content["metadata"]
@@ -157,7 +162,16 @@ class HttpService(Service):
         if self.config.manager_endpoint:
             self.log.info("Saying goodbye to the manager.")
             data = {"id": self.name}
-            self.remote(self.config.manager_endpoint, "delete", "goodbye", data=data)
+            try:
+                content = self.remote(self.config.manager_endpoint, "delete", "goodbye", data=data)
+                error = content.get("error")
+                if error:
+                    self.log.error("Error from manager: %s" % error)
+                    return False
+            except Exception as e:
+                self.log.warning("Communication with manager failed for 'goodbye' message: %s" % e)
+                # But we go on...
+                #return False
 
         # Stop the receiver
         self.log.info("Stopping service management listener.")
@@ -232,7 +246,7 @@ class HttpService(Service):
             "port"    : port,
             "pid"     : self.pid,
             "status"  : self.status,
-            "metakeys": self.config_keys
+            "metakeys": self.metadata_keys
         }
 
     def _mgmt_hello(self, request_handler, payload, **kwargs):
@@ -246,6 +260,10 @@ class HttpService(Service):
     def _mgmt_status(self, request_handler, payload, **kwargs):
         self.log.debug("called: status")
         return {"status": self.status}
+
+    def _mgmt_stats(self, request_handler, payload, **kwargs):
+        self.log.debug("called: stats")
+        return {"status": self.status, "stats": self.get_stats()}
 
     # args: (bool)wait
     def _mgmt_shutdown(self, request_handler, payload, **kwargs):

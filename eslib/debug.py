@@ -29,8 +29,9 @@ def byte_size_string(bytes, decimals=1):
 
 
 def get_memory_used():
-    """Get current memory useage by this process."""
+    """Get current memory usage by this process. Supposedly in KB."""
     if os.name == 'posix':
         return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     else:
-        raise NotImplementedError
+        0  # Don't want to risk an exception here..
+        #raise NotImplementedError

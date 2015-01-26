@@ -4,7 +4,7 @@
 from eslib.service import HttpService, status
 from eslib.procs import Timer
 from eslib.time import utcdate
-import json, datetime, Queue, os, signal
+import json, datetime, Queue, os, signal, subprocess, sys
 
 from elasticsearch import Elasticsearch
 from elasticsearch.client.indices import IndicesClient
@@ -27,6 +27,16 @@ class ServiceInfo(object):
         # Not persisted
         self.fail_count = 0
         self.status     = status.DEAD
+        self.error      = None
+
+    @property
+    def addr(self):
+        return "%s:%d" % (self.host, self.port) if self.port is not None else self.host
+
+    def set_ok(self):
+        self.error = None
+        self.fail_count = 0
+
 
 class ServiceManager(HttpService,):
 
@@ -35,6 +45,8 @@ class ServiceManager(HttpService,):
 
         self.config.set_default(
             management_endpoint     = "localhost:5000", # for this service...
+            service_runner          = None,
+            service_dir             = None,
 
             elasticsearch_hosts     = ["localhost:9200"],
             elasticsearch_index     = "management",
@@ -61,9 +73,10 @@ class ServiceManager(HttpService,):
 
         # Clear routes and re-enable a minimal set of calls that make sense here
         self._routes = []
+        # Use those in HttpService:
         self.add_route(self._mgmt_hello             , "GET"     , "/hello"      , None)
         self.add_route(self._mgmt_help              , "GET"     , "/help"       , None)
-        # self.add_route("GET"     , "help"      , self._mgmt_help)
+
         # self.add_route("GET"     , "status"    , self._mgmt_status)
 
         self.add_route(self._mgmt_service_register  , "POST|PUT" , "/hello"     , None)
@@ -94,6 +107,8 @@ class ServiceManager(HttpService,):
         self.config.set(
             name                    = config["name"],
             management_endpoint     = config["management_endpoint"],
+            service_runner          = config.get("service_runner"),
+            service_dir             = config.get("service_dir"),
 
             elasticsearch_hosts     = config["elasticsearch_hosts"],
             elasticsearch_index     = config["elasticsearch_index"],
@@ -194,7 +209,7 @@ class ServiceManager(HttpService,):
             "port"         : service.port,
             "pid"          : service.pid,
             "last_seen"    : service.last_seen  # elasticsearch api will serialize this properly
-            # not persisting "fail_count"
+            # not persisting "fail_count", "error", "status"
         }
 
         try:
@@ -216,6 +231,7 @@ class ServiceManager(HttpService,):
     #endregion Storage
 
     #region Dynamic port allocation helpers
+
     def _get_port(self, host):
         if host in self._available_ports and self._available_ports[host]:
             return self._available_ports[host].pop(0)  # Get first available
@@ -247,7 +263,7 @@ class ServiceManager(HttpService,):
         self._services = self._storage_load_services()
         for service in self._services.values():
             if self._grab_port(service.host, service.port):
-                self.log.trace("Service '%s' grabbed address '%s:%d' from dynamic pool." % (service.id, service.host, service.port))
+                self.log.trace("Service '%s' grabbed address '%s' from dynamic pool." % (service.id, service.addr))
         self.log.info("Loaded %d services." % len(self._services))
 
     def _probe_loaded_services(self):
@@ -260,27 +276,27 @@ class ServiceManager(HttpService,):
                 if service.guest:
                     self._remove_dead_service(service)
                 continue
-            failed = False
+            error = None
             addr = id = pid = status = metakeys = None
             try:
-                addr = "%s:%d" % (service.host, service.port)
-                content = self.remote(addr, "get", "hello")
+                content = self.remote(service.addr, "get", "hello")
                 id       = content["id"]
                 pid      = content["pid"]
                 status   = content["status"]
                 metakeys = content.get("metakeys")
 
                 if not id == service.id:
-                    #service["fail_count"] += 1
-                    failed = True
-                    self.log.warning("ID mismatch in 'hello' response at '%s'. Expected '%s', got '%s'." % (addr, service.id, id))
-
+                    error = "ID mismatch in 'hello' response at '%s'. Expected '%s', got '%s'." % (addr, service.id, id)
+                    self.log.warning(error)
+                    service.error = error
+                    service.fail_count += 1
             except Exception as e:
-                self.log.debug("Registered service '%s' did not respond properly to 'hello' at '%s'." % (service.id, addr))
-                #service["fail_count"] += 1
-                failed = True
+                error = "Registered service '%s' did not respond properly to 'hello' at '%s'." % (service.id, addr)
+                self.log.debug(error)
+                service.fail_count += 1  # Because we failed to contact it... but maybe it's not supposed to be running
+                self.error = None        # ... and that is why we do not register an error message here; wait for explicit launch request to do that.
 
-            if failed:
+            if error:
                 self._remove_dead_service(service)
                 continue
 
@@ -289,40 +305,54 @@ class ServiceManager(HttpService,):
             service.status        = status
             service.metadata_keys = metakeys or []
             service.last_seen     = self._now
+            service.error         = None
+            service.fail_count    = 0
             self._storage_save_service(service)
 
     def _get_status(self, service, save=True):
-        if service.status == status.DEAD:
-            return status.DEAD  # Don't even bother
-        if not service.port:
-            return status.DEAD  # We cannot reach it without a port, so it's dead to us
+        return self._get_stats(service, save)[0]
+
+    def _get_stats(self, service, save=True):
+        "Returns a tuple of (status, statistics)."
 
         ss = status.DEAD
+        stats = None
+
+        if service.status == status.DEAD:
+            return (status.DEAD, stats)  # Don't even bother
+        if not service.port:
+            return (status.DEAD, stats)  # We cannot reach it without a port, so it's dead to us
+
         error = None
         try:
-            addr = "%s:%d" % (service.host, service.port)
-            content = self.remote(addr, "get", "status")
+            content = self.remote(service.addr, "get", "stats")  # Note: Using 'stats' instead of 'status', now..
             ss = content.get("status")
+            stats = content.get("stats")
             error = content.get("error")  # Should not really be possible!
             if not "status" in content:
                 error = "Missing status field."
             if error:
-                self.log.error("Failed to retrieve status from servive '%s' at '%s': %s" % (service.id, addr, error))
+                msg = "Failed to retrieve stats from service '%s' at '%s': %s" % (service.id, service.addr, error)
+                self.log.error(msg)
         except Exception as e:
             error = str(e)
-            self.log.warning("Failed to communicate with service '%s' at '%s': %s" % (service.id, addr, e))
+            msg = "Failed to communicate with service '%s' at '%s': %s" % (service.id, service.addr, e)
+            self.log.warning(msg)
 
         if error:
+            service.error = error
             service.fail_count += 1
-            if service.fail_count >= 0:  # Always remove it for now
+            if service.fail_count >= 0:  # TODO: Always remove it for now
                 self._remove_dead_service(service)
-            return status.DEAD
+            return (status.DEAD, stats)
 
         service.status = ss
         service.last_seen = self._now
+        service.error = None
+        service.fail_count = 0
         if save:
             self._storage_save_service(service)
-        return ss
+        return (ss, stats)
 
     def _remove_dead_service(self, service):
         service.pid = None
@@ -331,7 +361,7 @@ class ServiceManager(HttpService,):
 
         # Remove port from pool if it's in the dynamic pool
         if self._release_port(service.host, service.port):
-            self.log.trace("Service '%s' released address '%s:%d' back to dynamic pool." % (service.id, service.host, service.port))
+            self.log.trace("Service '%s' released address '%s' back to dynamic pool." % (service.id, service.addr))
         if not service.fixed_port:
             service.port = None
         if service.guest:
@@ -357,9 +387,10 @@ class ServiceManager(HttpService,):
         )
 
     def _mgmt_service_remove(self, request_handler, payload, **kwargs):
-        self.log.debug("called: remove service '%s'" % payload.get("id"))
-        return self._remove_service(
-            payload.get("id"),
+        ids = payload.get("ids") or []
+        self.log.debug("called: remove service(s) [%s]" % ", ".join(ids))
+        return self._remove_services(
+            ids,
             payload.get("stop") or False
         )
 
@@ -382,43 +413,59 @@ class ServiceManager(HttpService,):
 
     def _mgmt_service_list(self, request_handler, payload, **kwargs):
         # TODO: name patterns from payload or kwargs
+        #ids = payload.get("names") or []
 
+        services = list(self._services.values())
+        self.log.debug("called: list services")
+        return self._get_service_info(services)
+
+    def _get_service_info(self, services, return_missing=False):
         ret = {}
-        for service in list(self._services.values()):
-            ss = self._get_status(service)
+        for service in services:
+            ss, stats = self._get_stats(service)
             # The service may have been removed in the call to _get_status:
             if not service.id in self._services:
-                continue
-
-            ret[service.id] = {
-                "id"        : service.id,
-                "guest"     : service.guest,
-                "host"      : service.host,
-                "type"      : service.type,
-                "config"    : service.config_key,
-                "metakeys"  : service.metadata_keys,
-                "fixed_port": service.fixed_port,
-                "port"      : service.port,
-                "pid"       : service.pid,
-                "last_seen" : service.last_seen,
-                "fail_count": service.fail_count,
-                "status"    : ss,
-                # TODO: RUNTIME STATISTICS:
-                "stats"     : {
-                    "elapsed": None,
-                    "eta": None
+                if return_missing:
+                    ret[service.id] = {"error": "Service '%s' no longer exists." % service.id}
+            else:
+                ret[service.id] = {
+                    "id"         : service.id,
+                    "guest"      : service.guest,
+                    "host"       : service.host,
+                    "type"       : service.type,
+                    "config"     : service.config_key,
+                    "metakeys"   : service.metadata_keys,
+                    "fixed_port" : service.fixed_port,
+                    "port"       : service.port,
+                    "pid"        : service.pid,
+                    "last_seen"  : service.last_seen,
+                    "fail_count" : service.fail_count,
+                    "fail_reason": service.error,
+                    "status"     : ss,
+                    # Runtime statistics from service:
+                    "stats"      : stats
+                    # "stats"     : {
+                    #     "elapsed": None,
+                    #     "eta": None
+                    # }
                 }
-            }
         return ret
 
-    # TODO:
     def _mgmt_service_stats(self, request_handler, payload, **kwargs):
-        return {"error": "TODO"}
+        ids = payload.get("ids") or []
+        self.log.debug("called: get stats for service(s) [%s]" % ", ".join(ids))
+        missing = [id for id in ids if id not in self._services]
+        fetch = [service for service in self._services.values() if service.id in ids]
+        ret = self._get_service_info(fetch, return_missing=True)
+        for id in missing:
+            if not id in ret:
+                ret[id] = {"error": "Service '%s' not found." % id}
+        return ret
 
     def _mgmt_service_run(self, request_handler, payload, **kwargs):
-        names = payload.get("names") or []
-        self.log.debug("called: run service(s) []" % ", ".join(names))
-        return self._run_services(names)
+        ids = payload.get("ids") or []
+        self.log.debug("called: run service(s) [%s]" % ", ".join(ids))
+        return self._run_services(ids)
 
     def _mgmt_service_shutdown(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
@@ -464,7 +511,7 @@ class ServiceManager(HttpService,):
         self.log.debug("called: resume service(s) [%s]" % ", ".join(ids))
         return self._resume_processing(ids)
 
-    #region Service interface commands
+    #endregion Service interface commands
 
     #region Service interface helpers
 
@@ -483,14 +530,15 @@ class ServiceManager(HttpService,):
             # Check if another service is registered with this port, if port is insisted on
             for s in list(self._services.values()):
                 if host == s.host and port == s.port:
-                    self.log.error("Tried to register service '%s' on endpoint '%s:%d', held by service '%s'." % (id, host, port, s["id"]))
-                    return {"error": "Another service '%s' is already registered on '%s:%d'." % (s.id, s.host, s.port)}
+                    self.log.error("Tried to register service '%s' on endpoint '%s', held by service '%s'." % (id, s.addr, s.id))
+                    return {"error": "Another service '%s' is already registered on '%s'." % (s.id, s.addr)}
             # Remove port from pool if it's in the dynamic pool
             if self._grab_port(host, port):
                 self.log.trace("Service '%s' grabbed address '%s:%d' from dynamic pool." % (id, host, port))
 
         service = ServiceInfo()
         service.id         = id
+        service.type       = service_type_name
         service.guest      = guest
         service.host       = host
         service.config_key = config_key
@@ -502,56 +550,81 @@ class ServiceManager(HttpService,):
         self._services[id] = service
         if save:
             self._storage_save_service(service)
-
-        if auto_start:
-            pass  # TODO
-
-        port_ext = ":%d" % port if port else ""
-        msg = "Service '%s' registered on endpoint '%s%s'." % (id, host, port_ext)
+        as_guest_str = " as guest" if service.guest else ""
+        msg = "Service '%s' registered%s on endpoint '%s'." % (service.id, as_guest_str, service.addr)
         self.log.info(msg)
-        return {"message": msg}  # All ok
 
-    def _remove_service(self, id, auto_stop):
-        if not id in self._services:
-            self.log.debug("Tried to remove a non-existing service '%s'." % id)
-            return {"error": "No such registered service '%s'." % id}
+        error = None
+        if auto_start:
+            if self._launch_service(service): # Will log success and failures itself
+                msg += " And launched!"
+            else:
+                msg += " But failed to launch!"
+                error = "Service '%s' failed to launch." % id
 
-        service = self._services[id]
-        ss = self._get_status(service, save=False)  # We're saving later here anyway
-        if not id in self._services:
-            return {"message": "Service '%s' removed." % id}
+        ret = {"message": msg}
+        if error:
+            ret["error"] = error
+        return ret
 
-        # We can only remove services that are dead; otherwise we require a shutdown first
-        if ss == status.DEAD:
-            service.guest = True  # Demoting to guest makes sure the _remove_dead_service will remove it
-            self._remove_dead_service(service)
-            msg = "Service '%s' removed." % id
-            self.log.info(msg)
-            return {"message": msg}
-        elif auto_stop:
-            was_guest = service.guest
-            service.guest = True  # Demoting it to guest will make sure it is removed after it has shut down and sends a goodbye/unregister message
-            self._storage_save_service(service)
+    def _remove_services(self, ids, auto_stop):
+        succeeded = []
+        failed = []
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to remove a non-existing service '%s'." % id)
+                #return {"error": "No such registered service '%s'." % id}
+                failed.append(id)
+                continue
 
-            # Tell the service to shut down
-            addr = "%s:%d" % (service.host, service.port)
-            error = None
-            try:
-                content = self.remote(addr, "delete", "shutdown", {"id": id})
-                error = content.get("error")
-            except Exception as e:
-                error = str(e)
-            if error:
-                self.log.warning("Remove active service ('%s') with shutdown request failed: %s" % (id, error))
-                return {"error": "Service '%s' marked for removal, but shutdown request failed: %s" % (id, error)}
+            service = self._services[id]
+            ss = self._get_status(service, save=False)  # We're saving later here anyway
+            if not id in self._services:
+                #return {"message": "Service '%s' removed." % id}
+                succeeded.append(id)
+                continue
 
-            extra_info = " demoted to guest and" if was_guest else ""
-            self.log.info("Request to remove a running service '%s'; %s shut down message sent to service." % (id, extra_info))
-            return {"message": "Service '%s' was running; %s and shut down message sent to service." % (id, extra_info)}
-        else:
-            msg = "Tried to remove a service ('%s') that was not dead without the auto_stop flag set." % id
-            self.log.debug(msg)
-            return {"error": msg}
+            # We can only remove services that are dead; otherwise we require a shutdown first
+            if ss == status.DEAD:
+                service.guest = True  # Demoting to guest makes sure the _remove_dead_service will remove it
+                self._remove_dead_service(service)
+                msg = "Service '%s' removed." % id
+                self.log.info(msg)
+                #return {"message": msg}
+                succeeded.append(id)
+            elif auto_stop:
+                was_guest = service.guest
+                service.guest = True  # Demoting it to guest will make sure it is removed after it has shut down and sends a goodbye/unregister message
+                self._storage_save_service(service)
+
+                # Tell the service to shut down
+                error = None
+                try:
+                    content = self.remote(service.addr, "delete", "shutdown", {"id": id})
+                    error = content.get("error")
+                except Exception as e:
+                    error = str(e)
+                if error:
+                    self.log.warning("Remove active service ('%s') with shutdown request failed: %s" % (id, error))
+                    #return {"error": "Service '%s' marked for removal, but shutdown request failed: %s" % (id, error)}
+                    failed.append(id)
+                else:
+                    extra_info = " demoted to guest and" if was_guest else ""
+                    self.log.info("Request to remove a running service '%s'; %s shut down message sent to service." % (id, extra_info))
+                    #return {"message": "Service '%s' was running; %s and shut down message sent to service." % (id, extra_info)}
+                    succeeded.append(id)
+            else:
+                msg = "Tried to remove a service ('%s') that was not dead without the auto_stop flag set." % id
+                self.log.debug(msg)
+                #return {"error": msg}
+                failed.append(id)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Services not removed: [%s]" % ", ".join(failed)
+        if succeeded:
+            ret["message"] = "Services removed: [%s]" % ", ".join(succeeded)
+        return ret
 
     def _register_service(self, id, host, port, pid, status, metakeys):
         # If this service is not registered, treat it as a guest.
@@ -567,6 +640,14 @@ class ServiceManager(HttpService,):
                 return {"error": msg}
             else:
                 self.log.info("Allocated port '%s:%d' for service '%s'." % (host, dynport, id))
+        else:
+            for s in self._services:
+                if s.port == port:
+                    if s.id == id:
+                        break  # Same service reserved port; this is ok
+                    else:
+                        self.log.warning("Service '%s' saying 'hello' and requesting fixed address '%s:%d', already reserved by service '%s'." % (id, host, port, s.id))
+                        return {"error": "Address '%s:%d' is already reserved by service '%s'." % (host, port, s.id)}
 
         if not id in self._services:
             self.log.debug("Hello from unknown service '%s'; treating it as a guest." % id)
@@ -578,6 +659,8 @@ class ServiceManager(HttpService,):
         service.metadata_keys = metakeys or []
         service.port = port or dynport
         service.last_seen = self._now
+        service.error = None
+        service.fail_count = 0
         self._storage_save_service(service)
 
         # TODO: We might want to return some more stuff here...(?)
@@ -599,7 +682,7 @@ class ServiceManager(HttpService,):
         service = self._services[id]
         extra_info = ""
         if self._release_port(service.host, service.port):
-            extra_info = " Dynamic port '%s:%d' released back to pool." % (service.host, service.port)
+            extra_info = " Dynamic port '%s' released back to pool." % (service.addr)
             if not service.fixed_port:
                 service.port = None
         if service.guest:
@@ -612,12 +695,102 @@ class ServiceManager(HttpService,):
             service.pid = None
             service.status = status.DEAD
             service.last_seen = self._now
+            service.error = None
+            service.fail_count = 0
             self._storage_save_service(service)
             self.log.info("Registered service '%s' said goodbye.%s" % (id, extra_info))
             return {"message": "Manager waves goodbye back to service '%s'.%s" % (id, extra_info)}
 
     def _run_services(self, ids):
-        return {"error": "TODO"}  # TODO
+        # TODO: Launch service on remote host
+        succeeded = []
+        failed = []
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to launch a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                if self._launch_service(service):  # Does all necessary logging itself
+                    succeeded.append(id)
+                else:
+                    failed.append(id)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Services that failed to launch: [%s]" % ", ".join(failed)
+        if succeeded:
+            ret["message"] = "Services launched: [%s]" % ", ".join(succeeded)
+        return ret
+
+    def _launch_service(self, service):
+        #runner = "/Users/htb/git/elasticsearch-eslib/bin/es-run"
+        #run_dir = "/Users/htb/git/customer-nets/services"
+
+        # This is the normal case, that it was started from es-run:
+        runner = sys.argv[0]
+        run_dir = os.path.normpath(os.path.join(os.getcwd(), "../.."))
+        # But there may be reasons to override this, especially if NOT run by es-run:
+        if self.config.service_runner:
+            runner = self.config.service_runner
+        if self.config.service_dir:
+            run_dir = self.config.service_dir
+
+        # print "***RUNNER=", runner
+        # print "***RUN_DIR=", run_dir
+
+        if service.guest:
+            self.log.warning("Tried to launch guest service '%s'. Guests cannot be managed." % service.id)
+            return False
+        if not service.type:
+            self.log.error("Service '%s' is not registered with a type. Cannot launch." % service.id)
+            return False
+        ss = self._get_status(service)
+        # It might have been removed by _get_status..
+        if not service.id in self._services:
+            self.log.warning("Service '%s' is no longer registered; cannot launch." % service.id)
+            return False
+        if not ss == status.DEAD:
+            self.log.debug("Cannot launch service ('%s') with status '%s'." % (service.id, ss))
+            return False
+
+        self.log.debug("Launching service '%s' of type '%s' at '%s'." % (service.id, service.type, service.addr))
+
+        p = None
+        try:
+            p = subprocess.Popen(
+                (
+                    sys.executable,  # Same python that is running this
+                    runner,
+                    "-d", run_dir,
+                    "-c", service.config_key,
+                    service.id,
+                    service.type,
+                    "-m", self.config.management_endpoint,  # This manager address
+                    "-e", service.addr,  # Own address
+                    "--daemon"  # Needed for logging to directories anyway..
+                ),
+                stdout = subprocess.PIPE,
+                stderr = subprocess.PIPE
+            )
+            # TODO: Grab stdout/stderr
+        except Exception as e:
+            self.log.exception("Failed to launch service '%s' at '%s'." % (service.id, service.addr))
+            service.error = str(e)
+            service.fail_count += 1
+            return False
+
+        service.pid = p.pid
+        service.error = None
+        service.fail_count = 0
+        service.status = status.DEAD
+        #service.last_seen = self._now
+        #self._storage_save_service()
+        # TODO: Perhaps just wait for service to say 'hello'?
+
+        self.log.status("Service '%s' launched at '%s' with pid=%d." % (service.id, service.addr, service.pid))
+        return True
 
     def _shutdown_services(self, ids, wait):
         # Since it has the same inner code as a processing operation:
@@ -626,6 +799,8 @@ class ServiceManager(HttpService,):
     def _kill_services(self, ids, force):
         # This is only for extreme cases.
         # Normally, a shutdown should do the trick.
+
+        # TODO: Kill service on remote host
 
         succeeded = []
         failed = []
@@ -660,14 +835,16 @@ class ServiceManager(HttpService,):
 
                     if dead:
                         service.last_seen = self._now
+                        self.error = None
+                        self.fail_count = 0  # Because we killed it..
                         self._remove_dead_service(service)
                         succeeded.append(id)
 
         ret = {}
         if failed:
-            ret["error"] = "Processes that failed: [%s]" % ", ".join(failed)
+            ret["error"] = "Services that failed to be killed: [%s]" % ", ".join(failed)
         if succeeded:
-            ret["message"] = "Processes killed: [%s]" % ", ".join(succeeded)
+            ret["message"] = "Services killed: [%s]" % ", ".join(succeeded)
         return ret
 
     def _processing_operation(self, ids, remote_verb, remote_command, infinitive_str, past_tense_str, required_status_list, wait=None):
@@ -688,11 +865,10 @@ class ServiceManager(HttpService,):
 
                 error = None
                 try:
-                    addr = "%s:%d" % (service.host, service.port)
                     data = None
                     if wait is not None:
                         data = {"wait": wait}
-                    content = self.remote(addr, remote_verb, remote_command, data)
+                    content = self.remote(service.addr, remote_verb, remote_command, data)
                     error = content.get("error")
                 except Exception as e:
                     error = str(e)
@@ -705,9 +881,9 @@ class ServiceManager(HttpService,):
 
         ret = {}
         if failed:
-            ret["error"] = "Processes not %s: [%s]" % (past_tense_str, ", ".join(failed))
+            ret["error"] = "Service not %s: [%s]" % (past_tense_str, ", ".join(failed))
         if succeeded:
-            ret["message"] = "Processes %s: [%s]" % (past_tense_str, ", ".join(succeeded))
+            ret["message"] = "Services %s: [%s]" % (past_tense_str, ", ".join(succeeded))
         return ret
 
     def _start_processing(self, ids):
@@ -725,7 +901,7 @@ class ServiceManager(HttpService,):
     def _resume_processing(self, ids):
         return self._processing_operation(ids, "post", "resume", "resume", "resumed", [status.SUSPENDED])
 
-    #region Service interface helpers
+    #endregion Service interface helpers
 
     #region Controller overrides
 

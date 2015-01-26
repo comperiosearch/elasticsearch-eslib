@@ -47,6 +47,14 @@ class Service(Configurable):
         # Overriding classes should set this to True if the service needs metadata
         self.requires_metadata = False
 
+        # Initialize statistics counters
+        self.stat_processing_started = 0
+        self.stat_processing_ended   = 0
+        self.stat_service_started    = 0
+        self.stat_processing_ended   = 0
+        self.stat_max_memory         = 0
+        self.stat_max_threads        = 0
+
     def __str__(self):
         return "%s|%s (%s)" % (self.__class__.__name__, self.name, self.status)
 
@@ -84,7 +92,14 @@ class Service(Configurable):
             return False
         if self._processing_stopping:
             return True  # Still considered to be working with the items..
-        return self.is_processing()  # TODO: What the hell to do if this call fails??
+        is_processing = self.is_processing()  # TODO: What the hell to do if this call fails??
+
+        # To set this correctly, we need a dependable callback from the last processor ending;
+        # otherwise, it depends on us polling, like here
+        if not is_processing and not self.stat_processing_ended:
+            self.stat_processing_ended = time.time()
+
+        return is_processing
 
     @property
     def processing_suspended(self):
@@ -174,12 +189,14 @@ class Service(Configurable):
 
         self._running = True
         self.log.status("Service running.")
+        self.stat_service_started = time.time()
 
         if wait:
             self.log.info("Waiting until service is shut down.")
             if not self._call_failable(self.on_wait):
                 return False
             self.log.status("Service stopped.")
+            self.stat_service_ended = time.time()
         return True  # Started; and potentially stopped again, in case we waited here
 
     def shutdown(self, wait=False):
@@ -221,6 +238,7 @@ class Service(Configurable):
 
         self._closing = False
         self._running = False
+        self.stat_service_ended = time.time()
         return ok
 
     def wait(self):
@@ -254,6 +272,8 @@ class Service(Configurable):
             self._processing = True
             self._processing_aborted = False
             self.log.status("Processing started.")
+            self.stat_processing_started = time.time()
+            self.stat_processing_ended = 0
         elif raise_on_error:
             raise ServiceOperationError("Processing failed to start.")
         return ok
@@ -446,4 +466,53 @@ class Service(Configurable):
 
     #endregion Processing management methods for override
 
+
+    def get_stats(self):
+        import psutil
+        proc = psutil.Process()
+
+        stats = {}
+        now = time.time()
+
+        # uptime
+        uptime = 0
+        if self._running:
+            uptime = now - self.stat_service_started
+        stats["uptime"] = int(uptime)
+
+        # elapsed time; current or from last run:
+        elapsed = None
+        if self.processing:
+            elapsed = (now - self.stat_processing_started)
+        elif self.stat_processing_started:
+            elapsed = int(self.stat_processing_ended - self.stat_processing_started)
+        stats["elapsed"] = elapsed
+
+        # memory used (supposedly in KB, but seems more like bytes..)
+        mem = long(proc.get_memory_info()[0])
+        if mem > self.stat_max_memory:
+            self.stat_max_memory = mem
+        stats["memory"] = mem
+        stats["memory_max"] = self.stat_max_memory
+
+        # threads
+        threads = threading.active_count()
+        if threads > self.stat_max_threads:
+            self.stat_max_threads = threads
+        stats["threads"] = threads
+        stats["threads_max"] = self.stat_max_threads
+
+        # cpu_percent
+        # This collects CPU load in % over 0.1 seconds... but it blocks for that time!
+        stats["cpu_percent"] = proc.cpu_percent(0.1)
+
+        # TODO: Only the individual service can know this...
+
+        stats["eta"] = None
+        # eta
+        # count
+        # remaining_count
+        # total_processed
+
+        return stats
 

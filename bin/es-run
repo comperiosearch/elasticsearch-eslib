@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# TODO: LOGGING / OUTPUT OF ERRORS
-# TODO: exception handling
-
 import eslib  # For logging
+import eslib.service
 from eslib.service import HttpService, status
 import yaml, logging, argparse
 import sys, os, imp, inspect, pwd, daemon, signal
@@ -83,44 +81,72 @@ class ServiceRunner(object):
             self._service.processing_resume()
 
     def run(self):
+        self._service.log.status("--- STARTING SERVICE ---")
         self._service.run(wait=True)
-        return False if self._terminate else self._reload
+        self._service.log.status("--- SERVICE STOPPED ---")
+        reload = False if self._terminate else self._reload
+        if reload:
+            self._service.log.info("Reloading service.")
+        return reload
 
 
-def _list_services(mod, prefix="", ll=None):
-    if not ll:
+def list_services(run_dir=None, service_package_path=None, service_file_path=None):
+    if not run_dir:
+        run_dir = os.environ.get("ESLIB_SERVICE_DIR")
+
+    tops = _get_tops(run_dir, service_package_path, service_file_path)
+    for top in tops:
+        services = eslib.unique(_list_services(top))
+        for service in services:
+            print service
+
+def _list_services(mod, prefix="", ll=None, seen=None):
+    if ll is None:
         ll = []
+    if seen is None:
+        seen = []
     for name, cls in inspect.getmembers(mod):
         if inspect.isclass(cls) and issubclass(cls, HttpService) and not issubclass(HttpService, cls):
             ll.append(prefix + name)
-        elif inspect.ismodule(cls):
-            _list_services(cls, "%s%s." % (prefix, name), ll)
+        elif inspect.ismodule(cls) and not cls in seen:
+            seen.append(cls)
+            _list_services(cls, "%s%s." % (prefix, name), ll, seen)
     return ll
 
-def list_services(run_dir=None, service_package_path=None, service_file_path=None):
-    top = None
+def _get_tops(run_dir, service_package_path, service_file_path):
+    tops = []
     if service_file_path:
-        top = imp.load_source("service_module", service_file_path)
-    elif service_package_path:
-        top = imp.load_package("service_package", service_package_path)
-    elif run_dir:
-        top = imp.load_package("service_package", "/".join([run_dir, "service"]))
-    else:
-        print >> sys.stderr, "Either run directory, service_package or file path must be specified."
-        sys.exit(1)
+        mod = imp.load_source("service_module", service_file_path)
+        if mod:
+            tops.append(mod)
+    if service_package_path:
+        pkg = imp.load_package("service_package", service_package_path)
+        if pkg:
+            tops.append(pkg)
+    if run_dir:
+        pkg = imp.load_package("service_package", "/".join([run_dir, "source"]))
+        if pkg:
+            tops.append(pkg)
+    tops.append(eslib.service)
+    return tops
 
-    print top
+def find_type(service_type_name, run_dir=None, service_package_path=None, service_file_path=None):
+    tops = _get_tops(run_dir, service_package_path, service_file_path)
+    for top in tops:
+        found = _find_type(top, service_type_name)
+        if found:
+            return found
+    return None
 
-    services = eslib.unique(_list_services(top))
-    for service in services:
-        print service
-
-def _find_type(mod, service_type_name):
+def _find_type(mod, service_type_name, seen=None):
+    if seen is None:
+        seen = []
     for name, cls in inspect.getmembers(mod):
         if inspect.isclass(cls) and issubclass(cls, HttpService) and not issubclass(HttpService, cls) and name == service_type_name:
             return cls
-        elif inspect.ismodule(cls):
-            hit = _find_type(cls, service_type_name)
+        elif inspect.ismodule(cls) and not cls in seen:
+            seen.append(cls)
+            hit = _find_type(cls, service_type_name, seen)
             if hit:
                 return hit
     return None
@@ -146,6 +172,27 @@ def run_service(
     log_console_path = "/".join([run_dir, "config", "logging-console.yaml"])
     log_dir          = "/".join([run_dir, "log"   , service_name])
 
+    if daemon_mode:
+        print "Daemonizing... redirecting output to run_dir: %s" % run_dir
+        daemon_context = daemon.DaemonContext(
+            stdout=open("daemon.stdout", "wb"),
+            stderr=open("daemon.stderr", "wb"),
+            files_preserve=None,
+            umask=022,
+            prevent_core=True,
+            detach_process=True,
+            #pidfile=,
+        )
+        daemon_context.open()
+        # From here on we are in a forked daemon process, and the original parent process is dead
+
+    # Change output dir to log_dir
+    os.system('mkdir -p %s' % log_dir)
+    os.chdir(log_dir)
+    # Write pid
+    with open("pid", "wt") as pidfile:
+        print >> pidfile, os.getpid()
+
     # Change executing user (if privileged to do so)
     if run_as_user:
         pw = pwd.getpwnam(run_as_user)
@@ -154,31 +201,16 @@ def run_service(
         os.setgid(gid)
         os.setuid(uid)
 
-    if not console_mode:
-        # Change output dir to log_dir
-        os.system('mkdir -p %s' % log_dir)
-        os.chdir(log_dir)
-        # Write pid
-        with open("pid", "wt") as pidfile:
-            print >> pidfile, os.getpid()
-
     # Change process name
-    setproctitle("es-run-service %s" % service_name)
+    setproctitle("%s %s" % (os.path.basename(sys.argv[0]), service_name))
 
     reload = True
-    while reload: # Only exceptions and 'reload' set to false will get us out of here
+    while reload:
+        # We do all of the below per reload iteration, since either source code or configs can have changed meanwhile.
+        # Only exceptions and 'reload' set to false will get us out of here
 
         # Find service type from name
-        top = None
-        if service_file_path:
-            top = imp.load_source("service_module", service_file_path)
-        elif service_package_path:
-            top = imp.load_package("service_package", service_package_path)
-        elif run_dir:
-            top = imp.load_package("service_package", "/".join([run_dir, "service"]))
-        if not top:
-            print >> sys.stderr, "Either run directory, service_package or file path must be specified."
-        service_type = _find_type(top, service_type_name)
+        service_type = find_type(service_type_name, run_dir, service_package_path, service_file_path)
         if not service_type:
             # No service, no logger, so we have to print this to stderr:
             print >> sys.stderr, "Failed to evaluate service type '%s'." % service_type_name
@@ -207,42 +239,12 @@ def run_service(
         if endpoint:
             service.config.management_endpoint = endpoint
 
-        # TODO: Do we *really* have to demonize every reload iteration?? File loggers are not working if we do this outside the reload loop
-        if daemon_mode:
-            print "Daemonizing... redirecting stdout and stderr."
-            is_daemonized = True
-            # The daemon needs to preserve logging to files
-            preserve = []
-            loggers = list(logging.Logger.manager.loggerDict.values())
-            loggers.append(logging.Logger.manager.root)
-            for logger in loggers:
-                if hasattr(logger, 'handlers'):
-                    for handler in logger.handlers:
-                        if hasattr(handler, 'stream') and \
-                           hasattr(handler.stream, 'fileno'):
-                            preserve.append(handler.stream)
+        reload = ServiceRunner(service, daemon_mode).run()
 
-            daemon_context = daemon.DaemonContext(
-                stdout=open("daemon.stdout", "wb"),
-                stderr=open("daemon.stderr", "wb"),
-                files_preserve=preserve
-            )
-            with daemon_context:
-                service.log.status("--- STARTING SERVICE ---")
-                reload = ServiceRunner(service, daemon_mode).run()
-        else:
-            service.log.status("--- STARTING SERVICE ---")
-            reload = ServiceRunner(service, daemon_mode).run()
+    os.remove("pid")
 
-        service.log.status("--- SERVICE STOPPED ---")
-
-        if reload:
-            service.log.info("Reloading service.")
-
-    if not console_mode:
-        os.remove("pid")
-
-    return reload
+    if daemon_mode:
+        daemon_context.close()
 
 #================================
 
@@ -257,15 +259,17 @@ Usage:
 
 Options:
   [-d <run_dir>]         * Home directory for service config and output.
-  [-p <service_package>] * Override path to service package. Defaults to ./services.
+  [-p <service_package>] * Override path to service package. Default=./service.
   [-f <service_file>]    * Load types directly from module file instead of package.
-  [-c <config_section>]    Name of config section for service within ./config/services.yaml
+  [-c <config_section>]    Name of config section for service within
+                           ./config/services.yaml.
   [-l <log_level>]         Log level, for console mode logging only.
   [-u <run_as_user>]       Run as this user.
-  [--daemon]               Detach and run as daemon process. (Otherwise logging to console, etc.)
+  [--daemon]               Detach and run in background.
+                           (Otherwise logging to console, etc..)
 
-  [-m <manager_endpoint>]  "host:port" of service manager, to subscribe to metadata.
-  [-e <endpoint>]          "host:port" where this service listens for management requests.
+  [-m <manager_endpoint>]  "host:port" of service manager.
+  [-e <endpoint>]          "host:port" where this service listens for commands.
 
 Run dir expects directories with content in
 
@@ -274,7 +278,7 @@ Run dir expects directories with content in
         logging.yaml
         logging-console.yaml
         services.yaml
-    service/
+    source/
         <python package with services>
 
 and writes pid and log output to log/.

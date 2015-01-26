@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json, yaml, sys, requests
+import eslib.debug
 from eslib.service import status
 
 def dump_formatted(format, data):
@@ -47,19 +48,20 @@ def cmd_list(host, format, name_patterns):
         r = res[key]
         elapsed = ""
         eta     = ""
-        if r["stats"]["elapsed"] is not None:
-            minutes = int(r["stats"]["elapsed"]) / 60
-            elapsed = "%d:%02d" % (minutes / 60, minutes % 60)
-        s = r["status"]
-        if s == status.SUSPENDED:
-            eta = "paused"
-        elif s in [status.PROCESSING, status.STOPPING]:
-            if r["stats"]["eta"] is not None:
-                if r["stats"]["eta"] == -1:
-                    eta = "infinite"
-                else:
-                    minutes = int(r["stats"]["eta"]) / 60
-                    eta     = "%d:%02d" % (minutes / 60, minutes % 60)
+        if r.get("stats"):
+            v = r["stats"]["elapsed"]
+            if v is not None:
+                elapsed = _hm_str(v)
+            s = r["status"]
+            if s == status.SUSPENDED:
+                eta = "paused"
+            elif s in [status.PROCESSING, status.STOPPING]:
+                v = r["stats"]["eta"]
+                if v is not None:
+                    if v == -1:
+                        eta = "infinite"
+                    else:
+                        eta = _hm_str(v)
 
         addr = r["host"]
         if r["port"]:
@@ -69,16 +71,73 @@ def cmd_list(host, format, name_patterns):
                 addr += ":(%s)" % str(r["port"])
         print ifmt % (key, r["status"], r["pid"], addr, elapsed, eta)
 
+#region Value formatters
+
+def _hm_str(value):
+    if value is None: return ""
+    minutes = int(value) / 60
+    hm = "%d:%02d" % (minutes / 60, minutes % 60)
+    return hm
+
+def _hms_str(value):
+    if value is None: return ""
+    seconds = int(value) % 60
+    minutes = int(value) / 60
+    hms = "%d:%02d:%02d" % (minutes / 60, minutes % 60, seconds)
+    return hms
+
+def _pct_str(value):
+    if value is None: return ""
+    return "%0.1f%%" % value
+
+def _byte_str(value):
+    if value is None: return ""
+    return eslib.debug.byte_size_string(value, 1)
+
+#endregion Value formatters
 
 # stats [options] <name> [<stat_fields...>]
-def cmd_stats(host, format, names, stat_fields):
-    pass
+def cmd_stats(host, format, name, stat_fields):
+    # TODO: Filter out stat_fields
 
-# add [options] [--start] <name> <type> [-t <config_tag>] [-s <server>]
+    data = {
+        "ids"   : [name]
+    }
+    res = remote(host, "get", "stats", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if not error and res.get(name):
+        error = res[name].get("error")
+    if error:
+        print >>sys.stderr, "Error getting stats for service '%s': %s" % (name, error)
+        return
+    else:
+        info = res.get(name)
+        if info:
+            print "INFO FOR SERVICE '%s':" % name
+            for key in sorted(info.keys()):
+                value = info[key]
+                if key == "stats":
+                    continue
+                print "    %-15s = %s" % (key, value)
+            stats = info.get("stats")
+            if stats:
+                print "STATS:"
+                for key in sorted(stats.keys()):
+                    value = stats[key]
+                    if key in ["uptime", "elapsed", "eta"]:
+                        value = _hms_str(value)
+                    elif key in ["cpu_percent"]:
+                        value = _pct_str(value)
+                    elif key in ["memory", "memory_max"]:
+                        value = _byte_str(value)
+                    print "    %-15s = %s" % (key, value)
+
+# add [options] [--start] <name> <type> [-c <config_tag>] [-s <server>]
 def cmd_add(host, format, name, service_type, config_tag, server_address, auto_start):
-    remote_host = server_address
+    remote_host = server_address or "localhost"
     remote_port = None
-    addr = server_address.split(":")
+    addr = remote_host.split(":")
     if len(addr) == 2:
         remote_host = addr[0]
         remote_port = addr[1]
@@ -98,20 +157,27 @@ def cmd_add(host, format, name, service_type, config_tag, server_address, auto_s
         print >>sys.stderr, "Error adding service '%s': %s" % (name, error)
 
 # remove [options] [--stop] <name>
-def cmd_remove(host, format, name, auto_stop):
+def cmd_remove(host, format, names, auto_stop):
     data = {
-        "id"   : name,
+        "ids"   : names,
         "stop" : auto_stop
     }
     res = remote(host, "delete", "remove", data)
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
-        print >>sys.stderr, "Error removing service '%s': %s" % (name, error)
+        print >>sys.stderr, "Error removing service(s) %s: %s" % (names, error)
 
 # run [options] <names...>
 def cmd_run(host, format, names):
-    pass
+    data = {
+        "ids"   : names
+    }
+    res = remote(host, "post", "run", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error launching service(s) %s: %s" % (names, error)
 
 # shutdown [options] [--wait] <names...>
 def cmd_shutdown(host, format, names, wait):
@@ -206,8 +272,8 @@ Usage:
   %(prog)s list     [options] [<name_patterns...>]
   %(prog)s stats    [options] <name> [<stat_fields...>]
 
-  %(prog)s add      [options] [--start] <name> <type> [-t <config_tag>] [-s <server_address>]
-  %(prog)s remove   [options] [--stop] <name>
+  %(prog)s add      [options] [--start] <name> <type> [-c <config_tag>] [-s <server_address>]
+  %(prog)s remove   [options] [--stop] <names...>
 
   %(prog)s run      [options] <names...>
   %(prog)s shutdown [options] [--wait] <names...>
@@ -270,20 +336,20 @@ Common options:
     parser_stats.add_argument("name", type=str, nargs=1)
     parser_stats.add_argument("fields", type=str, nargs="*")  # * = 0 or more
 
-    # add [options] [--start] <name> <type> [-t <config_tag>] [-s <server_address>]
+    # add [options] [--start] <name> <type> [-c <config_tag>] [-s <server_address>]
     desc = "Register a service that can be ran. Registration is stored."
     parser_add = subparsers.add_parser("add", description=desc, parents=[parser_common])
     parser_add._actions[0].help = argparse.SUPPRESS
     parser_add.add_argument("name", type=str, nargs=1)
     parser_add.add_argument("type", type=str, nargs=1)
-    parser_add.add_argument("-t", "--tag", dest="config_tag", type=str, required=False)
+    parser_add.add_argument("-c", "--tag", dest="config_tag", type=str, required=False)
     parser_add.add_argument("-s", "--server", type=str, required=False)
     parser_add.add_argument("--start", dest="auto_start", action="store_true")
-    # remove [options] [--stop] <name>
+    # remove [options] [--stop] <names...>
     desc = "Unregister a service."
     parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
     parser_remove._actions[0].help = argparse.SUPPRESS
-    parser_remove.add_argument("name", type=str, nargs=1)
+    parser_remove.add_argument("names", type=str, nargs="+")
     parser_remove.add_argument("--stop", dest="auto_stop", action="store_true")
 
     # run [options] <names...>
@@ -346,14 +412,14 @@ Common options:
         format = "yaml"
     elif args.json:
         format = "json"
-    host = args.host or "localhost:5000"
+    host = args.host or os.environ.get("ESLIB_SERVICE_MANAGER") or "localhost:5000"
 
     # Call commands according to parsed verbs
 
     if   args.command == "list"      : cmd_list    (host, format, args.names)
     elif args.command == "stats"     : cmd_stats   (host, format, args.name[0], args.fields)
     elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.type[0], args.config_tag, args.server, args.auto_start)
-    elif args.command == "remove"    : cmd_remove  (host, format, args.name[0], args.auto_stop)
+    elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.auto_stop)
     elif args.command == "run"       : cmd_run     (host, format, args.names)
     elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.wait)
     elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.force)
