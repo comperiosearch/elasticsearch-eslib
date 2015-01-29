@@ -35,7 +35,6 @@ class RabbitmqBase(Configurable):
 
     # returns (host, queue_name, vhost_name)
     def _get_addr(self, vhost, name):
-
         if not vhost and not self.config.virtual_host:
             raise ValueError("Virtual host must be specified either explicitly or through 'self.config.virtual_host'.")
 
@@ -79,6 +78,9 @@ class RabbitmqBase(Configurable):
         except HTTPError as e:
             if e.status == 404:
                self.log.debug("Could not purge queue '%s', not found." % q)
+
+    def get_queue_size(self, name=None, vhost=None):
+        return self.get_queue(name, vhost)["messages_ready"]
 
     def get_queue(self, name=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, name)
@@ -193,7 +195,7 @@ class RabbitmqBase(Configurable):
                 self.log.debug("Successfully reconnected to RabbitMQ.")
             except pika.exceptions.AMQPConnectionError as e:
                 timeout = 3
-                self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds.", timeout)
+                self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds." % timeout)
                 time.sleep(timeout)
 
         properties = pika.BasicProperties(

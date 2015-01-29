@@ -49,11 +49,10 @@ class HttpService(Service):
             metakeys
 
         # TODO:
-        GET  info
-        POST register     # External debug command to register with the manager
-        POST unregister
-        POST shutdown
+        GET  help
         GET  status
+        GET  stats
+        POST shutdown
         POST update       # causes (re)start
         POST start
         POST stop
@@ -144,6 +143,9 @@ class HttpService(Service):
             self._metadata = content["metadata"]
         else:
             self.log.info("No manager endpoint specified. Running stand-alone.")
+            if not data["port"]:
+                self.log.critical("Port must be specified when running stand-alone.")
+                exit(1)
         self._receiver.config.host = data["host"]
         self._receiver.config.port = data["port"]
 

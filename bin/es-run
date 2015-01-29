@@ -80,9 +80,12 @@ class ServiceRunner(object):
         if doit:
             self._service.processing_resume()
 
-    def run(self):
+    def run(self, auto_start):
         self._service.log.status("--- STARTING SERVICE ---")
-        self._service.run(wait=True)
+        ok = self._service.run()
+        if ok and auto_start:
+            ok = self._service.processing_start()
+        self._service.wait()
         self._service.log.status("--- SERVICE STOPPED ---")
         reload = False if self._terminate else self._reload
         if reload:
@@ -156,7 +159,8 @@ def run_service(
         service_name=None, service_type_name=None, config_section=None,
         console_log_level=None,
         daemon_mode=None, run_as_user=None,
-        manager_endpoint=None, endpoint=None):
+        manager_endpoint=None, endpoint=None,
+        auto_start=False):
 
     console_mode = not daemon_mode
 
@@ -209,13 +213,6 @@ def run_service(
         # We do all of the below per reload iteration, since either source code or configs can have changed meanwhile.
         # Only exceptions and 'reload' set to false will get us out of here
 
-        # Find service type from name
-        service_type = find_type(service_type_name, run_dir, service_package_path, service_file_path)
-        if not service_type:
-            # No service, no logger, so we have to print this to stderr:
-            print >> sys.stderr, "Failed to evaluate service type '%s'." % service_type_name
-            exit(1)
-
         # Load config files
         with open(credentials_path, "r") as f:
             credentials = yaml.load(f)
@@ -223,6 +220,25 @@ def run_service(
             global_config = yaml.load(f)
         with open(log_console_path if console_mode else log_config_path) as f:
             log_config = yaml.load(f)
+
+        # Unless explicitly overridden, look for the service_type_name in the config
+        if not service_type_name:
+            section = global_config.get(config_section or service_name)
+            if section:
+                config_stn = section.get("type")
+                if config_stn:
+                    service_type_name =config_stn
+        if not service_type_name:
+            # No service, no logger, so we have to print this to stderr:
+            print >> sys.stderr, "Missing service type name; not in config and not explicitly overridden."
+            exit(1)
+
+        # Find service type from name
+        service_type = find_type(service_type_name, run_dir, service_package_path, service_file_path)
+        if not service_type:
+            # No service, no logger, so we have to print this to stderr:
+            print >> sys.stderr, "Failed to evaluate service type '%s'." % service_type_name
+            exit(1)
 
         # Initialize logging
         logging.config.dictConfig(config=log_config)
@@ -238,8 +254,10 @@ def run_service(
             service.config.manager_endpoint = manager_endpoint
         if endpoint:
             service.config.management_endpoint = endpoint
+        else:
+            service.config.management_endpoint = "localhost"  # TODO: Change to host we are running from, as "localhost" may mean another host to the manager if it is running on a different machine (i.e. the host IT is running on)
 
-        reload = ServiceRunner(service, daemon_mode).run()
+        reload = ServiceRunner(service, daemon_mode).run(auto_start)
 
     os.remove("pid")
 
@@ -255,21 +273,22 @@ Runner for eslib document processing services.
 
 Usage:
   %(prog)s list [*options]
-  %(prog)s [options] <service_name> <service_type>
+  %(prog)s [options] <service_name>
 
 Options:
   [-d <run_dir>]         * Home directory for service config and output.
   [-p <service_package>] * Override path to service package. Default=./service.
   [-f <service_file>]    * Load types directly from module file instead of package.
+  [-t <service_type>]      Normally this is gotten from the config file, but can be overridden here.
   [-c <config_section>]    Name of config section for service within
                            ./config/services.yaml.
   [-l <log_level>]         Log level, for console mode logging only.
   [-u <run_as_user>]       Run as this user.
   [--daemon]               Detach and run in background.
                            (Otherwise logging to console, etc..)
-
-  [-m <manager_endpoint>]  "host:port" of service manager.
+[-m <manager_endpoint>]  "host:port" of service manager.
   [-e <endpoint>]          "host:port" where this service listens for commands.
+  [--start]                Start processing at once.
 
 Run dir expects directories with content in
 
@@ -308,24 +327,26 @@ Default run_dir can be set with environment variable ESLIB_SERVICE_DIR.
         list_services(args.run_dir, args.service_package, args.service_file,)
     else:
         parser.add_argument("name", type=str, nargs=1)
-        parser.add_argument("type", type=str, nargs=1)
         parser.add_argument("-d", dest="run_dir"        , type=str, required=False)
         parser.add_argument("-p", dest="service_package", type=str, required=False)
         parser.add_argument("-f", dest="service_file"   , type=str, required=False)
         parser.add_argument("-c", dest="config_section" , type=str, required=False)
+        parser.add_argument("-t", dest="type"           , type=str, required=False)
         parser.add_argument("-l", dest="loglevel"       , type=str, required=False)
         parser.add_argument("-u", dest="user"           , type=str, required=False)
         parser.add_argument("--daemon" , action="store_true")
         parser.add_argument("-m", dest="mgr_endpoint"   , type=str, required=False)
         parser.add_argument("-e", dest="mgmt_endpoint"  , type=str, required=False)
+        parser.add_argument("--start" , action="store_true")
 
         args = parser.parse_args()
         run_service(
             args.run_dir, args.service_package, args.service_file,
-            args.name[0], args.type[0], args.config_section,
+            args.name[0], args.type, args.config_section,
             args.loglevel,
             args.daemon, args.user,
-            args.mgr_endpoint, args.mgmt_endpoint)
+            args.mgr_endpoint, args.mgmt_endpoint,
+            args.start)
 
 if __name__ == '__main__':
     main()

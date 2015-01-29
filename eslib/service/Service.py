@@ -3,6 +3,8 @@ __author__ = 'Hans Terje Bakke'
 import logging
 import time, os, threading
 from ..Configurable import Configurable
+import psutil
+
 
 class ServiceOperationError(Exception):
     def __init__(self, *args, **kwargs):
@@ -34,29 +36,65 @@ class Service(Configurable):
 
         self._setup_logging()
 
-        self._running = False
-        self._failed = False
-        self._processing = False
-        self._processing_aborted = False
+        self._running             = False
+        self._failed              = False
+        self._processing          = False
+        self._processing_aborted  = False
         self._processing_stopping = False
-        self._closing = False
+        self._closing             = False
 
         self._metadata_initialized = False
         self._registered_procs = []
 
         # Overriding classes should set this to True if the service needs metadata
-        self.requires_metadata = False
+        self.requires_metadata = False  # TODO: NOW OBSOLETE??
 
         # Initialize statistics counters
         self.stat_processing_started = 0
         self.stat_processing_ended   = 0
         self.stat_service_started    = 0
-        self.stat_processing_ended   = 0
         self.stat_max_memory         = 0
         self.stat_max_threads        = 0
+        self.stat_cpu_percent        = 0
+        self.stat_max_cpu_percent    = 0
+
+        self.stat_count              = 0
+        self.stat_count_total        = None  # There might not be a total count..
+        self.stat_eta                = None  # If there is no total count... it may never end..
+
+        self._last_stat_tick         = 0
+        self._time_at_resume         = 0
+        self._count_at_resume        = 0
+
+        self._stat_thread_interval   = 10  # 10 seconds
+        self._stat_thread_running    = False
+        self._stat_thread            = None
+
+        # self.log.debug("Starting stat thread.")
+        # self._stat_thread = threading.Thread(target=self._stat_thread_run, name="stat")
+        # self._stat_thread.daemon = True
+        # self._stat_thread.start()
+        #
+    def __del__(self):
+        # if self.stat_thread:
+        #     self.log.debug("Stopping stat thread.")
+        #     self._stat_thread_running = False
+        #     self._stat_thread.join()
+        #     self.log.debug("Stat thread stopped.")
+        #     self.stat_thread = None
+        pass
 
     def __str__(self):
         return "%s|%s (%s)" % (self.__class__.__name__, self.name, self.status)
+
+    def _stat_thread_run(self):
+        self._stat_thread_running = True
+        while self._stat_thread_running:
+            self._stat_tick()
+            for i in range(int(self._stat_thread_interval)):
+                if not self._stat_thread_running:
+                    break
+                time.sleep(1.0)
 
     @property
     def pid(self):
@@ -74,7 +112,7 @@ class Service(Configurable):
             return status.DOWN
         if self._closing:
             return status.CLOSING
-        if self._processing_aborted:
+        if self.processing_aborted:
             return status.ABORTED
         if self._processing_stopping:
             return status.STOPPING
@@ -100,6 +138,13 @@ class Service(Configurable):
             self.stat_processing_ended = time.time()
 
         return is_processing
+
+    @property
+    def processing_aborted(self):
+        if not self._processing_aborted:
+            return False
+        is_processing_aborted = self.is_aborted()  # TODO: What the hell to do if this call fails??
+        return is_processing_aborted
 
     @property
     def processing_suspended(self):
@@ -191,6 +236,11 @@ class Service(Configurable):
         self.log.status("Service running.")
         self.stat_service_started = time.time()
 
+        self.log.debug("Starting stat thread.")
+        self._stat_thread = threading.Thread(target=self._stat_thread_run, name="stat")
+        self._stat_thread.daemon = True
+        self._stat_thread.start()
+
         if wait:
             self.log.info("Waiting until service is shut down.")
             if not self._call_failable(self.on_wait):
@@ -239,6 +289,14 @@ class Service(Configurable):
         self._closing = False
         self._running = False
         self.stat_service_ended = time.time()
+
+        if self._stat_thread:
+            self.log.debug("Stopping stat thread.")
+            self._stat_thread_running = False
+            self._stat_thread.join()
+            self.log.debug("Stat thread stopped.")
+            self._stat_thread = None
+
         return ok
 
     def wait(self):
@@ -269,11 +327,13 @@ class Service(Configurable):
         self.log.info("Starting processing.")
         ok = self.on_processing_start()
         if ok:
-            self._processing = True
-            self._processing_aborted = False
+            self._processing             = True
+            self._processing_aborted     = False
             self.log.status("Processing started.")
             self.stat_processing_started = time.time()
-            self.stat_processing_ended = 0
+            self.stat_processing_ended   = 0
+            self._time_at_resume         = self.stat_processing_started
+            self._count_at_resume        = 0
         elif raise_on_error:
             raise ServiceOperationError("Processing failed to start.")
         return ok
@@ -396,6 +456,8 @@ class Service(Configurable):
         ok = self.on_processing_resume()
         if ok:
             self.log.status("Processing resumed.")
+            self._time_at_resume         = time.time()
+            self._count_at_resume        = self.on_count()
         elif raise_on_error:
             raise ServiceOperationError("Processing failed to resume.")
         return ok
@@ -424,6 +486,15 @@ class Service(Configurable):
 
     #endregion Setup methods for override
 
+    #region Statistics provider methods for override
+
+    def on_count(self):
+        return None
+    def on_count_total(self):
+        return None
+
+    #endregion Statistics provider methods for override
+
     #region Service management methods for override
 
     def on_run(self):
@@ -444,7 +515,9 @@ class Service(Configurable):
     def is_processing(self):
         "Evaluate whether processing is in progress."
         return False
-
+    def is_aborted(self):
+        "Evaluate whether processing is aborted."
+        return False
     def is_suspended(self):
         "Evaluate whether processing is suspended."
         return False
@@ -454,6 +527,7 @@ class Service(Configurable):
     def on_processing_restart(self):
         return True
     def on_processing_stop(self):
+        "This method should block until the process is fully stopped."
         return True
     def on_processing_abort(self):
         return True
@@ -468,7 +542,6 @@ class Service(Configurable):
 
 
     def get_stats(self):
-        import psutil
         proc = psutil.Process()
 
         stats = {}
@@ -503,16 +576,54 @@ class Service(Configurable):
         stats["threads_max"] = self.stat_max_threads
 
         # cpu_percent
-        # This collects CPU load in % over 0.1 seconds... but it blocks for that time!
-        stats["cpu_percent"] = proc.cpu_percent(0.1)
+        # # This collects CPU load in % over 0.1 seconds... but it blocks for that time!
+        # stats["cpu_percent"] = proc.cpu_percent(0.1)
+        stats["cpu_percent"] = self.stat_cpu_percent
+        stats["cpu_percent_max"] = self.stat_max_cpu_percent
 
-        # TODO: Only the individual service can know this...
+        # Only the individual service can provide knowledge for these:
 
-        stats["eta"] = None
-        # eta
-        # count
-        # remaining_count
-        # total_processed
+        # estimated time remaining ("eta")
+        stats["eta"] = None if self.stat_eta is None else int(self.stat_eta)
+
+        # counts
+        stats["count"] = self.stat_count
+        stats["count_total"] = self.stat_count_total
 
         return stats
 
+
+    def _stat_tick(self):
+        "Retrieve counts and ETA plus cpu load."
+
+        proc = psutil.Process()
+
+        now = time.time()
+
+        # cpu
+        if self._last_stat_tick:
+            self._total_cpu_time = psutil.cpu_times().user + psutil.cpu_times().system
+            self._process_cpu_time = proc.cpu_times().user + psutil.cpu_times().system
+            self.stat_cpu_percent = self._process_cpu_time / self._total_cpu_time
+            if self.stat_cpu_percent > self.stat_max_cpu_percent:
+                self.stat_max_cpu_percent = self.stat_cpu_percent
+        else:
+            self.stat_cpu_percent = 0
+            self.stat_max_cpu_percent = 0
+
+        self.stat_count = self.on_count() or 0
+        self.stat_count_total = self.on_count_total()
+
+        if not self.processing:
+            self.stat_eta = 0
+        else:
+            if self.stat_count_total is None:
+                self.stat_eta = None  # Infinite, or unknown
+            else:
+                if (now == self._time_at_resume) or (self.stat_count == self._count_at_resume):
+                    self.stat_eta = None
+                else:
+                    speed = (self.stat_count - self._count_at_resume) / (now - self._time_at_resume)
+                    self.stat_eta = (self.stat_count_total - self.stat_count) / speed
+
+        self._last_stat_tick = now

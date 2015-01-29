@@ -8,8 +8,27 @@ class Config(object):
     def set_default(self, **kwargs):
         for key,val in kwargs.iteritems():
             self.defaults[key] = val
-            if not key in self.__dict__:
-                self.__dict__[key] = val
+            # if not key in self.__dict__:
+            #     self.__dict__[key] = val
+
+    def __getattr__(self, key):
+        if key in self.__dict__:
+            return self.__dict__.__getattr__(key)
+        elif key in self.defaults:
+            return self.defaults[key]
+        else:
+            raise AttributeError("'%s' has no attribute '%s'" % (self.__class__.__name__, key))
+
+    def __getitem__(self, key):
+        if key in self.__dict__:
+            return self.__dict__[key]
+        elif key in self.defaults:
+            return self.defaults[key]
+        else:
+            raise AttributeError("'%s' has no attribute '%s'" % (self.__class__.__name__, key))
+
+    def __setitem__(self, key, value):
+            self.__dict__[key] = value
 
     def set(self, **kwargs):
         for key,val in kwargs.iteritems():

@@ -53,51 +53,18 @@ class DummyService(HttpService, PipelineService):
             service = self,
             name    = "logger",
             func    = self._logfunc)
-        self._logger.subscribe(timer)
 
-        #  Register them for debug dumping
-        self.register_procs(timer, self._logger)
+        procs = [timer, self._logger]
 
-        # Assign head and tail of pipeline
-        self.head = timer
-        self.tail = self._logger
+        # Link them
+        self.link(*procs)
 
-        self._started = 0
+        # Register them for debug dumping
+        self.register_procs(*procs)
 
         return True
 
-    #region Controller overrides
-
-    def is_processing(self):
-        "Evaluate whether processing is in progress."
-        return self.tail.running
-
-    def is_suspended(self):
-        "Evaluate whether processing is suspended."
-        return self.head.suspended
-
-    def on_processing_start(self):
-        self._started = time.time()
-        self.head.start()
-        return True
-
-    def on_processing_stop(self):
-        self.head.stop()
-        self.tail.wait()
-        return True
-
-    def on_processing_abort(self):
-        self.head.abort()
-        self.tail.wait()
-        return True
-
-    def on_processing_suspend(self):
-        self.head.suspend()
-        return True
-
-    def on_processing_resume(self):
-        self.head.resume()
-        return True
+    #region Service overrides
 
     # TODO
     def on_update(self, config):
@@ -109,7 +76,7 @@ class DummyService(HttpService, PipelineService):
             pass  # Note: No restart needed
         return True
 
-    #endregion Controller overrides
+    #endregion Service overrides
 
     def _logfunc(self, doc):
         if self.config.lifespan and time.time() - self._started > self.config.lifespan:

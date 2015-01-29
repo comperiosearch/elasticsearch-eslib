@@ -105,8 +105,7 @@ class ServiceManager(HttpService,):
 
     def on_configure(self, credentials, config, global_config):
         self.config.set(
-            name                    = config["name"],
-            management_endpoint     = config["management_endpoint"],
+            management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
             service_runner          = config.get("service_runner"),
             service_dir             = config.get("service_dir"),
 
@@ -419,6 +418,27 @@ class ServiceManager(HttpService,):
         self.log.debug("called: list services")
         return self._get_service_info(services)
 
+    def _get_own_service_info(self):
+        host, port = self.config.management_endpoint.split(":")
+
+        return {
+            "id"         : self.name,
+            "guest"      : True,
+            "host"       : host,
+            "type"       : self.__class__.__name__,
+            "config"     : None,  # Unknown at this point
+            "metakeys"   : [],
+            "fixed_port" : True,
+            "port"       : port,
+            "pid"        : self.pid,
+            "last_seen"  : self._now,
+            "fail_count" : 0,
+            "fail_reason": None,
+            "status"     : self.status,
+            # Runtime statistics from service:
+            "stats"      : self.get_stats()
+        }
+
     def _get_service_info(self, services, return_missing=False):
         ret = {}
         for service in services:
@@ -444,15 +464,15 @@ class ServiceManager(HttpService,):
                     "status"     : ss,
                     # Runtime statistics from service:
                     "stats"      : stats
-                    # "stats"     : {
-                    #     "elapsed": None,
-                    #     "eta": None
-                    # }
                 }
         return ret
 
     def _mgmt_service_stats(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
+
+        if not ids:
+            return {self.name: self._get_own_service_info()}
+
         self.log.debug("called: get stats for service(s) [%s]" % ", ".join(ids))
         missing = [id for id in ids if id not in self._services]
         fetch = [service for service in self._services.values() if service.id in ids]
@@ -641,7 +661,7 @@ class ServiceManager(HttpService,):
             else:
                 self.log.info("Allocated port '%s:%d' for service '%s'." % (host, dynport, id))
         else:
-            for s in self._services:
+            for s in self._services.values()[:]:
                 if s.port == port:
                     if s.id == id:
                         break  # Same service reserved port; this is ok
@@ -737,8 +757,10 @@ class ServiceManager(HttpService,):
         if self.config.service_dir:
             run_dir = self.config.service_dir
 
-        # print "***RUNNER=", runner
-        # print "***RUN_DIR=", run_dir
+        print "***RUNNER=", runner
+        print "***RUN_DIR=", run_dir
+
+        print "***CONFIG_KEY=", service.config_key
 
         if service.guest:
             self.log.warning("Tried to launch guest service '%s'. Guests cannot be managed." % service.id)
@@ -757,20 +779,23 @@ class ServiceManager(HttpService,):
 
         self.log.debug("Launching service '%s' of type '%s' at '%s'." % (service.id, service.type, service.addr))
 
+        args = [
+            sys.executable,  # Same python that is running this
+            runner,
+            "-d", run_dir,
+            service.id,
+            #service.type,  # OBSOLETE: Getting this from config now
+            "-m", self.config.management_endpoint,  # This manager address
+            "-e", service.addr,  # Own address
+            "--daemon"  # Needed for logging to directories anyway..
+        ]
+        if service.config_key:
+            args.extend(["-c", service.config_key])
+
         p = None
         try:
             p = subprocess.Popen(
-                (
-                    sys.executable,  # Same python that is running this
-                    runner,
-                    "-d", run_dir,
-                    "-c", service.config_key,
-                    service.id,
-                    service.type,
-                    "-m", self.config.management_endpoint,  # This manager address
-                    "-e", service.addr,  # Own address
-                    "--daemon"  # Needed for logging to directories anyway..
-                ),
+                args,
                 stdout = subprocess.PIPE,
                 stderr = subprocess.PIPE
             )
@@ -903,7 +928,17 @@ class ServiceManager(HttpService,):
 
     #endregion Service interface helpers
 
-    #region Controller overrides
+    #region Service overrides
+
+    def get_stats(self):
+        stats = super(ServiceManager, self).get_stats()
+        available_ports = {}
+        for host, ports in self._available_ports.iteritems():
+            available_ports[host] = len(ports)
+        stats["available_ports"] = available_ports
+        return stats
+
+    #TODO: ALL OF THE BELOW++, fix them when I work with metadata
 
     def on_status(self):
         return {"timer": self._timer.status}
@@ -934,8 +969,7 @@ class ServiceManager(HttpService,):
         self._timer.resume()
         return True
 
-
-    #endregion Controller overrides
+    #endregion Service overrides
 
     #
     # # TODO: OLD STUFF

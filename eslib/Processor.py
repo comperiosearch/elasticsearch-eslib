@@ -12,6 +12,7 @@ from .Terminal import TerminalProtocolException
 from .TerminalInfo import TerminalInfo
 from .Connector import Connector
 from .Socket import Socket
+import weakref
 
 class ProcessorStatistics(object):
     def __init__(self, owner):
@@ -51,13 +52,16 @@ class ProcessorStatistics(object):
 class Processor(Configurable):
     "Base class for workflow processing object."
 
-    def __init__(self, **kwargs):
+    def __init__(self, service=None, **kwargs):
         super(Processor, self).__init__(**kwargs)
         self.sleep = 0.001
 
+        self.service = None
+        if service:
+            self.service = weakref.proxy(service)
+
         self.config.set_default(
             name    = self.__class__.__name__,
-            service = None
         )
 
         self._setup_logging()
@@ -88,6 +92,10 @@ class Processor(Configurable):
         self._runchan_count = 0  # Number of running producers, whether connector or local monitor/generator thread
         self._initialized = False  # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
 
+        # Variables for keeping track of progress.
+        self.total = 0
+        self.count = 0
+
     def __str__(self):
         return "%s|%s" % (self.__class__.__name__, self.name)
 
@@ -112,8 +120,8 @@ class Processor(Configurable):
 
     def _setup_logging(self):
         serviceName = "UNKNOWN"
-        if self.config.service:
-            serviceName = self.config.service.name
+        if self.service:
+            serviceName = self.service.name
 
         fullPath = ".".join([serviceName, self.name])
 
