@@ -120,6 +120,8 @@ class ElasticsearchWriter(Generator):
             if   "create" in docop: resdoc = docop["create"]
             elif "update" in docop: resdoc = docop["update"]
             if resdoc:
+                self.count += 1
+                
                 id      = resdoc["_id"]
                 version = resdoc.get("_version")
                 index   = resdoc["_index"]
@@ -146,6 +148,7 @@ class ElasticsearchWriter(Generator):
     #region Generator
 
     def on_start(self):
+        self.count = 0
         self._last_batch_time = time.time()  # Not 0, in that case we would attempt a zero batch immediately upon start
 
     def on_shutdown(self):
