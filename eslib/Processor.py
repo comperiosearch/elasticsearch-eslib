@@ -692,6 +692,11 @@ class Processor(Configurable):
                         return True
                     return connector.owner.congestion(seen)
 
+    def congestion_sleep(self, delay=1.0):
+        start = time.time()
+        while (time.time() - start < delay) and (not self.end_tick_reason):
+            time.sleep(self.sleep)
+
     #endregion Operation management
 
     #region Send and receive data with external methods

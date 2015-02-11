@@ -56,13 +56,10 @@ class ElasticsearchWriter(Generator):
         self._last_batch_time = 0
 
     def is_congested(self):
-        # TODO: MUST RATHER CHECK HOW MANY WE HAVE HAVE SENT VS ARE WAITING FOR(?)
         if self.config.batchsize:
             if self._queue.qsize() > self.config.batchsize * 10:
-                print "***CONGESTED"
                 return True
         elif self._queue.qsize() > 10000:
-            print "***CONGESTED"
             return True
         return False
 
