@@ -82,7 +82,7 @@ class Neo4jWriter(Generator):
 
     def _incoming_user(self, document):
         if self.doclog.isEnabledFor(logging.TRACE):
-            self.doclog.trace("Incoming user '%s' ('%s')." % document["screen_name"], document["id"])
+            self.doclog.trace("Incoming user '%s' ('%s')." % (document["screen_name"], document["id"]))
         query, params = self._neo4j.get_node_merge_query(document)
         self._user_queue.append((query, params))
 
