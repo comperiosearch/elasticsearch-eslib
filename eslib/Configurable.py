@@ -30,8 +30,11 @@ class Config(object):
     def __setitem__(self, key, value):
             self.__dict__[key] = value
 
-    def set(self, **kwargs):
+    def set(self, ignore_none=False, **kwargs):
+        "ignore_none means that fields with value None are not set."
         for key,val in kwargs.iteritems():
+            if ignore_none and val is None:
+                continue
             self.__dict__[key] = val
 
     def get_default_attributes(self):

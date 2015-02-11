@@ -11,7 +11,7 @@ import time
 class Connector(Terminal):
 
     def __init__(self, name, protocol=None, method=None):
-        self.sleep = 0.001
+        self.sleep = 0.1 #0.001  # Check for data in incoming queue this often (then burst through as much as possible)
 
         super(Connector, self).__init__(name, protocol)
         self.type = Connector
@@ -46,7 +46,12 @@ class Connector(Terminal):
             self.queue.task_done()
             if document:
                 if self.method:
-                    self.method(document)
+                    try:
+                        self.method(document)
+                    except Exception as e:
+                        msg = "Unhandled exception in processor '%s' func '%s' while processing a document." % (self.owner.name, self.method.__name__)
+                        self.owner.doclog.exception(msg)
+                        self.owner.log.exception(msg)
 
     def receive(self, document):
         "Put document on the incoming queue for this connector. Called by sockets."
@@ -70,7 +75,8 @@ class Connector(Terminal):
                 self.stopping = False
                 self.running = False
             elif not self.suspended:
-                self._process()
+                while self.running and not self.suspended and not self.queue.empty():
+                    self._process()
 
         # Clean out the queue (in case we just aborted)
         self._clear()

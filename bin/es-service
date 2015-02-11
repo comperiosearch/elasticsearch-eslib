@@ -18,7 +18,7 @@ def remote(host, verb, path, data):
         "http://%s/%s" % (host, path),
         data=json.dumps(data),
         headers={"content-type": "application/json"},
-        timeout=1.0
+        timeout=(3.5, 10)
     )
     if res.content:
         return json.loads(res.content)
@@ -39,11 +39,11 @@ def cmd_list(host, format, name_patterns):
     if error:
         print >>sys.stderr, "Error listing services: %s" % (error)
 
-    hfmt = "%-20s %-10s %6s %-23s %9s %9s"
-    ifmt = "%-20s %-10s %6s %-23s %9s %9s"
+    hfmt = "%-20s %-10s %6s %-20s %9s %9s"
+    ifmt = "%-20s %-10s %6s %-20s %9s %9s"
     print hfmt % ("NAME", "STATUS", "PID", "HOST", "ELAPSED", "ETA")
     d = "-"
-    print hfmt % (d*20, d*10, d*6, d*20, d*9, d*7)
+    print hfmt % (d*20, d*10, d*6, d*20, d*9, d*9)
     for key in sorted(list(res.keys())):
         r = res[key]
         elapsed = ""
@@ -133,8 +133,8 @@ def cmd_stats(host, format, name, stat_fields):
                         value = _byte_str(value)
                     print "    %-15s = %s" % (key, value)
 
-# add [options] [--start] <name> <type> [-c <config_tag>] [-s <server>]
-def cmd_add(host, format, name, service_type, config_tag, server_address, auto_start):
+# add [options] [--start] <name> [-c <config_tag>] [-s <server>]
+def cmd_add(host, format, name, config_tag, server_address, auto_start):
     remote_host = server_address or "localhost"
     remote_port = None
     addr = remote_host.split(":")
@@ -143,12 +143,11 @@ def cmd_add(host, format, name, service_type, config_tag, server_address, auto_s
         remote_port = addr[1]
 
     data = {
-        "id"     : name,
-        "type"   : service_type,
-        "host"   : remote_host,
-        "port"   : remote_port,
-        "config" : config_tag,
-        "start"  : auto_start,
+        "id"         : name,
+        "host"       : remote_host,
+        "port"       : remote_port,
+        "config_key" : config_tag,
+        "start"      : auto_start,
     }
     res = remote(host, "put", "add", data)
     if format: return dump_formatted(format, res)

@@ -88,6 +88,10 @@ class TwitterMonitor(Monitor):
         self._may_iterate             = False  # Prevent it from entering blocking call
         self._inside_blocking         = False
 
+        # If there are not keywords to monitor, the API does not let us watch nothing,
+        # so this is a special state where we are running, but not connected to Twitter.
+        self._no_mon = True
+
 
     def on_open(self):
         self.total = 0
@@ -99,7 +103,11 @@ class TwitterMonitor(Monitor):
 
         # Verify that there is actually something we should monitor
         if not (self.config.track or self.config.follow or self.config.locations):
-            raise ValueError("Config should contain either 'track', 'follow' or 'locations' to monitor. Monitoring without any is meaningless.")
+            self._no_mon = True
+            self.log.warning("Neither 'track', 'follow', or 'locations' are specified.")
+            #raise ValueError("Config should contain either 'track', 'follow' or 'locations' to monitor. Monitoring without any is meaningless.")
+        else:
+            self._no_mon = False
 
         # Verify phrase format for "track"
         for phrase in self.config.track:
@@ -139,7 +147,8 @@ class TwitterMonitor(Monitor):
 
         # Try a request once, which includes connecting. Some validation should cast an exception.
         # Upon connection problems will try a reconnect in the run loop, later.
-        self._connect(raise_instead_of_abort=True)
+        if not self._no_mon:
+            self._connect(raise_instead_of_abort=True)
 
 
     def stop(self):
@@ -162,6 +171,8 @@ class TwitterMonitor(Monitor):
 
 
     def _connect(self, raise_instead_of_abort=False):
+        if self._no_mon:
+            return
 
         # First check if we are supposed to connect and we have waited long enough
         if not self._connecting:
@@ -360,7 +371,7 @@ class TwitterMonitor(Monitor):
 
         now = datetime.datetime.utcnow()
 
-        print raw
+        #print raw  # DEBUG
         tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
 
         ts = tweet["_source"] = {"id": raw["id_str"] }  # id repeated intentionally

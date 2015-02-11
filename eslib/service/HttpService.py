@@ -24,7 +24,7 @@ class HttpService(Service):
         name
         manager_endpoint          Address 'host:port' to manager service; for receiving metadata updates, etc.
         management_endpoint       Management endpoint for this service; where it can be managed.
-        connection_timeout        Timeout when connecting to other services.
+        connection_timeout        Timeout when connecting to other services. Float or tuple of (connect, read) timeouts.
 
     Communication with manager:
 
@@ -72,7 +72,7 @@ class HttpService(Service):
             # The host:port endpoint where this service will listen for management commands
             management_endpoint = "localhost:4444",
 
-            connection_timeout = 1.0  # Whe connecting to other services
+            connection_timeout = (3.5, 10.0)  # Whe connecting to other services
         )
 
         self.metadata = {}
@@ -107,7 +107,7 @@ class HttpService(Service):
             "http://%s/%s" % (host, path),
             data=json.dumps(data) if data else None,
             headers={"content-type": "application/json"},
-            timeout=self.config.connection_timeout
+            timeout=self.config.connection_timeout  # either float or tuple of (connect, read) timeouts
             #, auth=('user', '*****')
         )
         if res.content:
@@ -243,29 +243,35 @@ class HttpService(Service):
             host = self._receiver.config.host
             port = self._receiver.config.port
         return {
-            "id"      : self.name,
-            "host"    : host,
-            "port"    : port,
-            "pid"     : self.pid,
-            "status"  : self.status,
-            "metakeys": self.metadata_keys
+            "id"        : self.name,
+            "type"      : self.__class__.__name__,
+            "config_key": self.config_key,
+            "host"      : host,
+            "port"      : port,
+            "pid"       : self.pid,
+            "status"    : self.status,
+            "meta_keys" : self.metadata_keys
         }
 
     def _mgmt_hello(self, request_handler, payload, **kwargs):
-        self.log.debug("called: hello")
+        self.log.trace("called: hello")
         return self._build_hello_message()
 
     def _mgmt_help(self, request_handler, payload, **kwargs):
         self.log.debug("called: help")
-        return {"routes": self._routes.keys()}
+        routes = ["%s %s" % (r.verb, r.path) for r in self._routes]
+        return {"routes": routes}
 
     def _mgmt_status(self, request_handler, payload, **kwargs):
-        self.log.debug("called: status")
+        self.log.trace("called: status")
         return {"status": self.status}
 
     def _mgmt_stats(self, request_handler, payload, **kwargs):
-        self.log.debug("called: stats")
-        return {"status": self.status, "stats": self.get_stats()}
+        self.log.trace("called: stats")
+        return {
+            "status"     : self.status,
+            "stats"      : self.get_stats()
+        }
 
     # args: (bool)wait
     def _mgmt_shutdown(self, request_handler, payload, **kwargs):

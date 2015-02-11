@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# TODO: USE SCRIPT ENTRY PATH AS BASE FOR ALL RELATIVE PATH CALCULATIONS
+
 import eslib  # For logging
 import eslib.service
 from eslib.service import HttpService, status
@@ -156,7 +158,8 @@ def _find_type(mod, service_type_name, seen=None):
 
 def run_service(
         run_dir=False, service_package_path=None, service_file_path=None,
-        service_name=None, service_type_name=None, config_section=None,
+        service_name=None, service_type_name=None,
+        config_file_path=None, config_section=None,
         console_log_level=None,
         daemon_mode=None, run_as_user=None,
         manager_endpoint=None, endpoint=None,
@@ -164,13 +167,23 @@ def run_service(
 
     console_mode = not daemon_mode
 
+    if not config_section:
+        config_section = service_name
+
     if not run_dir:
         run_dir = os.environ.get("ESLIB_SERVICE_DIR")
     if not run_dir:
         print >> sys.stderr, "CRITICAL: Missing run_dir; cannot continue."
         sys.exit(1)
 
-    config_path      = "/".join([run_dir, "config", "services.yaml"])
+    config_path = None
+    if config_file_path:
+        if config_file_path == os.path.basename(config_file_path):
+            config_path  = "/".join([run_dir, "config", config_file_path])
+        else:
+            config_path = config_file_path
+    else:
+        config_path  = "/".join([run_dir, "config", "services.yaml"])
     credentials_path = "/".join([run_dir, "config", "credentials.yaml"])
     log_config_path  = "/".join([run_dir, "config", "logging.yaml"])
     log_console_path = "/".join([run_dir, "config", "logging-console.yaml"])
@@ -223,7 +236,7 @@ def run_service(
 
         # Unless explicitly overridden, look for the service_type_name in the config
         if not service_type_name:
-            section = global_config.get(config_section or service_name)
+            section = global_config.get(config_section)
             if section:
                 config_stn = section.get("type")
                 if config_stn:
@@ -249,7 +262,9 @@ def run_service(
 
         # Instantiate and set up
         service = service_type(name=service_name)
-        service.configure(credentials, global_config.get(config_section or service_name), global_config)
+        service.config_file = config_file_path  # The manager needs to know this so it can spawn processes based on the same config
+        service.config_key = config_section
+        service.configure(credentials, global_config.get(config_section), global_config)
         if manager_endpoint:
             service.config.manager_endpoint = manager_endpoint
         if endpoint:
@@ -276,19 +291,20 @@ Usage:
   %(prog)s [options] <service_name>
 
 Options:
-  [-d <run_dir>]         * Home directory for service config and output.
-  [-p <service_package>] * Override path to service package. Default=./service.
-  [-f <service_file>]    * Load types directly from module file instead of package.
-  [-t <service_type>]      Normally this is gotten from the config file, but can be overridden here.
-  [-c <config_section>]    Name of config section for service within
-                           ./config/services.yaml.
-  [-l <log_level>]         Log level, for console mode logging only.
-  [-u <run_as_user>]       Run as this user.
-  [--daemon]               Detach and run in background.
-                           (Otherwise logging to console, etc..)
-[-m <manager_endpoint>]  "host:port" of service manager.
-  [-e <endpoint>]          "host:port" where this service listens for commands.
-  [--start]                Start processing at once.
+  [-d <run_dir>]            * Home directory for service config and output.
+  [-f <config_file>]          Use this config file instead of the default. Searches config dir first.
+  [-t <service_type>]         Normally this is gotten from the config file, but can be overridden.
+  [-c <config_section>]       Name of config section for service within
+                              ./config/services.yaml.
+  [-l <log_level>]            Log level, for console mode logging only.
+  [-u <run_as_user>]          Run as this user.
+  [-m <manager_endpoint>]     "host:port" of service manager.
+  [-e <endpoint>]             "host:port" where this service listens for commands. Port is optional.
+  [--start]                   Start processing at once.
+  [--daemon]                  Detach and run in background.
+                              (Otherwise logging to console, etc..)
+  [--service-package <dir>] * Override path to service package. Default=./service.
+  [--service-file <file>]   * Load types directly from module file instead of package.
 
 Run dir expects directories with content in
 
@@ -318,31 +334,33 @@ Default run_dir can be set with environment variable ESLIB_SERVICE_DIR.
         desc = "List available service types."
         parser = argparse.ArgumentParser(description=desc)
         parser._actions[0].help = argparse.SUPPRESS
-        parser.add_argument("-d", dest="run_dir"        , type=str, required=False)
-        parser.add_argument("-p", dest="service_package", type=str, required=False)
-        parser.add_argument("-f", dest="service_file"   , type=str, required=False)
+        parser.add_argument("-d", "--run-dir"  , dest="run_dir"        , type=str, required=False)
+        parser.add_argument("--service-package", dest="service_package", type=str, required=False)
+        parser.add_argument("--service-file"   , dest="service_file"   , type=str, required=False)
 
         args = parser.parse_args()
 
         list_services(args.run_dir, args.service_package, args.service_file,)
     else:
         parser.add_argument("name", type=str, nargs=1)
-        parser.add_argument("-d", dest="run_dir"        , type=str, required=False)
-        parser.add_argument("-p", dest="service_package", type=str, required=False)
-        parser.add_argument("-f", dest="service_file"   , type=str, required=False)
+        parser.add_argument("-d", "--run-dir"    , dest="run_dir"     , type=str, required=False)
+        parser.add_argument("-f", "--config-file", dest="config_file" , type=str, required=False)
         parser.add_argument("-c", dest="config_section" , type=str, required=False)
         parser.add_argument("-t", dest="type"           , type=str, required=False)
         parser.add_argument("-l", dest="loglevel"       , type=str, required=False)
         parser.add_argument("-u", dest="user"           , type=str, required=False)
-        parser.add_argument("--daemon" , action="store_true")
         parser.add_argument("-m", dest="mgr_endpoint"   , type=str, required=False)
         parser.add_argument("-e", dest="mgmt_endpoint"  , type=str, required=False)
-        parser.add_argument("--start" , action="store_true")
+        parser.add_argument("--daemon" , action="store_true")
+        parser.add_argument("--start"  , action="store_true")
+        parser.add_argument("--service-package", dest="service_package", type=str, required=False)
+        parser.add_argument("--service-file"   , dest="service_file"   , type=str, required=False)
 
         args = parser.parse_args()
         run_service(
             args.run_dir, args.service_package, args.service_file,
-            args.name[0], args.type, args.config_section,
+            args.name[0], args.type,
+            args.config_file, args.config_section,
             args.loglevel,
             args.daemon, args.user,
             args.mgr_endpoint, args.mgmt_endpoint,

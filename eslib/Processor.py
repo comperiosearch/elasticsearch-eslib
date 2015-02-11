@@ -653,7 +653,6 @@ class Processor(Configurable):
 
     def _wait(self, restarting=False):
         "Wait for this processor to finish."
-
         while self.running or (self.restarting and not restarting):
             time.sleep(0.1)  # wait 0.1 seconds
 

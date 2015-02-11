@@ -52,7 +52,7 @@ class ServiceManager(HttpService,):
             elasticsearch_index     = "management",
 
             dynamic_port_ranges     = [("localhost", 5001, 5099)],
-            connection_timeout      = 1.0  # max seconds to wait for connection to a service
+            connection_timeout      = (3.5, 10.0)  # max seconds to wait for connection to a service, max wait for read
         )
 
         self._es = None
@@ -172,6 +172,7 @@ class ServiceManager(HttpService,):
             ic = IndicesClient(self._es)
             # If index does not exist, create it:
             if not ic.exists(self._es_index):
+                self.log.info("Management index '%s' did not exist. Creating it." % self._es_index)
                 ic.create(self._es_index)
             ic.refresh(self._es_index)
             scan_resp = scan(self._es, index=self._es_index, doc_type='service', query=self._matchall_query)
@@ -187,7 +188,6 @@ class ServiceManager(HttpService,):
             service.id            = doc["_id"]
             service.guest         = s["guest"]
             service.host          = s["host"]
-            service.type          = s["type"]
             service.config_key    = s["config_key"]
             service.metadata_keys = s["metadata_keys"]
             service.fixed_port    = s["fixed_port"]
@@ -201,7 +201,6 @@ class ServiceManager(HttpService,):
         payload = {
             "guest"        : service.guest,
             "host"         : service.host,
-            "type"         : service.type,
             "config_key"   : service.config_key,
             "metadata_keys": service.metadata_keys,
             "fixed_port"   : service.fixed_port,
@@ -333,6 +332,9 @@ class ServiceManager(HttpService,):
             if error:
                 msg = "Failed to retrieve stats from service '%s' at '%s': %s" % (service.id, service.addr, error)
                 self.log.error(msg)
+            # Transfer these via the 'stats' section:
+            stats["type"]       = content.get("type")
+            stats["config_key"] = content.get("config_key")
         except Exception as e:
             error = str(e)
             msg = "Failed to communicate with service '%s' at '%s': %s" % (service.id, service.addr, e)
@@ -378,10 +380,9 @@ class ServiceManager(HttpService,):
         return self._add_service(
             payload.get("guest") or False,  # guest
             payload.get("id"),              # service id
-            payload.get("type"),            # service type name
             payload.get("host"),            # hostname for where to run this service (or where guest IS running)
             payload.get("port"),            # port service insists to run admin port on
-            payload.get("config"),          # config key
+            payload.get("config_key"),      # config key
             payload.get("start") or False   # auto_start
         )
 
@@ -397,11 +398,13 @@ class ServiceManager(HttpService,):
         self.log.debug("called: hello/register service '%s'" % payload.get("id"))
         return self._register_service(
             payload.get("id"),
+            payload.get("type"),
+            payload.get("config_key"),
             payload.get("host"),
             payload.get("port") or None,
             payload.get("pid"),
             payload.get("status"),
-            payload.get("metakeys"),
+            payload.get("meta_keys"),
         )
 
     def _mgmt_service_unregister(self, request_handler, payload, **kwargs):
@@ -426,8 +429,8 @@ class ServiceManager(HttpService,):
             "guest"      : True,
             "host"       : host,
             "type"       : self.__class__.__name__,
-            "config"     : None,  # Unknown at this point
-            "metakeys"   : [],
+            "config_key" : self.config_key,
+            "meta_keys"  : [],
             "fixed_port" : True,
             "port"       : port,
             "pid"        : self.pid,
@@ -453,8 +456,8 @@ class ServiceManager(HttpService,):
                     "guest"      : service.guest,
                     "host"       : service.host,
                     "type"       : service.type,
-                    "config"     : service.config_key,
-                    "metakeys"   : service.metadata_keys,
+                    "config_key" : service.config_key,
+                    "meta_keys"  : service.metadata_keys,
                     "fixed_port" : service.fixed_port,
                     "port"       : service.port,
                     "pid"        : service.pid,
@@ -535,11 +538,9 @@ class ServiceManager(HttpService,):
 
     #region Service interface helpers
 
-    def _add_service(self, guest, id, service_type_name, host, port, config_key, auto_start, save=True):
+    def _add_service(self, guest, id, host, port, config_key, auto_start, save=True):
         if port is not None and type(port) is not int:
             port = int(port)
-        if not guest and not service_type_name:
-            return {"error": "Service type must be specified for non-guest service."}
 
         # Check if service is already registered
         if id in self._services:
@@ -558,7 +559,6 @@ class ServiceManager(HttpService,):
 
         service = ServiceInfo()
         service.id         = id
-        service.type       = service_type_name
         service.guest      = guest
         service.host       = host
         service.config_key = config_key
@@ -646,7 +646,7 @@ class ServiceManager(HttpService,):
             ret["message"] = "Services removed: [%s]" % ", ".join(succeeded)
         return ret
 
-    def _register_service(self, id, host, port, pid, status, metakeys):
+    def _register_service(self, id, service_type, config_key, host, port, pid, status, metakeys):
         # If this service is not registered, treat it as a guest.
         # Give it a port number if missing.
 
@@ -672,8 +672,10 @@ class ServiceManager(HttpService,):
         if not id in self._services:
             self.log.debug("Hello from unknown service '%s'; treating it as a guest." % id)
             guest = True
-            self._add_service(guest, id, None, host, port, None, False, save=False)
+            self._add_service(guest, id, host, port, None, False, save=False)
         service = self._services[id]
+        service.config_key = config_key
+        service.type = service_type
         service.pid = pid
         service.status = status
         service.metadata_keys = metakeys or []
@@ -757,16 +759,13 @@ class ServiceManager(HttpService,):
         if self.config.service_dir:
             run_dir = self.config.service_dir
 
-        print "***RUNNER=", runner
-        print "***RUN_DIR=", run_dir
-
-        print "***CONFIG_KEY=", service.config_key
+        # print "***RUNNER=", runner
+        # print "***RUN_DIR=", run_dir
+        # print "***CONFIG_FILE=", self.config_file
+        # print "***CONFIG_KEY=", service.config_key
 
         if service.guest:
             self.log.warning("Tried to launch guest service '%s'. Guests cannot be managed." % service.id)
-            return False
-        if not service.type:
-            self.log.error("Service '%s' is not registered with a type. Cannot launch." % service.id)
             return False
         ss = self._get_status(service)
         # It might have been removed by _get_status..
@@ -777,18 +776,19 @@ class ServiceManager(HttpService,):
             self.log.debug("Cannot launch service ('%s') with status '%s'." % (service.id, ss))
             return False
 
-        self.log.debug("Launching service '%s' of type '%s' at '%s'." % (service.id, service.type, service.addr))
+        self.log.debug("Launching service '%s' at '%s'." % (service.id, service.addr))
 
         args = [
             sys.executable,  # Same python that is running this
             runner,
             "-d", run_dir,
             service.id,
-            #service.type,  # OBSOLETE: Getting this from config now
             "-m", self.config.management_endpoint,  # This manager address
             "-e", service.addr,  # Own address
             "--daemon"  # Needed for logging to directories anyway..
         ]
+        if self.config_file:
+            args.extend(["-f", self.config_file])
         if service.config_key:
             args.extend(["-c", service.config_key])
 

@@ -1,5 +1,8 @@
 __author__ = 'Hans Terje Bakke'
 
+# TODO: Perhaps rewrite with a better async implementation. Example here:
+#   http://pika.readthedocs.org/en/latest/examples/asynchronous_consumer_example.html
+
 from ..Configurable import Configurable
 import pyrabbit.api as rabbit
 from pyrabbit.http import HTTPError
@@ -188,7 +191,7 @@ class RabbitmqBase(Configurable):
 
     def _publish(self, msg_type, data):
 
-        while not self._connection.is_open and self.running and not self.aborted:
+        while (not self._connection or not self._connection.is_open) and self.running and not self.aborted:
             self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
             try:
                 self._open_connection()
@@ -209,11 +212,11 @@ class RabbitmqBase(Configurable):
             try:
                 self._channel.basic_publish(
                     exchange=self.config.exchange or "",
-                    routing_key=self._queue_name,  # Fanout exchange should ignore this
+                    routing_key=self._queue_name,  # Fanout exchange will ignore this
                     body=data,
                     properties=properties)
                 ok = True
-            except pika.exceptions.ConnectionClosed as e:
+            except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as e:
                 if try_again:
                     self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
                     try_again = self._reconnect(3, 3)

@@ -79,7 +79,7 @@ class DummyService(HttpService, PipelineService):
     #endregion Service overrides
 
     def _logfunc(self, doc):
-        if self.config.lifespan and time.time() - self._started > self.config.lifespan:
+        if self.config.lifespan and time.time() - self.stat_processing_started > self.config.lifespan:
             self.log.status("Life has come to an end; stopping.")
             self.processing_stop()
             return

@@ -27,7 +27,7 @@ class status(object):
 class Service(Configurable):
 
     # Class level properties
-    config_keys = []
+    metadata_keys = []
 
     def __init__(self, **kwargs):
         super(Service, self).__init__(**kwargs)
@@ -35,6 +35,10 @@ class Service(Configurable):
         self.config.set_default(name=self.__class__.__name__)
 
         self._setup_logging()
+
+        # For outer book keeping only
+        self.config_file          = None   # The manager needs to know this so it can spawn processes based on the same config
+        self.config_key           = None
 
         self._running             = False
         self._failed              = False
@@ -65,6 +69,8 @@ class Service(Configurable):
         self._last_stat_tick         = 0
         self._time_at_resume         = 0
         self._count_at_resume        = 0
+        self._total_cpu_time         = 0
+        self._process_cpu_time       = 0
 
         self._stat_thread_interval   = 10  # 10 seconds
         self._stat_thread_running    = False
@@ -279,6 +285,13 @@ class Service(Configurable):
                 self._closing = False
                 return False
 
+        if self._stat_thread:
+            self.log.debug("Stopping stat thread.")
+            self._stat_thread_running = False
+            self._stat_thread.join()
+            self.log.debug("Stat thread stopped.")
+            self._stat_thread = None
+
         ok = self._call_failable(self.on_shutdown)
         if ok:
             self.log.status("Service shut down.")
@@ -289,13 +302,6 @@ class Service(Configurable):
         self._closing = False
         self._running = False
         self.stat_service_ended = time.time()
-
-        if self._stat_thread:
-            self.log.debug("Stopping stat thread.")
-            self._stat_thread_running = False
-            self._stat_thread.join()
-            self.log.debug("Stat thread stopped.")
-            self._stat_thread = None
 
         return ok
 
@@ -596,26 +602,32 @@ class Service(Configurable):
     def _stat_tick(self):
         "Retrieve counts and ETA plus cpu load."
 
-        proc = psutil.Process()
-
         now = time.time()
+        interval = (now - self._last_stat_tick)
 
         # cpu
+        psproc = psutil.Process()
+        tot = psutil.cpu_times().user + psutil.cpu_times().system
+        prc = psproc.cpu_times().user + psproc.cpu_times().system
         if self._last_stat_tick:
-            self._total_cpu_time = psutil.cpu_times().user + psutil.cpu_times().system
-            self._process_cpu_time = proc.cpu_times().user + psutil.cpu_times().system
-            self.stat_cpu_percent = self._process_cpu_time / self._total_cpu_time
+            avg_tot = (tot - self._total_cpu_time  ) / interval
+            avg_prc = (prc - self._process_cpu_time) / interval
+            self.stat_cpu_percent = (avg_prc / avg_tot) * 100.0
             if self.stat_cpu_percent > self.stat_max_cpu_percent:
                 self.stat_max_cpu_percent = self.stat_cpu_percent
         else:
             self.stat_cpu_percent = 0
             self.stat_max_cpu_percent = 0
+        self._total_cpu_time = tot
+        self._process_cpu_time = prc
 
+        # Counts
         self.stat_count = self.on_count() or 0
         self.stat_count_total = self.on_count_total()
 
+        # Estimated time remaining
         if not self.processing:
-            self.stat_eta = 0
+            self.stat_eta = None
         else:
             if self.stat_count_total is None:
                 self.stat_eta = None  # Infinite, or unknown
