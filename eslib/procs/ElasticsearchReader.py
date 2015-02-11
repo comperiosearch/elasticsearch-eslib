@@ -142,6 +142,8 @@ class ElasticsearchReader(Generator):
                 return
             if self.suspended:
                 sleep(self.sleep)
+            elif self.congestion():
+                sleep(self.sleep)
             else:
                 self.log.info("Fetching follow-up scan batch from Elasticsearch.")
                 res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)

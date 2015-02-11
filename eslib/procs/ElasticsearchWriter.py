@@ -55,6 +55,12 @@ class ElasticsearchWriter(Generator):
         self._queue_lock = Lock()
         self._last_batch_time = 0
 
+    def is_congested(self):
+        if self.config.batchsize:
+            return self._queue.qsize() > self.config.batchsize * 10
+        else:
+            return self._queue.qsize() > 10000
+
     def _incoming(self, document):
         id = document.get("_id")
         index = self.config.index or document.get("_index")
@@ -121,7 +127,7 @@ class ElasticsearchWriter(Generator):
             elif "update" in docop: resdoc = docop["update"]
             if resdoc:
                 self.count += 1
-                
+
                 id      = resdoc["_id"]
                 version = resdoc.get("_version")
                 index   = resdoc["_index"]
