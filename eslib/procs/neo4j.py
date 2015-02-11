@@ -210,12 +210,12 @@ class Neo4j(Configurable):
         resp.raise_for_status()
         return resp.json()
 
-    def _handle_error(self, path, requests, headers, get=True):
+    def _handle_error(self, path, reqs, headers, get=True):
         """
         We call this whenever we get a connection error from requests.
 
         :param str path: the rest endpoint we're trying to reach
-        :param dict requests: the dict holding the neo4j transactions
+        :param dict reqs: the dict holding the neo4j transactions
         :param str headers: the header corresponding to the correct http method
         :param boolean get: if true do a get call, else do a post
         :raise Exception: if to many reconnect attempts
@@ -224,7 +224,7 @@ class Neo4j(Configurable):
         """
         call = requests.get if get else requests.post
         resp = None
-        dump = json.dumps(requests)
+        dump = json.dumps(reqs)
         wait = self.config.start_reconnect_wait
         while resp is None:
             if wait > self.config.max_reconnect_wait:
