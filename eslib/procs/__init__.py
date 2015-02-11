@@ -29,7 +29,7 @@ from .PatternRemover        import PatternRemover
 from .HtmlRemover           import HtmlRemover
 from .BlacklistFilter       import BlacklistFilter
 from .Throttle              import Throttle
-from .ProtocolConverter     import ProtocolConverter
+from .Transformer           import Transformer
 from .EntityExtractor       import EntityExtractor
 from .ProcessWrapper        import ProcessWrapper
 from .CLIReader             import CLIReader
@@ -59,7 +59,7 @@ __all__ = (
     "HtmlRemover",
     "BlacklistFilter",
     "Throttle",
-    "ProtocolConverter",
+    "Transformer",
     "EntityExtractor",
     "ProcessWrapper",
     "CLIReader",

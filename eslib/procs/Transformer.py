@@ -2,7 +2,7 @@ __author__ = 'Hans Terje Bakke'
 
 from ..Processor import Processor
 
-class ProtocolConverter(Processor):
+class Transformer(Processor):
     """
     Convert input to output protocol.
     Returns a LIST of zero or more documents converted to the output protocol.
@@ -16,7 +16,7 @@ class ProtocolConverter(Processor):
                                      documents complying with the output protocol.
     """
     def __init__(self, func=None, input_protocol=None, output_protocol=None, **kwargs):
-        super(ProtocolConverter, self).__init__(**kwargs)
+        super(Transformer, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", input_protocol)
         self._output = self.create_socket("output", output_protocol)
 

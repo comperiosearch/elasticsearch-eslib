@@ -1,6 +1,6 @@
 # elasticsearch-eslib
 
-2014.09.29 -- Hans Terje Bakke
+2015.01.14 -- Hans Terje Bakke
 
 Python library for document processing for Elasticsearch.
 
@@ -113,6 +113,25 @@ processor.add_callback(do_stuff)
 ...
 ```
 
+### Events
+
+You can register methods to listen to events. The following events can be subscribed to:
+
+```python
+event_started
+event_stopped
+event_aborted
+```
+    
+You register a method that takes no a processor as arguments like so
+
+```python
+def myfunc(processor)
+    print "Processor '%s' started" % processor.name
+    
+myproc.event_started.append(myfunc)
+```
+
 ### Protocol compliance
 
 When sockets and connector are joined ("connected"), there is a check for protocol compliance. These are string
@@ -140,6 +159,10 @@ Read only:
     running
     suspended
     aborted
+Event lists:
+    event_started
+    event_stopped
+    event_aborted
 Methods:
     __init__(name) # Constructor/init
     subscribe(producer=None, socket_name=None, connector_name=None)
@@ -161,7 +184,7 @@ Methods for debugging:
     DUMP_connectors
     DUMP_sockets
 ```
-        
+
 ## Writing your own Processor
 
 The simple processor (not Generator type) typically has one or more connectors. A connector receives data from

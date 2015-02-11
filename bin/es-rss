@@ -3,6 +3,8 @@
 
 #TODO: cmd script use logs for verbose output
 
+import logging
+import eslib
 from eslib.procs import RssMonitor
 import eslib.prog
 from eslib.time import iso2date, ago2date
@@ -16,7 +18,6 @@ import getopt, sys, os
 
 def setup_logging(debug=False):
 
-    import logging
     #LOG_FORMAT = ('%(name) -8s %(levelname) -10s %(funcName) -30s %(lineno) -5d: %(message)s')
     #logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
@@ -26,7 +27,7 @@ def setup_logging(debug=False):
 
     console = logging.StreamHandler()
     console.setLevel(loglevel)
-    console.setFormatter(logging.Formatter("%(firstname) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
+    console.setFormatter(logging.Formatter("%(firstName) -8s %(lineno) -5d %(levelname) -10s %(message)s"))
 
     proclog = logging.getLogger("proclog")
     proclog.setLevel(logging.TRACE)

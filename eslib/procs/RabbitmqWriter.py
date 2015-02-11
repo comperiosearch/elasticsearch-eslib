@@ -45,6 +45,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 
     def on_open(self):
+        self.count = 0
         self._open_connection()
         self.log.info("Connected to RabbitMQ.")
 
@@ -58,13 +59,13 @@ class RabbitmqWriter(Processor, RabbitmqBase):
 
         data = None
         msg_type = None
-        if type(document) in set([str, unicode]):
+        if isinstance(document, basestring):
             data = document
             msg_type = type(document).__name__
-        elif type(document) in set([int, float]):
+        elif isinstance(document, (int, long, float)):
             data = str(document)
             msg_type = type(document).__name__
-        elif type(document) in set([list, dict]):
+        elif isinstance(document, (list, dict)):
             try:
                 data = tojson(document)
             except TypeError as e:
@@ -75,5 +76,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             data = str(document)
             msg_type = "str" #type(document).__name__
             self.doclog.warning("Writing document of unsupported type '%s' as type 'str'." % type(document).__name__)
+
+        self.count += 1
 
         self._publish(msg_type, data)

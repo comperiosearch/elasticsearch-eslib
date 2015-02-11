@@ -6,8 +6,6 @@ from eslib.procs import FileReader, FileWriter, TweetEntityRemover, PatternRemov
 import eslib.prog
 import argparse
 
-# TODO: Is ellipses suffixes a remnant from the Elasticsearch Twitter river, meaning 'truncated', or still part of tweet?
-
 
 def main():
     desc   = "Perform a chain of cleaning operations on tweets:\n" + \

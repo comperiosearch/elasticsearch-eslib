@@ -12,25 +12,72 @@ from .Terminal import TerminalProtocolException
 from .TerminalInfo import TerminalInfo
 from .Connector import Connector
 from .Socket import Socket
+import weakref
+
+class ProcessorStatistics(object):
+    def __init__(self, owner):
+        """
+        :param Processor owner:
+        """
+        self.processor = owner
+
+        self.input_count      = 0  # Number delivered to processor methods by connectors
+        self.output_count     = 0  # Number written to output sockets
+        self.pending_count    = 0  # Currently pending processing; sum of input and internal processing queues; incl. waiting for write
+        self.processed_count  = 0
+        self.started_time     = 0
+        self.ended_time       = 0
+        self.elapsed_time     = 0
+        self.eta_time         = 0  # Estimated time to finished
+        self.processing_time  = 0  # Time inside connector target method, generator tick method or shutdown method
+        self.iteration_number = 0  # Number of times processor has been started
+        self.processing_velocity_hour   = 0
+        self.processing_velocity_minute = 0
+        self.processing_velocity_second = 0
+        self.pending_growth_hour   = 0
+        self.pending_growth_minute = 0
+        self.pending_growth_second = 0
+
+        # These are not particular to the document processor, but to the entire process
+        self.thread_count     = 0
+        self.max_thread_count = 0  # PER PROCESS
+        self.memory_used      = 0  # PER PROCESS
+        self.max_memory_used  = 0  # PER PROCESS
+
+
+#TODO: CALLBACK chains: 'stopped', 'aborted'
+#TODO: RESOLVE BOTTLENECKS
+#DOCUMENT STATISTICS, CALLBACK CHAINS, BOTTLENECKS
 
 class Processor(Configurable):
     "Base class for workflow processing object."
 
-    def __init__(self, **kwargs):
+    def __init__(self, service=None, **kwargs):
         super(Processor, self).__init__(**kwargs)
         self.sleep = 0.001
 
-        self.config.set_default(name=self.__class__.__name__)
+        self.service = None
+        if service:
+            self.service = weakref.proxy(service)
+
+        self.config.set_default(
+            name    = self.__class__.__name__,
+        )
+
+        self._setup_logging()
 
         self.is_generator = False
+
+        # Callback events
+        self._event_started = []
+        self._event_stopped = []
+        self._event_aborted = []
 
         # Terminals
         self.sockets    = {}
         self.connectors = {}
         self.default_connector = None
         self.default_socket    = None
-
-        self._setup_logging()
 
         # Execution control status, needed by generators and monitors
         self.accepting  = False
@@ -44,6 +91,10 @@ class Processor(Configurable):
         self._thread = None
         self._runchan_count = 0  # Number of running producers, whether connector or local monitor/generator thread
         self._initialized = False  # Set only by _setup() and _close() methods! (To avoid infinite circular setup of processor graph.)
+
+        # Variables for keeping track of progress.
+        self.total = 0
+        self.count = 0
 
     def __str__(self):
         return "%s|%s" % (self.__class__.__name__, self.name)
@@ -67,26 +118,19 @@ class Processor(Configurable):
         else:
             return "stopped"
 
-    def _setup_logging(self):  # TODO: MIGHT WANT TO REDO ALL OF THIS...
-        # Set up logging
-        parts = []
-        if not self.__module__ == "__main__": parts.append(self.__module__)
-        className = self.__class__.__name__
-        parts.append(className)
+    def _setup_logging(self):
+        serviceName = "UNKNOWN"
+        if self.service:
+            serviceName = self.service.name
 
-        name = self.name
-        if name:
-            if name.endswith(".py"):
-                name = name[:-3]
-            if not name == className:
-                parts.append(name)
-        fullPath = ".".join(parts)
-        #print "FULL=[%s]" % fullPath
+        fullPath = ".".join([serviceName, self.name])
+
         self.doclog  = logging.getLogger("doclog.%s"  % fullPath)
         self.log     = logging.getLogger("proclog.%s" % fullPath)
 
-        self.log.className = self.doclog.className = className
-        self.log.instanceName = self.doclog.instanceName = name
+        self.log.serviceName  = self.doclog.serviceName  = serviceName
+        self.log.className    = self.doclog.className    = self.__class__.__name__
+        self.log.instanceName = self.doclog.instanceName = self.name
 
     def _iter_subscribers(self):
         for socket in self.sockets.itervalues():
@@ -299,6 +343,37 @@ class Processor(Configurable):
 
     #endregion Connection management
 
+    #region Event callbacks
+
+    @property
+    def event_started(self):
+        """
+        List of methods to be called after the processor has successfully started.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_started
+
+    @property
+    def event_stopped(self):
+        """
+        List of methods to be called after the processor has successfully stopped/completed.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_stopped
+
+    @property
+    def event_aborted(self):
+        """
+        List of methods to be called after the processor has been aborted.
+        Register with started.append(my_method), where my_method has signature
+        my_method().
+        """
+        return self._event_aborted
+
+    #endregion Event callbacks
+
     #region Handlers for all processors types
 
     def on_open    (self): pass
@@ -403,6 +478,20 @@ class Processor(Configurable):
         self._initialized = False
         # Note: Do NOT tell subscribers to close. They will do this themselves after they have been stopped or aborted.
 
+        # Notify everyone subscribing to 'event_stopped' or 'event_aborted' events
+        if self.aborted:
+            for func in self.event_aborted:
+                try:
+                    func()
+                except Exception as e:
+                    self.log.exception("Unhandled exception in an event handler for 'aborted'.")
+        else:
+            for func in self.event_stopped:
+                try:
+                    func()
+                except Exception as e:
+                    self.log.exception("Unhandled exception in an event handler for 'stopped'.")
+
     def _accept_incoming(self):
 
         if self.accepting:
@@ -432,6 +521,7 @@ class Processor(Configurable):
                 connector.run()
                 self._runchan_count += 1
             # Tell all subscribers to start running
+            # Note: We make sure the receivers are running before we start pushing data to them.
             for subscriber in self._iter_subscribers():
                 subscriber._start_running()
         # Start running this, if generator/monitor
@@ -449,6 +539,12 @@ class Processor(Configurable):
                 connector.resume()
             self.restarting = False
 
+        # Notify everyone subscribing to 'event_started' events
+        for func in self.event_started:
+            try:
+                func()
+            except Exception as e:
+                self.log.exception("Unhandled exception in an event handler for 'started'.")
 
     def stop(self):
         """
@@ -557,7 +653,6 @@ class Processor(Configurable):
 
     def _wait(self, restarting=False):
         "Wait for this processor to finish."
-
         while self.running or (self.restarting and not restarting):
             time.sleep(0.1)  # wait 0.1 seconds
 

@@ -21,14 +21,14 @@ class EntityExtractor(Processor):
 
     The result pattern under the 'entities' section of the document:
 
-        <category>      dict            # Name of the category for the entity.
-            <name>      list of...      # The name/id of this entity within this category, containing a list of matches...
-                type        str         # Match type (e.g. email, exact, iprange, etc.)
-                pattern     str         # Pattern that was used to find the hit, e.g. the 'iprange' pattern.
-                hit         str         # String that is identified as matching the match criteria.
-                span        list[2]     # (start, exclusive end) position of the hit.
-                field       str         # Which field the hit was found in.
-                score       float       # The quality of the hit (multiplied with the optional weight specified!)
+        <category>      list of dict of... # Name of the category for the entity.
+            name        str         # The name/id of this entity within this category.
+            type        str         # Match type (e.g. email, exact, iprange, etc.)
+            pattern     str         # Pattern that was used to find the hit, e.g. the 'iprange' pattern.
+            hit         str         # String that is identified as matching the match criteria.
+            span        list[2]     # (start, exclusive end) position of the hit.
+            field       str         # Which field the hit was found in.
+            score       float       # The quality of the hit (multiplied with the optional weight specified!)
 
     Connectors:
         input      (esdoc)     (default)  : Incoming document in 'esdoc' dict format.
@@ -122,14 +122,11 @@ class EntityExtractor(Processor):
 
         if entities is None:
             entities = {}
-        for e_category, e_name, e_match in extracted:
+        for e_category, e_match in extracted:
             category = entities.get(e_category)
             if category is None:
-                category = entities[e_category] = {}
-            mlist = category.get(e_name)
-            if not mlist:
-                mlist = category[e_name] = []
-            mlist.append(e_match)
+                category = entities[e_category] = []
+            category.append(e_match)
 
         return entities
 
@@ -167,8 +164,8 @@ class EntityExtractor(Processor):
                     # One item to follow...
                     yield (
                         category,
-                        name or txt,
                         {
+                            "name"   : name or txt,
                             "type"   : t,
                             "pattern": pattern,
                             "value"  : txt,

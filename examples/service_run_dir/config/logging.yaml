@@ -1,0 +1,62 @@
+version : 1
+disable_existing_loggers: False
+formatters:
+  brief:
+    format: "%(firstName) -20s %(serviceName) -20s %(className) -20s %(instanceName) -20s %(levelname) -10s %(message)s"
+  individual:
+    format: "%(asctime)s  %(className) -20s %(instanceName) -20s %(levelname) -10s %(message)s"
+  root:
+    format: "%(asctime)s  %(name) -50s %(levelname) -10s %(message)s"
+
+handlers:
+  console:
+    class       : logging.StreamHandler
+    formatter   : brief
+    level       : INFO
+    #filters     : [allow_foo]
+    stream      : ext://sys.stdout
+  file_root:
+    class       : logging.handlers.RotatingFileHandler
+    formatter   : root
+    filename    : root.log
+    maxBytes    : 1024
+    backupCount : 3
+  file_service:
+    class       : logging.handlers.RotatingFileHandler
+    formatter   : individual
+    filename    : service.log
+    maxBytes    : 1024
+    backupCount : 3
+  file_proc:
+    class       : logging.handlers.RotatingFileHandler
+    formatter   : individual
+    filename    : proc.log
+    maxBytes    : 1024
+    backupCount : 3
+  file_doc:
+    class       : logging.handlers.RotatingFileHandler
+    formatter   : individual
+    filename    : doc.log
+    maxBytes    : 1024
+    backupCount : 3
+loggers:
+  "":
+    handlers    : [file_root]
+    level       : DEBUG
+  servicelog:
+    handlers    : [console, file_service]
+    level       : DEBUG
+    propagate   : false
+  proclog:
+    handlers    : [console, file_proc]
+    level       : DEBUG
+    propagate   : false
+  doclog:
+    handlers    : [file_doc]
+    level       : DEBUG
+    propagate   : false
+
+# servicelog.SERVICE.INSTANCE
+
+  doclog.myservice.myinstance:
+    level: DEBUG

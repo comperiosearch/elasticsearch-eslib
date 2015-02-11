@@ -121,7 +121,7 @@ class ElasticsearchWriter(Generator):
             elif "update" in docop: resdoc = docop["update"]
             if resdoc:
                 id      = resdoc["_id"]
-                version = resdoc["_version"]
+                version = resdoc.get("_version")
                 index   = resdoc["_index"]
                 doctype = resdoc["_type"]
 
@@ -161,6 +161,7 @@ class ElasticsearchWriter(Generator):
         elif self.config.batchsize and (self._queue.qsize() >= self.config.batchsize):
             self.log.debug("Submitting full batch (%d)." % self.config.batchsize)
             self._send()
+            self.log.trace("Batch submitted.")  # TODO: DEBUG: REMOVE
         elif self.config.batchtime and self._queue.qsize() and (time.time() - self._last_batch_time > self.config.batchtime):
             self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()

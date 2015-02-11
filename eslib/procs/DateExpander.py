@@ -17,7 +17,7 @@ class DateExpander(Processor):
         minute       (0 through 59)
         second       (0 through 59)
         weekday      (1 through 7)
-        week_number  (1 through 53)
+        week         (1 through 53)
 
     Connectors:
         input       (esdoc)   : Incoming.

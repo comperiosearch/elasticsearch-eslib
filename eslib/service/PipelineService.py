@@ -1,9 +1,7 @@
 __author__ = 'Hans Terje Bakke'
 
-# TODO: Logging
-
 from .Service import Service
-
+import time
 
 class PipelineService(Service):
     def __init__(self, **kwargs):
@@ -12,35 +10,85 @@ class PipelineService(Service):
         self.head = None
         self.tail = None
 
-    #region Controller overrides
+    def _log_finished(self):
+        self.log.status("Processing finished.")
+        self._processing = False  # This will shortcut further evaluation of whether we are processing
+        self.stat_processing_ended = time.time()
 
-    def on_status(self):
-        return {"head": self.head.status, "tail": self.tail.status}
+    def _log_aborted(self):
+        self.log.status("Processing finished after abort.")
+        self._processing_aborted = True  # This will shortcut further evaluation of whether we are aborted
+        self.stat_processing_ended = time.time()
 
-    def on_start(self):
+    def link(self, *processors):
+        "Link processors together and assign head and tail."
+        prev = None
+        for proc in processors:
+            if prev:
+                proc.subscribe(prev)
+            prev = proc
+        self.head = processors[0]
+        self.tail = processors[-1]
+
+    #region Service overrides
+
+    # DEPRECATED
+    # def on_status(self):
+    #     return {"head": self.head.status, "tail": self.tail.status}
+
+    def is_processing(self):
+        "Evaluate whether processing is in progress."
+        return self.tail.running
+
+    def is_aborted(self):
+        "Evaluate whether processing is in progress."
+        return self.head.aborted
+
+    def is_suspended(self):
+        "Evaluate whether processing is suspended."
+        return self.head.suspended
+
+    def on_processing_start(self):
+        if not self._log_finished in self.tail.event_stopped:
+            self.tail.event_stopped.append(self._log_finished)
+        if not self._log_aborted in self.tail.event_aborted:
+            self.tail.event_aborted.append(self._log_aborted)
+
         self.head.start()
-        return True  # TODO
+        return True
 
     def on_restart(self):
-        self.head.restart()
-        return True  # TODO
+        # if not self.head.running:
+        #     self.head.start()
+        # else:
+        #     return True
+        return True  # Well, not really, but still.. it didn't fail either.
 
-    def on_stop(self):
+    def on_processing_stop(self):
+        "This method should block until the process is fully stopped."
         self.head.stop()
         self.tail.wait()
-        return True  # TODO
+        return True
 
-    def on_abort(self):
+    def on_processing_abort(self):
         self.head.abort()
         self.tail.wait()
-        return True  # TODO
+        return True
 
-    def on_suspend(self):
+    def on_processing_suspend(self):
         self.head.suspend()
-        return True  # TODO
+        return True
 
-    def on_resume(self):
+    def on_processing_resume(self):
         self.head.resume()
-        return True  # TODO
+        return True
 
-    #endregion Controller overrides@
+    # TODO
+    def on_update(self, config):
+        # Auto-start on update
+        if not self.head.running:
+            self.head.start()
+        else:
+            return True
+
+    #endregion Service overrides

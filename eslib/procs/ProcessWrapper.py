@@ -5,6 +5,7 @@ from Queue import Queue
 from select import select
 import codecs, json
 from ..esdoc import tojson
+import time
 
 from ..Generator import Generator
 
@@ -86,6 +87,7 @@ class ProcessWrapper(Generator):
         # Process as much as we see pending
         while self._process and not self.end_tick_reason and not self.suspended:
             self._handle_io()
+            time.sleep(0.2)
 
     def _readline(self, stream):
         line = stream.readline()  # Bugger... what if there's no newline? Will it block?
@@ -97,44 +99,48 @@ class ProcessWrapper(Generator):
         print >> self._process.stdin, line
 
     def _handle_io(self):
-        if not self._process:
-            return
+        while self._process and (self.stopping or (not self.suspended and not self.end_tick_reason)):
+            # Process as much as possible
 
-        outputs = []
-        if not self._process.stdin.closed:
-            outputs = [self._process.stdin.fileno()]
-        r, w, e = select([self._process.stdout.fileno(), self._process.stderr.fileno()], outputs, [], 0)
-        if not r and not w and not e:
-            return  # Nothing to do right now; let's get some air..
+            # if not self._process:
+            #     return
 
-        if self._process.stderr.fileno() in r:
-            msg = self._readline(self._process.stderr)
-            if msg:
-                self.log.warning("Subprocess stderr: %s" % msg)
+            outputs = []
+            if not self._process.stdin.closed:
+                outputs = [self._process.stdin.fileno()]
+            r, w, e = select([self._process.stdout.fileno(), self._process.stderr.fileno()], outputs, [], 0)
+            if not r and not e and (not w or self._outgoing.empty()):
+                # print "**LEAVING-1"
+                return  # Nothing to do right now; let's get some air..
 
-        if self._process.stdout.fileno() in r:
-            incoming = self._readline(self._process.stdout)
-            if incoming:
-                self._send(incoming)
-            else:
-                # This is the end... we must have lost contact with the process. Perhaps it finished...
-                self.log.debug("EoF; stopping.")
-                self._process = None
-                self.stop()
-                return
+            if self._process.stderr.fileno() in r:
+                msg = self._readline(self._process.stderr)
+                if msg:
+                    self.log.warning("Subprocess stderr: %s" % msg)
 
-        if outputs and self._process.stdin.fileno() in w:
-            # Send an item from the queue
-            if not self._outgoing.empty():
-                doc = self._outgoing.get()
-                self._outgoing.task_done()
-                try:
-                    self._writeline(self._process.stdin, doc)
-                except Exception as e:
-                    self.log.exception("Error writing to subprocess: %s: %s" % (e.__class__.__name__, e.message))
+            if self._process.stdout.fileno() in r:
+                incoming = self._readline(self._process.stdout)
+                if incoming:
+                    self._send(incoming)
+                else:
+                    # This is the end... we must have lost contact with the process. Perhaps it finished...
+                    self.log.debug("EoF; stopping.")
                     self._process = None
                     self.stop()
                     return
+
+            if outputs and self._process.stdin.fileno() in w:
+                # Send an item from the queue
+                if not self._outgoing.empty():
+                    doc = self._outgoing.get()
+                    self._outgoing.task_done()
+                    try:
+                        self._writeline(self._process.stdin, doc)
+                    except Exception as e:
+                        self.log.exception("Error writing to subprocess: %s: %s" % (e.__class__.__name__, e.message))
+                        self._process = None
+                        self.stop()
+                        return
 
     def _incoming(self, document):
         if self._outgoing:

@@ -1,5 +1,8 @@
 __author__ = 'Hans Terje Bakke'
 
+# TODO: Perhaps rewrite with a better async implementation. Example here:
+#   http://pika.readthedocs.org/en/latest/examples/asynchronous_consumer_example.html
+
 from ..Configurable import Configurable
 import pyrabbit.api as rabbit
 from pyrabbit.http import HTTPError
@@ -35,7 +38,6 @@ class RabbitmqBase(Configurable):
 
     # returns (host, queue_name, vhost_name)
     def _get_addr(self, vhost, name):
-
         if not vhost and not self.config.virtual_host:
             raise ValueError("Virtual host must be specified either explicitly or through 'self.config.virtual_host'.")
 
@@ -79,6 +81,9 @@ class RabbitmqBase(Configurable):
         except HTTPError as e:
             if e.status == 404:
                self.log.debug("Could not purge queue '%s', not found." % q)
+
+    def get_queue_size(self, name=None, vhost=None):
+        return self.get_queue(name, vhost)["messages_ready"]
 
     def get_queue(self, name=None, vhost=None):
         (h, vh, q) = self._get_addr(vhost, name)
@@ -186,14 +191,14 @@ class RabbitmqBase(Configurable):
 
     def _publish(self, msg_type, data):
 
-        while not self._connection.is_open and self.running and not self.aborted:
+        while (not self._connection or not self._connection.is_open) and self.running and not self.aborted:
             self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
             try:
                 self._open_connection()
                 self.log.debug("Successfully reconnected to RabbitMQ.")
             except pika.exceptions.AMQPConnectionError as e:
                 timeout = 3
-                self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds.", timeout)
+                self.log.warning("Reconnect to RabbitMQ failed. Waiting %d seconds." % timeout)
                 time.sleep(timeout)
 
         properties = pika.BasicProperties(
@@ -207,11 +212,11 @@ class RabbitmqBase(Configurable):
             try:
                 self._channel.basic_publish(
                     exchange=self.config.exchange or "",
-                    routing_key=self._queue_name,  # Fanout exchange should ignore this
+                    routing_key=self._queue_name,  # Fanout exchange will ignore this
                     body=data,
                     properties=properties)
                 ok = True
-            except pika.exceptions.ConnectionClosed as e:
+            except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as e:
                 if try_again:
                     self.log.debug("No open connection to RabbitMQ. Trying to reconnect.")
                     try_again = self._reconnect(3, 3)

@@ -31,8 +31,27 @@ __all__ = (
     "Generator",
     "Monitor",
     "Configurable",
-    "Config"
+    "Config",
+
+    "unique"
 )
+
+#region Core stuff
+
+def unique(seq, idfun=None):
+   # order preserving
+   if idfun is None:
+       def idfun(x): return x
+   seen = {}
+   result = []
+   for item in seq:
+       marker = idfun(item)
+       if marker in seen: continue
+       seen[marker] = 1
+       result.append(item)
+   return result
+
+#endregion
 
 
 #region Encoding of stdin/stdout
@@ -56,6 +75,7 @@ class _ExtendedLogger(logging.getLoggerClass()):
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None):
         rec = logging.LogRecord(name, level, fn, lno, msg, args, exc_info, func)
 
+        rec.serviceName = self.serviceName if hasattr(self, 'serviceName') else None
         rec.className = self.className if hasattr(self, 'className') else None
         rec.instanceName = self.instanceName if hasattr(self, 'instanceName') else None
 

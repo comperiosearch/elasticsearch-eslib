@@ -1,37 +1,58 @@
 __author__ = 'Hans Terje Bakke'
 
-# TODO: Logging
-
 from .Service import Service
+from .UrlParamParser import UrlParamParser
 from ..procs.HttpMonitor import HttpMonitor
 import json, requests
+
+
+class Route(object):
+    def __init__(self, func, verb, path_specification=None, param_specifications=None):
+        self.func = func
+        self.verb = verb
+        self.path = path_specification
+        self.params = param_specifications
+        self.parser = UrlParamParser(path_specification=path_specification, param_specifications=param_specifications)
+
+    def parse(self, url):
+        return self.parser.parse(url)
 
 
 class HttpService(Service):
     """
     Common static config:
         name
-        mgmt_endpoint
-        mgmt_host
+        manager_endpoint          Address 'host:port' to manager service; for receiving metadata updates, etc.
+        management_endpoint       Management endpoint for this service; where it can be managed.
+        connection_timeout        Timeout when connecting to other services. Float or tuple of (connect, read) timeouts.
 
     Communication with manager:
 
-        POST register
-            name
-            callback
-        =>
-            session_token
+        POST hello
+            id
+            pid
+            status
+            metakeys
+        => returns:
             assigned_port
+            metadata
+        DELETE goodbye
+            id
 
-        POST unregister
+    The management interface for this service expects the following messages:
 
-    Callback interface expects the following messages:
+        GET  hello
+        => returns:
+            id
+            pid
+            status
+            metakeys
 
-        GET  info
-        POST register     # External debug command to register with the manager
-        POST unregister
-        POST shutdown
+        # TODO:
+        GET  help
         GET  status
+        GET  stats
+        POST shutdown
         POST update       # causes (re)start
         POST start
         POST stop
@@ -40,187 +61,165 @@ class HttpService(Service):
         POST resume
     """
 
-    config_keys = []
+    metadata_keys = []
 
     def __init__(self, **kwargs):
         super(HttpService, self).__init__(**kwargs)
 
         self.config.set_default(
             # A management server we can register with, that will manage this process through the 'mgmt_endpoint'
-            mgmt_host     = None,
+            manager_endpoint    = None,
             # The host:port endpoint where this service will listen for management commands
-            mgmt_endpoint = "localhost:4444"
+            management_endpoint = "localhost:4444",
+
+            connection_timeout = (3.5, 10.0)  # Whe connecting to other services
         )
 
+        self.metadata = {}
         self._receiver = None
-        self._mgmt_endpoint = None
-        self._routes = {}
+        self._routes = []
+
+        self.log.debug("Setting up routes.")
 
         # Add default management routes to functions
-        self.add_route("GET"     , "info"      , self._mgmt_info)
-        self.add_route("GET"     , "help"      , self._mgmt_help)
-        self.add_route("GET"     , "status"    , self._mgmt_status)
-        self.add_route("GET|POST", "register"  , self._mgmt_register)
-        self.add_route("GET|POST", "unregister", self._mgmt_unregister)
-        self.add_route("POST"    , "shutdown"  , self._mgmt_shutdown)
-        self.add_route("POST"    , "update"    , self._mgmt_update)
-        self.add_route("GET|POST", "start"     , self._mgmt_start)
-        self.add_route("GET|POST", "restart"   , self._mgmt_restart)
-        self.add_route("GET|POST", "stop"      , self._mgmt_stop)
-        self.add_route("GET|POST", "abort"     , self._mgmt_abort)
-        self.add_route("GET|POST", "suspend"   , self._mgmt_suspend)
-        self.add_route("GET|POST", "resume"    , self._mgmt_resume)
+        self.add_route(self._mgmt_hello     , "GET"         , "/hello"     , None)
+        self.add_route(self._mgmt_help      , "GET"         , "/help"      , None)
+        self.add_route(self._mgmt_status    , "GET"         , "/status"    , None)
+        self.add_route(self._mgmt_stats     , "GET"         , "/stats"     , None)
 
-        self._receiver = HttpMonitor(name="receiver", hook=self._hook)
+        self.add_route(self._mgmt_shutdown  , "DELETE"      , "/shutdown"  , None)
+        self.add_route(self._mgmt_start     , "GET|PUT|POST", "/start"     , None)
+        # TODO (restart):
+        self.add_route(self._mgmt_restart   , "GET|PUT|POST", "/restart"   , None)
+        self.add_route(self._mgmt_stop      , "GET|PUT|POST", "/stop"      , None)
+        self.add_route(self._mgmt_abort     , "GET|PUT|POST", "/abort"     , None)
+        self.add_route(self._mgmt_suspend   , "GET|PUT|POST", "/suspend"   , None)
+        self.add_route(self._mgmt_resume    , "GET|PUT|POST", "/resume"    , None)
+        # TODO (update):
+        self.add_route(self._mgmt_update    , "PUT|POST"    , "/update"    , None)
+
+        self._receiver = HttpMonitor(service=self, name="receiver", hook=self._hook)
         self.register_procs(self._receiver)
+
+    def remote(self, host, verb, path, data=None):
+        res = requests.request(
+            verb.lower(),
+            "http://%s/%s" % (host, path),
+            data=json.dumps(data) if data else None,
+            headers={"content-type": "application/json"},
+            timeout=self.config.connection_timeout  # either float or tuple of (connect, read) timeouts
+            #, auth=('user', '*****')
+        )
+        if res.content:
+            return json.loads(res.content)
+        else:
+            return None
 
     #region Debugging
 
     def DUMP_ROUTES(self):
-        for route in self._routes.keys():
-            print route
+        print "%-6s %-20s %s" % ("VERB", "ROUTE", "QUERY PARAMETERS")
+        for route in self._routes:
+            print "%-6s %-20s %s" % (route.verb, route.path, route.params)
 
     #endregion Debugging
 
-    #region Controller management overrides
+    #region Service management overrides
 
-    def run(self, wait=False):
-        "Start running the controller itself. (Not the document processors.)"
-        if self._running:
-            return False  # Not started; was already running, or failed
-
-        self.on_setup()
-
-        # Set the host address
-        a = self.config.mgmt_endpoint.split(":")
-        if len(a) > 0:
-            self._receiver.config.host = a[0]
-        if len(a) == 2:
+    def on_run(self):
+        data = self._build_hello_message(self.config.management_endpoint)
+        if self.config.manager_endpoint:
+            # Say hello to manager, asking for a port number if we're missing one
             try:
-                self._receiver.config.port = int(a[1])
+                content = self.remote(self.config.manager_endpoint, "post", "hello", data=data)
+                error = content.get("error")
+                if error:
+                    self.log.error("Error from manager: %s" % error)
+                    return False
             except Exception as e:
-                return False  # Port was not an int
+                self.log.error("Communication with manager failed for 'hello' message: %s" % e)
+                return False
+            data["port"] = content["port"]
+            self._metadata = content["metadata"]
         else:
-            self._receiver.config.port = self._assigned_port
+            self.log.info("No manager endpoint specified. Running stand-alone.")
+            if not data["port"]:
+                self.log.critical("Port must be specified when running stand-alone.")
+                exit(1)
+        self._receiver.config.host = data["host"]
+        self._receiver.config.port = data["port"]
+
+        self.log.info("Starting service management listener on '%s:%d'." % (self._receiver.config.host, self._receiver.config.port))
 
         try:
             self._receiver.start()
-            self._running = True
         except Exception as e:
+            self.log.critical("Service managemnet listener failed to start.")
             return False  # Not started; failed
 
-        if wait:
-            self._receiver.wait()
-        return True  # Started; and potentially stopped again, in case we waited here
+        return True
 
-    def shutdown(self, wait=True):
-        "Shut down the controller, including document processors."
-        if not self._running:
-            return False  # Not shut down; was not running
-        if not self._stop():
-            return False  # Not stopped properly
+    def on_shutdown(self):
+        # Tell the manager we're leaving
+        if self.config.manager_endpoint:
+            self.log.info("Saying goodbye to the manager.")
+            data = {"id": self.name}
+            try:
+                content = self.remote(self.config.manager_endpoint, "delete", "goodbye", data=data)
+                error = content.get("error")
+                if error:
+                    self.log.error("Error from manager: %s" % error)
+                    return False
+            except Exception as e:
+                self.log.warning("Communication with manager failed for 'goodbye' message: %s" % e)
+                # But we go on...
+                #return False
 
         # Stop the receiver
+        self.log.info("Stopping service management listener.")
         self._receiver.stop()
-        # Note: We cannot wait for this with HttpMonitor, because it will enter a deadlock.
+        return True
+
+    def on_wait(self):
+        # Note: We cannot use shutdown(wait=True) with HttpMonitor, because it will enter a deadlock.
         # (It will not finish unless the request has finished, and the request will not finish unless
         # we return from here.)
-        if wait:
-            self._receiver.wait()
-        self._running = False
-        return True
-
-    def wait(self):
-        "Wait until controller is shut down."
-        if not self._running:
-            return
+        self.log.debug("Waiting for service management listener to stop.")
         self._receiver.wait()
+        self.log.info("Service management listener stopped.")
+        return True  # Shut down successfully
 
-    #endregion Controller management overrides
-
-    #region Registration with remote management service
-
-    def register(self):
-        if not self.config.mgmt_host:
-            return False
-
-        # TODO: try/except/log
-        a = self.config.mgmt_endpoint.split(":")
-        host = a[0]
-        port = 0 if len(a) != 2 else int(a[1])
-        # If port number is missing in the callback, a number will be assigned by the manager
-        req = json.dumps({'id': self.name, 'host': host, 'port': port, "config_keys": self.config_keys})
-        res = requests.post("http://%s/register" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
-        jres = json.loads(res.content)
-
-        err = jres.get("error")
-        if err:
-            self.log.error("Service registration failed: %s" % err)
-            self._mgmt_endpoint = None
-        else:
-            # Use host and port returned from manager
-            self._mgmt_endpoint = "%s:%d" % (jres["host"], jres["port"])
-
-        #host, port = self.config.mgmt_endpoint.split(":")
-        #req = json.dumps({'id': self.name, 'host': host, "port": port, "config_keys": self.config_keys})
-        #res = requests.post("http://%s/register_service" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
-        #jres = json.loads(res.content)
-
-        return True
-
-    def unregister(self):
-        if not self.config.mgmt_host:
-            return False
-        # TODO: try/except/log
-        req = json.dumps({'id': self.name})
-        res = requests.delete("http://%s/unregister" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
-        jres = json.loads(res.content)
-
-        err = jres.get("error")
-        if err:
-            self.log.error("Service unregister failed: %s" % err)
-        else:
-            # Clear knowledge of management endpoint we got from manager
-            self._mgmt_endpoint = None
-
-        #host, port = self.config.mgmt_endpoint.split(":")
-        #req = json.dumps({'id': self.name, 'host': host, "port": port})
-        #res = requests.delete("http://%s/unregister_service" % self.config.mgmt_host, data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
-        ##jres = json.loads(res.content)
-
-        return True
-
-    #endregion
+    #endregion Service management overrides
 
     #region Routing and Route management
 
-    def add_route(self, verbs, path, func):
+    def add_route(self, func, verbs, path, params):
         "Add a route from an incoming REST request to a function. Multiple verbs can be specified with pipe character."
-        if path and path.startswith("/"):
-            path = path [1:]
         for verb in verbs.split("|"):
-            key = "%s_%s" % (verb.strip().upper(), path.lower())
-            self._routes[key] = func
+            self._routes.append(Route(func, verb, path, params))
 
-    def _hook(self, verb, path, data, format="application/json"):
-        #print "VERB=[%s], PATH=[%s], DATA=[%s]" % (verb, path, data)
+    def get_route(self, verb, path):
+        for route in self._routes:
+            if route.verb == verb:
+                params = route.parse(path)
+                if params is not None:
+                    return route, params
+        return None, None
 
-        key = "%s_%s" % (verb.upper(), path.lower())
+    def _hook(self, request_handler, verb, path, data): #, format="application/json"):
 
-        func = self._routes.get(key)
-        # TODO: BETTER MATCHING AND PARSING INTO *args and **kwargs
-        args = []
-        kwargs = {}
+        route, params = self.get_route(verb, path)
 
-        if not func:
-            return {"error": "No route for '%s'." % key}
-        payload = None
-        if data and format == "application/json":
-            payload = json.loads(data)
-        else:
-            payload = data
+        if not route:
+            return {"error": "No route for %s:'%s'." % (verb, path)}
+
+        payload = data
+        # if data and format == "application/json":
+        #     payload = json.loads(data)
+
         try:
-            res = func(payload, *args, **kwargs)
+            # res = func(payload, *args, **kwargs)
+            res = route.func(request_handler, payload, **params)
             return res
         except Exception as e:
             self.log.exception("Unhandled exception.")
@@ -230,79 +229,126 @@ class HttpService(Service):
 
     #region Command handlers
 
-    def _mgmt_info(self, payload, *args, **kwargs):
+    def _build_hello_message(self, addr_str=None):
+        host = None
+        port = None
+        if addr_str:
+            a = addr_str.split(":")
+            if len(a) == 2:
+                host = a[0]
+                port = int(a[1])
+            else:
+                host = addr_str
+        else:
+            host = self._receiver.config.host
+            port = self._receiver.config.port
         return {
-            "name": self.name,
-            "host": self._mgmt_endpoint or self.config.mgmt_endpoint,
+            "id"        : self.name,
+            "type"      : self.__class__.__name__,
+            "config_key": self.config_key,
+            "host"      : host,
+            "port"      : port,
+            "pid"       : self.pid,
+            "status"    : self.status,
+            "meta_keys" : self.metadata_keys
         }
 
-    def _mgmt_help(self, payload, *args, **kwargs):
-        return {"routes": self._routes.keys()}
+    def _mgmt_hello(self, request_handler, payload, **kwargs):
+        self.log.trace("called: hello")
+        return self._build_hello_message()
 
-    def _mgmt_register(self, payload, *args, **kwargs):
-        if self.register():
-            return {"message": "Registered with management service."}
+    def _mgmt_help(self, request_handler, payload, **kwargs):
+        self.log.debug("called: help")
+        routes = ["%s %s" % (r.verb, r.path) for r in self._routes]
+        return {"routes": routes}
+
+    def _mgmt_status(self, request_handler, payload, **kwargs):
+        self.log.trace("called: status")
+        return {"status": self.status}
+
+    def _mgmt_stats(self, request_handler, payload, **kwargs):
+        self.log.trace("called: stats")
+        return {
+            "status"     : self.status,
+            "stats"      : self.get_stats()
+        }
+
+    # args: (bool)wait
+    def _mgmt_shutdown(self, request_handler, payload, **kwargs):
+        self.log.debug("called: shutdown")
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
+        if self.shutdown():
+            if wait:
+                return {"message": "Service shut down."}
+            else:
+                return {"message": "Service shutting down."}
         else:
-            return {"warning": "Not registered with management service."}
+            return {"error": "Not shut down."}
 
-    def _mgmt_unregister(self, payload, *args, **kwargs):
-        if self.unregister():
-            return {"message": "Unregistered from management service."}
-        else:
-            return {"warning": "Not unregistered from management service."}
-
-    def _mgmt_shutdown(self, payload, *args, **kwargs):
-        if self.shutdown(wait=False):
-            return {"message": "Shutting down."}
-        else:
-            return {"warning": "Not shut down."}
-
-    def _mgmt_status(self, payload, *args, **kwargs):
-        return {"status": self.status(*args)}
-
-    def _mgmt_start(self, payload, *args, **kwargs):
-        if self.start():
+    def _mgmt_start(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_start")
+        if self.processing_start():
             return {"message": "Processing started."}
         else:
-            return {"warning": "Processing was not started."}
+            return {"error": "Processing was not started."}
 
-    def _mgmt_restart(self, payload, *args, **kwargs):
-        if self.restart():
-            return {"message": "Processing restarted."}
+    # args: (bool)wait
+    def _mgmt_restart(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_restart")
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
+        if self.processing_restart():
+            if wait:
+                return {"message": "Processing (re)started."}
+            else:
+                return {"message": "Processing (re)starting."}
         else:
-            return {"warning": "Processing not started."}
+            return {"error": "Processing not started."}
 
-    def _mgmt_stop(self, payload, *args, **kwargs):
-        if self.stop():
-            return {"message": "Processing stopped."}
+    # args: (bool)wait
+    def _mgmt_stop(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_stop")
+        wait = False
+        if payload:
+            wait = payload.get("wait") or False
+        if self.processing_stop(wait=wait):
+            if wait:
+                return {"message": "Processing stopped."}
+            else:
+                return {"message": "Processing stopping."}
         else:
-            return {"warning": "Processing was not stopped."}
+            return {"error": "Processing was not stopped."}
 
-    def _mgmt_abort(self, payload, *args, **kwargs):
-        if self.abort():
+    def _mgmt_abort(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_abort")
+        if self.processing_abort():
             return {"message": "Processing aborted."}
         else:
-            return {"warning": "Processing was not aborted."}
+            return {"error": "Processing was not aborted."}
 
-    def _mgmt_suspend(self, payload, *args, **kwargs):
-        if self.suspend():
+    def _mgmt_suspend(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_suspend")
+        if self.processing_suspend():
             return {"message": "Processing suspended."}
         else:
-            return {"warning": "Processing was not suspended."}
+            return {"error": "Processing was not suspended."}
 
-    def _mgmt_resume(self, payload, *args, **kwargs):
-        if self.resume():
+    def _mgmt_resume(self, request_handler, payload, **kwargs):
+        self.log.debug("called: processing_resume")
+        if self.processing_resume():
             return {"message": "Processing resumed."}
         else:
-            return {"warning": "Processing was not resumed."}
+            return {"error": "Processing was not resumed."}
 
-    def _mgmt_update(self, payload, *args, **kwargs):
+    # TODO
+    def _mgmt_update(self, request_handler, payload, **kwargs):
+        self.log.debug("called: update")
         if self.update(payload):
-            if self.restart():
-                return {"message": "Processing update and (re)started."}
-            else:
-                return {"warning": "Processing was not updated and (re)configuring."}
+            return {"message": "Processing updated."}
         else:
-            return {"warning": "Processing was not updated."}
+            return {"error": "Processing was not updated."}
 
     #endregion Command handlers

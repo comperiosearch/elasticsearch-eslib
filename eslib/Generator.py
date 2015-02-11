@@ -5,10 +5,6 @@ class Generator(Processor):
         super(Generator, self).__init__(**kwargs)
         self.is_generator = True
 
-        # Variables for keeping track of progress.
-        self.total = 0
-        self.count = 0
-
     # These methods could/should be implemented by inheriting classes:
 
     # on_open(self)     # from Processor

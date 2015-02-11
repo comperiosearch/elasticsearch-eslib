@@ -1,0 +1,432 @@
+#!/usr/bin/env python
+
+import json, yaml, requests, math
+import eslib.debug
+from eslib.service import status
+
+def dump_formatted(format, data):
+    if format == "yaml":
+        yaml.safe_dump(data, sys.stdout, default_flow_style=False)
+    elif format == "json":
+        json.dump(data, sys.stdout)
+    else:
+        print >>sys.stderr, "Unrecognized output format '%s'." % format
+
+def remote(host, verb, path, data):
+    res = requests.request(
+        verb.lower(),
+        "http://%s/%s" % (host, path),
+        data=json.dumps(data),
+        headers={"content-type": "application/json"},
+        timeout=(3.5, 10)
+    )
+    if res.content:
+        return json.loads(res.content)
+    else:
+        return None
+
+#region Template management commands
+
+# list [options] [<name_pattern>]
+def cmd_list(host, format, name_patterns):
+    data = {
+        "names": name_patterns,
+    }
+
+    res = remote(host, "get", "list", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error listing services: %s" % (error)
+
+    hfmt = "%-20s %-10s %6s %-20s %9s %9s"
+    ifmt = "%-20s %-10s %6s %-20s %9s %9s"
+    print hfmt % ("NAME", "STATUS", "PID", "HOST", "ELAPSED", "ETA")
+    d = "-"
+    print hfmt % (d*20, d*10, d*6, d*20, d*9, d*9)
+    for key in sorted(list(res.keys())):
+        r = res[key]
+        elapsed = ""
+        eta     = ""
+        if r.get("stats"):
+            v = r["stats"]["elapsed"]
+            if v is not None:
+                elapsed = _hms_str(v)
+            s = r["status"]
+            if s == status.SUSPENDED:
+                eta = "paused"
+            elif s in [status.PROCESSING, status.STOPPING]:
+                v = r["stats"]["eta"]
+                if v is not None:
+                    if v == -1:
+                        eta = "infinite"
+                    else:
+                        eta = _hms_str(v)
+
+        addr = r["host"]
+        if r["port"]:
+            if r["fixed_port"]:
+                addr += ":%s" % str(r["port"])
+            else:
+                addr += ":(%s)" % str(r["port"])
+        print ifmt % (key, r["status"][:10], r["pid"], addr, elapsed, eta)
+
+#region Value formatters
+
+def _hm_str(value):
+    if value is None: return ""
+    minutes = int(math.ceil(value / 60))  # rounding minutes up
+    hm = "%d:%02d" % (minutes / 60, minutes % 60)
+    return hm
+
+def _hms_str(value):
+    if value is None: return ""
+    seconds = int(value) % 60
+    minutes = int(value) / 60
+    hms = "%d:%02d:%02d" % (minutes / 60, minutes % 60, seconds)
+    return hms
+
+def _pct_str(value):
+    if value is None: return ""
+    return "%0.1f%%" % value
+
+def _byte_str(value):
+    if value is None: return ""
+    return eslib.debug.byte_size_string(value, 1)
+
+#endregion Value formatters
+
+# stats [options] [<name>] [<stat_fields...>]
+def cmd_stats(host, format, name, stat_fields):
+    # TODO: Filter out stat_fields
+
+    data = {
+        "ids"   : [name] if name else None
+    }
+    res = remote(host, "get", "stats", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if not error and res.get(name):
+        error = res[name].get("error")
+    if error:
+        print >>sys.stderr, "Error getting stats for service '%s': %s" % (name, error)
+        return
+    else:
+        info = res.get(name) if name else res.itervalues().next()
+        if info:
+            print "INFO FOR SERVICE '%s':" % name
+            for key in sorted(info.keys()):
+                value = info[key]
+                if key == "stats":
+                    continue
+                print "    %-15s = %s" % (key, value)
+            stats = info.get("stats")
+            if stats:
+                print "STATS:"
+                for key in sorted(stats.keys()):
+                    value = stats[key]
+                    if key in ["uptime", "elapsed", "eta"]:
+                        value = _hms_str(value)
+                    elif key in ["cpu_percent", "cpu_percent_max"]:
+                        value = _pct_str(value)
+                    elif key in ["memory", "memory_max"]:
+                        value = _byte_str(value)
+                    print "    %-15s = %s" % (key, value)
+
+# add [options] [--start] <name> [-c <config_tag>] [-s <server>]
+def cmd_add(host, format, name, config_tag, server_address, auto_start):
+    remote_host = server_address or "localhost"
+    remote_port = None
+    addr = remote_host.split(":")
+    if len(addr) == 2:
+        remote_host = addr[0]
+        remote_port = addr[1]
+
+    data = {
+        "id"         : name,
+        "host"       : remote_host,
+        "port"       : remote_port,
+        "config_key" : config_tag,
+        "start"      : auto_start,
+    }
+    res = remote(host, "put", "add", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error adding service '%s': %s" % (name, error)
+
+# remove [options] [--stop] <name>
+def cmd_remove(host, format, names, auto_stop):
+    data = {
+        "ids"   : names,
+        "stop" : auto_stop
+    }
+    res = remote(host, "delete", "remove", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error removing service(s) %s: %s" % (names, error)
+
+# run [options] <names...>
+def cmd_run(host, format, names):
+    data = {
+        "ids"   : names
+    }
+    res = remote(host, "post", "run", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error launching service(s) %s: %s" % (names, error)
+
+# shutdown [options] [--wait] <names...>
+def cmd_shutdown(host, format, names, wait):
+    data = {
+        "ids"   : names,
+        "wait"  : wait,
+    }
+    res = remote(host, "delete", "shutdown", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error shutting down service(s) %s: %s" % (names, error)
+
+# kill [options] [--force] <names...>
+def cmd_kill(host, format, names, force):
+    data = {
+        "ids"   : names,
+        "force" : force
+    }
+    res = remote(host, "delete", "kill", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error killing processes for service(s) %s: %s" % (names, error)
+
+# start [options] <names...>
+def cmd_start(host, format, names):
+    data = {
+        "ids"   : names,
+    }
+    res = remote(host, "post", "processing_start", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error starting processing for service(s) %s: %s" % (names, error)
+
+# stop [options] [--wait] <names...>
+def cmd_stop(host, format, names, wait):
+    data = {
+        "ids"   : names,
+        "wait"  : wait
+    }
+    res = remote(host, "post", "processing_stop", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
+
+# abort [options] <names...>
+def cmd_abort(host, format, names):
+    data = {
+        "ids"   : names,
+    }
+    res = remote(host, "post", "processing_abort", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
+
+# suspend [options] <names...>
+def cmd_suspend(host, format, names):
+    data = {
+        "ids"   : names,
+    }
+    res = remote(host, "post", "processing_suspend", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error suspending processing for service(s) %s: %s" % (names, error)
+
+# resume [options] <names...>
+def cmd_resume(host, format, names):
+    data = {
+        "ids"   : names,
+    }
+    res = remote(host, "post", "processing_resume", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error resuming processing for service(s) %s: %s" % (names, error)
+
+
+#endregion Template management commands
+
+
+import argparse, sys, os
+
+def main():
+    usage = \
+"""
+Usage:
+  %(prog)s list     [options] [<name_patterns...>]
+  %(prog)s stats    [options] <name> [<stat_fields...>]
+
+  %(prog)s add      [options] [--start] <name> [-c <config_tag>] [-s <server_address>]
+  %(prog)s remove   [options] [--stop] <names...>
+
+  %(prog)s run      [options] <names...>
+  %(prog)s shutdown [options] [--wait] <names...>
+  %(prog)s kill     [options] [--force] <names...>
+
+  %(prog)s start    [options] <names...>
+  %(prog)s stop     [options] [--wait] <names...>
+  %(prog)s abort    [options] <names...>
+  %(prog)s suspend  [options] <names...>
+  %(prog)s resume   [options] <names...>
+
+  # DEBUG:
+
+  %(prog)s hello       [options] <name> # fake keepalive
+  %(prog)s push_hello  [options] <name> # fake keepalive
+  %(prog)s guest_register   [options] <name> <address> [<meta_sections...>]
+  %(prog)s guest_unregister [options] <name>
+
+  %(prog)s update [options] [-f file] [path] #post
+  %(prog)s meta   [options] #get
+  # add/remove/replace meta sections?
+
+Common options:
+  --host=<host>
+  --json
+  --yaml
+"""
+
+    # Set up parser
+
+    parser_desc = "Service management client for document processing services."
+    parser = argparse.ArgumentParser(description=parser_desc)
+    parser._actions[0].help = argparse.SUPPRESS
+    subparsers = parser.add_subparsers(
+        title = "subcommands",
+        #description = "valid subcommands",
+        help = "additional help",
+        dest = "command")  # Name of variable to host which command was specified
+
+    parser_common = argparse.ArgumentParser(add_help=False)
+    parser_common.add_argument("--host", type=str, required=False)
+    parser_common.add_argument("--yaml", action="store_true")
+    parser_common.add_argument("--json", action="store_true")
+
+    # nargs="?" => 0 or 1 (NOT A LIST; either value or None... this is the weird shit)
+    # nargs="*" => 0 or more (list)
+    # nargs="+" => 1 or more (list)
+    # nargs="2" => 2 (list)
+    # nargs="1" => 1 (list)
+
+    # list [<name_patterns...>]
+    desc = "List services."
+    parser_list = subparsers.add_parser("list", description=desc, parents=[parser_common])
+    parser_list._actions[0].help = argparse.SUPPRESS
+    parser_list.add_argument("names", type=str, nargs="*")
+    # stats [options] [<name>] [<stat_fields...>]
+    desc = "Display runtime statistics for service."
+    parser_stats = subparsers.add_parser("stats", description=desc, parents=[parser_common])
+    parser_stats._actions[0].help = argparse.SUPPRESS
+    parser_stats.add_argument("name", type=str, nargs="?")
+    parser_stats.add_argument("fields", type=str, nargs="*")  # * = 0 or more
+
+    # add [options] [--start] <name> [-c <config_tag>] [-s <server_address>]
+    desc = "Register a service that can be ran. Registration is stored."
+    parser_add = subparsers.add_parser("add", description=desc, parents=[parser_common])
+    parser_add._actions[0].help = argparse.SUPPRESS
+    parser_add.add_argument("name", type=str, nargs=1)
+    parser_add.add_argument("-c", "--tag", dest="config_tag", type=str, required=False)
+    parser_add.add_argument("-s", "--server", type=str, required=False)
+    parser_add.add_argument("--start", dest="auto_start", action="store_true")
+    # remove [options] [--stop] <names...>
+    desc = "Unregister a service."
+    parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
+    parser_remove._actions[0].help = argparse.SUPPRESS
+    parser_remove.add_argument("names", type=str, nargs="+")
+    parser_remove.add_argument("--stop", dest="auto_stop", action="store_true")
+
+    # run [options] <names...>
+    desc = "Start the registered service as an OS process and run the service. (Not !document processing!)"
+    parser_run = subparsers.add_parser("run", description=desc, parents=[parser_common])
+    parser_run._actions[0].help = argparse.SUPPRESS
+    parser_run.add_argument("names", type=str, nargs="+")
+    # shutdown [options] [--wait] <names...>
+    desc = "Stop processing and shut down service."
+    parser_shutdown = subparsers.add_parser("shutdown", description=desc, parents=[parser_common])
+    parser_shutdown._actions[0].help = argparse.SUPPRESS
+    parser_shutdown.add_argument("names", type=str, nargs="+")
+    parser_shutdown.add_argument("--wait", action="store_true")
+    # kill [options] [--force] <names...>
+    desc = "Kill OS process. Meant for cleaning up dead/hanging processes."
+    parser_kill = subparsers.add_parser("kill", description=desc, parents=[parser_common])
+    parser_kill._actions[0].help = argparse.SUPPRESS
+    parser_kill.add_argument("names", type=str, nargs="+")
+    parser_kill.add_argument("--force", action="store_true")
+
+    # start [options] <names...>
+    desc = "Start document processing."
+    parser_start = subparsers.add_parser("start", description=desc, parents=[parser_common])
+    parser_start._actions[0].help = argparse.SUPPRESS
+    parser_start.add_argument("names", type=str, nargs="+")
+    # stop [options] [--wait] <names...>
+    desc = "Stop document processing."
+    parser_stop = subparsers.add_parser("stop", description=desc, parents=[parser_common])
+    parser_stop._actions[0].help = argparse.SUPPRESS
+    parser_stop.add_argument("names", type=str, nargs="+")
+    parser_stop.add_argument("--wait", action="store_true")
+    # abort [options] <names...>
+    desc = "Abort document processing."
+    parser_abort = subparsers.add_parser("abort", description=desc, parents=[parser_common])
+    parser_abort._actions[0].help = argparse.SUPPRESS
+    parser_abort.add_argument("names", type=str, nargs="+")
+    # suspend [options] <names...>
+    desc = "Suspend document processing."
+    parser_suspend = subparsers.add_parser("suspend", description=desc, parents=[parser_common])
+    parser_suspend._actions[0].help = argparse.SUPPRESS
+    parser_suspend.add_argument("names", type=str, nargs="+")
+    # resume [options] <names...>
+    desc = "Resume document processing."
+    parser_resume = subparsers.add_parser("resume", description=desc, parents=[parser_common])
+    parser_resume._actions[0].help = argparse.SUPPRESS
+    parser_resume.add_argument("names", type=str, nargs="+")
+
+    # Parse
+
+    if len(sys.argv) == 1:
+        print usage.strip() % {"prog": parser.prog}
+        sys.exit(1)
+
+    args = parser.parse_args()
+
+    # Prepare common vars from parsing
+
+    format = None
+    if args.yaml:
+        format = "yaml"
+    elif args.json:
+        format = "json"
+    host = args.host or os.environ.get("ESLIB_SERVICE_MANAGER") or "localhost:5000"
+
+    # Call commands according to parsed verbs
+
+    if   args.command == "list"      : cmd_list    (host, format, args.names)
+    elif args.command == "stats"     : cmd_stats   (host, format, args.name if args.name else None, args.fields)
+    elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.config_tag, args.server, args.auto_start)
+    elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.auto_stop)
+    elif args.command == "run"       : cmd_run     (host, format, args.names)
+    elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.wait)
+    elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.force)
+    elif args.command == "start"     : cmd_start   (host, format, args.names)
+    elif args.command == "stop"      : cmd_stop    (host, format, args.names, args.wait)
+    elif args.command == "abort"     : cmd_abort   (host, format, args.names)
+    elif args.command == "suspend"   : cmd_suspend (host, format, args.names)
+    elif args.command == "resume"    : cmd_resume  (host, format, args.names)
+
+
+if __name__ == '__main__':
+    main()
