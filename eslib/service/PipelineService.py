@@ -32,10 +32,6 @@ class PipelineService(Service):
 
     #region Service overrides
 
-    # DEPRECATED
-    # def on_status(self):
-    #     return {"head": self.head.status, "tail": self.tail.status}
-
     def is_processing(self):
         "Evaluate whether processing is in progress."
         return self.tail.running

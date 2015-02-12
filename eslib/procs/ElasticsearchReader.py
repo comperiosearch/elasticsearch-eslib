@@ -147,6 +147,7 @@ class ElasticsearchReader(Generator):
                 self.congestion_sleep(10.0)
             else:
                 self.log.debug("Fetching follow-up scan batch from Elasticsearch.")
+                # TODO: What do do if we get an exception here? (It has happened...)
                 res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)
                 self._scroll_id = res["_scroll_id"]
                 hits = res["hits"]["hits"]

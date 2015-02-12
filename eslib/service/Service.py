@@ -649,6 +649,6 @@ class Service(Configurable):
                     self.stat_eta = None
                 else:
                     speed = (self.stat_count - self._count_at_resume) / (now - self._time_at_resume)
-                    self.stat_eta = (self.stat_count_total - self.stat_count) / speed
+                    self.stat_eta = max(0.0, (self.stat_count_total - self.stat_count) / speed)
 
         self._last_stat_tick = now

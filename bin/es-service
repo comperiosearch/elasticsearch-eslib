@@ -18,7 +18,7 @@ def remote(host, verb, path, data):
         "http://%s/%s" % (host, path),
         data=json.dumps(data),
         headers={"content-type": "application/json"},
-        timeout=(3.5, 10)
+        timeout=(3.5, 60)
     )
     if res.content:
         return json.loads(res.content)
@@ -140,36 +140,64 @@ def cmd_stats(host, format, name, stat_fields):
         "ids"   : [name] if name else None
     }
     res = remote(host, "get", "stats", data)
-    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if format:
+        if error:
+            return dump_formatted(format, {"error": error})
+        else:
+            if stat_fields:
+                ret = {}
+                info = res.get(name) if name else res.itervalues().next()
+                for key in sorted(info.keys()):
+                    if key == "stats":
+                        continue
+                    if key in stat_fields:
+                        ret[key] = info[key]
+                stats = info.get("stats")
+                if stats:
+                    for key in stats.keys():
+                        if key in stat_fields:
+                            ret[key] = stats[key]
+                return dump_formatted(format, ret)
+            else:
+                return dump_formatted(format, res)
     error = res.get("error")
     if not error and res.get(name):
         error = res[name].get("error")
     if error:
         print >>sys.stderr, "Error getting stats for service '%s': %s" % (name, error)
         return
-    else:
-        info = res.get(name) if name else res.itervalues().next()
-        if info:
+
+    indent = "    " if not stat_fields else ""
+
+    info = res.get(name) if name else res.itervalues().next()
+    if info:
+        if not stat_fields:
             print "INFO FOR SERVICE '%s':" % name
-            for key in sorted(info.keys()):
-                value = info[key]
-                if key == "stats":
-                    continue
-                print "    %-15s = %s" % (key, value)
-            stats = info.get("stats")
-            if stats:
+        for key in sorted(info.keys()):
+            if key == "stats":
+                continue
+            if stat_fields and not key in stat_fields:
+                continue
+            value = info[key]
+            print "%s%-15s = %s" % (indent, key, value)
+        stats = info.get("stats")
+        if stats:
+            if not stat_fields:
                 print "STATS:"
-                for key in sorted(stats.keys()):
-                    value = stats[key]
-                    if key in ["uptime", "elapsed", "eta"]:
-                        value = _hms_str(value)
-                    elif key in ["cpu_percent", "cpu_percent_max"]:
-                        value = _pct_str(value)
-                    elif key in ["memory", "memory_max"]:
-                        value = _byte_str(value)
-                    elif key in ["dps"]:
-                        value = "" if value is None else ("%.2f" % value)
-                    print "    %-15s = %s" % (key, value)
+            for key in sorted(stats.keys()):
+                if stat_fields and not key in stat_fields:
+                    continue
+                value = stats[key]
+                if key in ["uptime", "elapsed", "eta"]:
+                    value = _hms_str(value)
+                elif key in ["cpu_percent", "cpu_percent_max"]:
+                    value = _pct_str(value)
+                elif key in ["memory", "memory_max"]:
+                    value = _byte_str(value)
+                elif key in ["dps"]:
+                    value = "" if value is None else ("%.2f" % value)
+                print "%s%-15s = %s" % (indent, key, value)
 
 # add [options] [--start] <name> [-c <config_tag>] [-s <server>]
 def cmd_add(host, format, name, config_tag, server_address, auto_start):
@@ -193,11 +221,16 @@ def cmd_add(host, format, name, config_tag, server_address, auto_start):
     if error:
         print >>sys.stderr, "Error adding service '%s': %s" % (name, error)
 
-# remove [options] [--stop] <name>
-def cmd_remove(host, format, names, auto_stop):
+# remove [options] [--all] [--stop] <name>
+def cmd_remove(host, format, names, all, auto_stop):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
-        "stop" : auto_stop
+        "all"   : all,
+        "stop"  : auto_stop
     }
     res = remote(host, "delete", "remove", data)
     if format: return dump_formatted(format, res)
@@ -207,6 +240,10 @@ def cmd_remove(host, format, names, auto_stop):
 
 # run [options] [-all] [--start] <names...>
 def cmd_run(host, format, names, all, start):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
         "all"   : all,
@@ -220,6 +257,10 @@ def cmd_run(host, format, names, all, start):
 
 # shutdown [options] [--all] [--wait] <names...>
 def cmd_shutdown(host, format, names, all, wait):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
         "all"   : all,
@@ -231,10 +272,15 @@ def cmd_shutdown(host, format, names, all, wait):
     if error:
         print >>sys.stderr, "Error shutting down service(s) %s: %s" % (names, error)
 
-# kill [options] [--force] <names...>
-def cmd_kill(host, format, names, force):
+# kill [options] [--all] [--force] <names...>
+def cmd_kill(host, format, names, all, force):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
         "force" : force
     }
     res = remote(host, "delete", "kill", data)
@@ -243,10 +289,15 @@ def cmd_kill(host, format, names, force):
     if error:
         print >>sys.stderr, "Error killing processes for service(s) %s: %s" % (names, error)
 
-# start [options] <names...>
-def cmd_start(host, format, names):
+# start [options] [--all] <names...>
+def cmd_start(host, format, names, all):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
     }
     res = remote(host, "post", "processing_start", data)
     if format: return dump_formatted(format, res)
@@ -254,10 +305,15 @@ def cmd_start(host, format, names):
     if error:
         print >>sys.stderr, "Error starting processing for service(s) %s: %s" % (names, error)
 
-# stop [options] [--wait] <names...>
-def cmd_stop(host, format, names, wait):
+# stop [options] [--all] [--wait] <names...>
+def cmd_stop(host, format, names, all, wait):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
         "wait"  : wait
     }
     res = remote(host, "post", "processing_stop", data)
@@ -266,10 +322,15 @@ def cmd_stop(host, format, names, wait):
     if error:
         print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
 
-# abort [options] <names...>
-def cmd_abort(host, format, names):
+# abort [options] [--all] <names...>
+def cmd_abort(host, format, names, all):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
     }
     res = remote(host, "post", "processing_abort", data)
     if format: return dump_formatted(format, res)
@@ -277,10 +338,15 @@ def cmd_abort(host, format, names):
     if error:
         print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
 
-# suspend [options] <names...>
-def cmd_suspend(host, format, names):
+# suspend [options] [--all] <names...>
+def cmd_suspend(host, format, names, all):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
     }
     res = remote(host, "post", "processing_suspend", data)
     if format: return dump_formatted(format, res)
@@ -288,10 +354,15 @@ def cmd_suspend(host, format, names):
     if error:
         print >>sys.stderr, "Error suspending processing for service(s) %s: %s" % (names, error)
 
-# resume [options] <names...>
-def cmd_resume(host, format, names):
+# resume [options] [--all] <names...>
+def cmd_resume(host, format, names, all):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
     data = {
         "ids"   : names,
+        "all"   : all,
     }
     res = remote(host, "post", "processing_resume", data)
     if format: return dump_formatted(format, res)
@@ -315,15 +386,15 @@ Usage:
   %(prog)s add      [options] [--start] <name> [-c <config_tag>] [-s <server_address>]
   %(prog)s remove   [options] [--stop] <names...>
 
-  %(prog)s run      [options] <names...>
-  %(prog)s shutdown [options] [--wait] <names...>
-  %(prog)s kill     [options] [--force] <names...>
+  %(prog)s run      [options] [--all] <names...>
+  %(prog)s shutdown [options] [--all] [--wait] <names...>
+  %(prog)s kill     [options] [--all] [--force] <names...>
 
-  %(prog)s start    [options] <names...>
-  %(prog)s stop     [options] [--wait] <names...>
-  %(prog)s abort    [options] <names...>
-  %(prog)s suspend  [options] <names...>
-  %(prog)s resume   [options] <names...>
+  %(prog)s start    [options] [--all] <names...>
+  %(prog)s stop     [options] [--all] [--wait] <names...>
+  %(prog)s abort    [options] [--all] <names...>
+  %(prog)s suspend  [options] [--all] <names...>
+  %(prog)s resume   [options] [--all] <names...>
 
   # DEBUG:
 
@@ -384,8 +455,9 @@ Common options:
     parser_add.add_argument("name", type=str, nargs=1)
     parser_add.add_argument("-c", "--tag", dest="config_tag", type=str, required=False)
     parser_add.add_argument("-s", "--server", type=str, required=False)
+    parser_add.add_argument("--all", action="store_true")
     parser_add.add_argument("--start", dest="auto_start", action="store_true")
-    # remove [options] [--stop] <names...>
+    # remove [options] [--all] [--stop] <names...>
     desc = "Unregister a service."
     parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
     parser_remove._actions[0].help = argparse.SUPPRESS
@@ -396,49 +468,55 @@ Common options:
     desc = "Start the registered service as an OS process and run the service. (Not !document processing!)"
     parser_run = subparsers.add_parser("run", description=desc, parents=[parser_common])
     parser_run._actions[0].help = argparse.SUPPRESS
-    parser_run.add_argument("names", type=str, nargs="+")
+    parser_run.add_argument("names", type=str, nargs="*")
     parser_run.add_argument("--all", action="store_true")
     parser_run.add_argument("--start", dest="auto_start", action="store_true")
     # shutdown [options] [--all] [--wait] <names...>
     desc = "Stop processing and shut down service."
     parser_shutdown = subparsers.add_parser("shutdown", description=desc, parents=[parser_common])
     parser_shutdown._actions[0].help = argparse.SUPPRESS
-    parser_shutdown.add_argument("names", type=str, nargs="+")
+    parser_shutdown.add_argument("names", type=str, nargs="*")
     parser_shutdown.add_argument("--wait", action="store_true")
     parser_shutdown.add_argument("--all", action="store_true")
-    # kill [options] [--force] <names...>
+    # kill [options] [--all] [--force] <names...>
     desc = "Kill OS process. Meant for cleaning up dead/hanging processes."
     parser_kill = subparsers.add_parser("kill", description=desc, parents=[parser_common])
     parser_kill._actions[0].help = argparse.SUPPRESS
-    parser_kill.add_argument("names", type=str, nargs="+")
+    parser_kill.add_argument("names", type=str, nargs="*")
     parser_kill.add_argument("--force", action="store_true")
+    parser_kill.add_argument("--all", action="store_true")
 
-    # start [options] <names...>
+    # start [options] [--all] <names...>
     desc = "Start document processing."
     parser_start = subparsers.add_parser("start", description=desc, parents=[parser_common])
     parser_start._actions[0].help = argparse.SUPPRESS
-    parser_start.add_argument("names", type=str, nargs="+")
-    # stop [options] [--wait] <names...>
+    parser_start.add_argument("names", type=str, nargs="*")
+    parser_start.add_argument("--all", action="store_true")
+    # stop [options] [--all] [--wait] <names...>
     desc = "Stop document processing."
     parser_stop = subparsers.add_parser("stop", description=desc, parents=[parser_common])
     parser_stop._actions[0].help = argparse.SUPPRESS
-    parser_stop.add_argument("names", type=str, nargs="+")
+    parser_stop.add_argument("names", type=str, nargs="*")
     parser_stop.add_argument("--wait", action="store_true")
-    # abort [options] <names...>
+    parser_stop.add_argument("--all", action="store_true")
+    # abort [options] [--all] <names...>
     desc = "Abort document processing."
     parser_abort = subparsers.add_parser("abort", description=desc, parents=[parser_common])
     parser_abort._actions[0].help = argparse.SUPPRESS
-    parser_abort.add_argument("names", type=str, nargs="+")
-    # suspend [options] <names...>
+    parser_abort.add_argument("names", type=str, nargs="*")
+    parser_abort.add_argument("--all", action="store_true")
+    # suspend [options] [--all] <names...>
     desc = "Suspend document processing."
     parser_suspend = subparsers.add_parser("suspend", description=desc, parents=[parser_common])
     parser_suspend._actions[0].help = argparse.SUPPRESS
-    parser_suspend.add_argument("names", type=str, nargs="+")
-    # resume [options] <names...>
+    parser_suspend.add_argument("names", type=str, nargs="*")
+    parser_suspend.add_argument("--all", action="store_true")
+    # resume [options] [--all] <names...>
     desc = "Resume document processing."
     parser_resume = subparsers.add_parser("resume", description=desc, parents=[parser_common])
     parser_resume._actions[0].help = argparse.SUPPRESS
-    parser_resume.add_argument("names", type=str, nargs="+")
+    parser_resume.add_argument("names", type=str, nargs="*")
+    parser_resume.add_argument("--all", action="store_true")
 
     # Parse
 
@@ -462,15 +540,15 @@ Common options:
     if   args.command == "list"      : cmd_list    (host, format, args.names, args.rich)
     elif args.command == "stats"     : cmd_stats   (host, format, args.name if args.name else None, args.fields)
     elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.config_tag, args.server, args.auto_start)
-    elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.auto_stop)
+    elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.all, args.auto_stop)
     elif args.command == "run"       : cmd_run     (host, format, args.names, args.all, args.auto_start)
     elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.all, args.wait)
-    elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.force)
-    elif args.command == "start"     : cmd_start   (host, format, args.names)
-    elif args.command == "stop"      : cmd_stop    (host, format, args.names, args.wait)
-    elif args.command == "abort"     : cmd_abort   (host, format, args.names)
-    elif args.command == "suspend"   : cmd_suspend (host, format, args.names)
-    elif args.command == "resume"    : cmd_resume  (host, format, args.names)
+    elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.all, args.force)
+    elif args.command == "start"     : cmd_start   (host, format, args.names, args.all)
+    elif args.command == "stop"      : cmd_stop    (host, format, args.names, args.all, args.wait)
+    elif args.command == "abort"     : cmd_abort   (host, format, args.names, args.all)
+    elif args.command == "suspend"   : cmd_suspend (host, format, args.names, args.all)
+    elif args.command == "resume"    : cmd_resume  (host, format, args.names, args.all)
 
 
 if __name__ == '__main__':

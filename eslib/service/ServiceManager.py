@@ -385,9 +385,10 @@ class ServiceManager(HttpService,):
 
     def _mgmt_service_remove(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: remove service(s) [%s]" % ", ".join(ids))
+        self.log.debug("called: remove service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._remove_services(
             ids,
+            payload.get("all") or False,
             payload.get("stop") or False
         )
 
@@ -473,7 +474,7 @@ class ServiceManager(HttpService,):
         if not ids:
             return {self.name: self._get_own_service_info()}
 
-        self.log.debug("called: get stats for service(s) [%s]" % ", ".join(ids))
+        self.log.debug("called: get stats for service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         missing = [id for id in ids if id not in self._services]
         fetch = [service for service in self._services.values() if service.id in ids]
         ret = self._get_service_info(fetch, return_missing=True)
@@ -484,52 +485,71 @@ class ServiceManager(HttpService,):
 
     def _mgmt_service_run(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: run service(s) [%s]" % ", ".join(ids))
-        return self._run_services(ids)
+        self.log.debug("called: run service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._run_services(
+            ids,
+            payload.get("all") or False,
+            payload.get("start") or False
+        )
 
     def _mgmt_service_shutdown(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: shutdown service(s) [%s]" % ", ".join(ids))
+        self.log.debug("called: shutdown service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._shutdown_services(
             ids,
+            payload.get("all") or False,
             payload.get("wait") or False
         )
 
     def _mgmt_service_kill(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: kill service(s) [%s]" % ", ".join(ids))
+        self.log.debug("called: kill service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._kill_services(
             ids,
+            payload.get("all") or False,
             payload.get("force") or False
         )
 
     def _mgmt_processing_start(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: start service(s) [%s]" % ", ".join(ids))
-        return self._start_processing(ids)
+        self.log.debug("called: start service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._start_processing(
+            ids,
+            payload.get("all") or False
+        )
 
     def _mgmt_processing_stop(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: stop service(s) [%s]" % ", ".join(ids))
+        self.log.debug("called: stop service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._stop_processing(
             ids,
+            payload.get("all") or False,
             payload.get("wait") or False
         )
 
     def _mgmt_processing_abort(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: abort service(s) [%s]" % ", ".join(ids))
-        return self._abort_processing(ids)
+        self.log.debug("called: abort service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._abort_processing(
+            ids,
+            payload.get("all") or False
+        )
 
     def _mgmt_processing_suspend(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: suspend service(s) [%s]" % ", ".join(ids))
-        return self._suspend_processing(ids)
+        self.log.debug("called: suspend service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._suspend_processing(
+            ids,
+            payload.get("all") or False
+        )
 
     def _mgmt_processing_resume(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: resume service(s) [%s]" % ", ".join(ids))
-        return self._resume_processing(ids)
+        self.log.debug("called: resume service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._resume_processing(
+            ids,
+            payload.get("all") or False
+        )
 
     #endregion Service interface commands
 
@@ -584,9 +604,11 @@ class ServiceManager(HttpService,):
             ret["error"] = error
         return ret
 
-    def _remove_services(self, ids, auto_stop):
+    def _remove_services(self, ids, all, auto_stop):
         succeeded = []
         failed = []
+        if all:
+            ids = self._services.keys()[:]
         for id in ids:
             if not id in self._services:
                 self.log.debug("Tried to remove a non-existing service '%s'." % id)
@@ -630,7 +652,7 @@ class ServiceManager(HttpService,):
                     self.log.info("Request to remove a running service '%s'; %s shut down message sent to service." % (id, extra_info))
                     #return {"message": "Service '%s' was running; %s and shut down message sent to service." % (id, extra_info)}
                     succeeded.append(id)
-            else:
+            elif not all:
                 msg = "Tried to remove a service ('%s') that was not dead without the auto_stop flag set." % id
                 self.log.debug(msg)
                 #return {"error": msg}
@@ -720,18 +742,20 @@ class ServiceManager(HttpService,):
             self.log.info("Registered service '%s' said goodbye.%s" % (id, extra_info))
             return {"message": "Manager waves goodbye back to service '%s'.%s" % (id, extra_info)}
 
-    def _run_services(self, ids):
+    def _run_services(self, ids, all=False, start=None):
         # TODO: Launch service on remote host
         succeeded = []
         failed = []
+        if all:
+            ids = self._services.keys()[:]
         for id in ids:
-            if not id in self._services:
+            if not all and not id in self._services:
                 self.log.debug("Tried to launch a non-existing service '%s'." % id)
                 failed.append(id)
                 continue
             else:
                 service = self._services[id]
-                if self._launch_service(service):  # Does all necessary logging itself
+                if self._launch_service(service, start):  # Does all necessary logging itself
                     succeeded.append(id)
                 else:
                     failed.append(id)
@@ -743,7 +767,7 @@ class ServiceManager(HttpService,):
             ret["message"] = "Services launched: [%s]" % ", ".join(succeeded)
         return ret
 
-    def _launch_service(self, service):
+    def _launch_service(self, service, start):
         #runner = "/Users/htb/git/elasticsearch-eslib/bin/es-run"
         #run_dir = "/Users/htb/git/customer-nets/services"
 
@@ -784,6 +808,8 @@ class ServiceManager(HttpService,):
             "-e", service.addr,  # Own address
             "--daemon"  # Needed for logging to directories anyway..
         ]
+        if start:
+            args.append("--start")
         if self.config_file:
             args.extend(["-f", self.config_file])
         if service.config_key:
@@ -807,18 +833,18 @@ class ServiceManager(HttpService,):
         service.error = None
         service.fail_count = 0
         service.status = status.DEAD
+        # For the rest, wait for service to say 'hello' back.
         #service.last_seen = self._now
         #self._storage_save_service()
-        # TODO: Perhaps just wait for service to say 'hello'?
 
         self.log.status("Service '%s' launched at '%s' with pid=%d." % (service.id, service.addr, service.pid))
         return True
 
-    def _shutdown_services(self, ids, wait):
+    def _shutdown_services(self, ids, all, wait):
         # Since it has the same inner code as a processing operation:
-        return self._processing_operation(ids, "delete", "shutdown", "shut down", "shut down", [status.IDLE, status.ABORTED, status.PROCESSING, status.SUSPENDED], wait)
+        return self._processing_operation(ids, "delete", "shutdown", "shut down", "shut down", [status.IDLE, status.ABORTED, status.PROCESSING, status.SUSPENDED], all, wait)
 
-    def _kill_services(self, ids, force):
+    def _kill_services(self, ids, all, force):
         # This is only for extreme cases.
         # Normally, a shutdown should do the trick.
 
@@ -826,8 +852,10 @@ class ServiceManager(HttpService,):
 
         succeeded = []
         failed = []
+        if all:
+            ids = self._services.keys()[:]
         for id in ids:
-            if not id in self._services:
+            if not all and not id in self._services:
                 self.log.debug("Tried to kill a non-existing service '%s'." % id)
                 failed.append(id)
                 continue
@@ -869,9 +897,11 @@ class ServiceManager(HttpService,):
             ret["message"] = "Services killed: [%s]" % ", ".join(succeeded)
         return ret
 
-    def _processing_operation(self, ids, remote_verb, remote_command, infinitive_str, past_tense_str, required_status_list, wait=None):
+    def _processing_operation(self, ids, remote_verb, remote_command, infinitive_str, past_tense_str, required_status_list, all=False, wait=False):
         succeeded = []
         failed = []
+        if all:
+            ids = self._services.keys()[:]
         for id in ids:
             if not id in self._services:
                 self.log.debug("Tried to %s a non-existing service '%s'." % (infinitive_str, id))
@@ -881,8 +911,9 @@ class ServiceManager(HttpService,):
                 service = self._services[id]
                 ss = self._get_status(service)
                 if not ss in required_status_list:
-                    self.log.debug("Tried to %s a service with status '%s'." % (infinitive_str, ss))
-                    failed.append(id)
+                    if not all:
+                        self.log.debug("Tried to %s a service with status '%s'." % (infinitive_str, ss))
+                        failed.append(id)
                     continue
 
                 error = None
@@ -908,20 +939,20 @@ class ServiceManager(HttpService,):
             ret["message"] = "Services %s: [%s]" % (past_tense_str, ", ".join(succeeded))
         return ret
 
-    def _start_processing(self, ids):
-        return self._processing_operation(ids, "post", "start", "start", "started", [status.IDLE, status.ABORTED])
+    def _start_processing(self, ids, all):
+        return self._processing_operation(ids, "post", "start", "start", "started", [status.IDLE, status.ABORTED], all)
 
-    def _stop_processing(self, ids, wait):
-        return self._processing_operation(ids, "post", "stop", "stop", "stopped", [status.PROCESSING, status.PENDING, status.SUSPENDED], wait)
+    def _stop_processing(self, ids, all, wait):
+        return self._processing_operation(ids, "post", "stop", "stop", "stopped", [status.PROCESSING, status.PENDING, status.SUSPENDED], all, wait)
 
-    def _abort_processing(self, ids):
-        return self._processing_operation(ids, "post", "abort", "abort", "aborted", [status.PROCESSING, status.PENDING, status.SUSPENDED, status.STOPPING])
+    def _abort_processing(self, ids, all):
+        return self._processing_operation(ids, "post", "abort", "abort", "aborted", [status.PROCESSING, status.PENDING, status.SUSPENDED, status.STOPPING], all)
 
-    def _suspend_processing(self, ids):
-        return self._processing_operation(ids, "post", "suspend", "suspend", "suspended", [status.PROCESSING])
+    def _suspend_processing(self, ids, all):
+        return self._processing_operation(ids, "post", "suspend", "suspend", "suspended", [status.PROCESSING], all)
 
-    def _resume_processing(self, ids):
-        return self._processing_operation(ids, "post", "resume", "resume", "resumed", [status.SUSPENDED])
+    def _resume_processing(self, ids, all):
+        return self._processing_operation(ids, "post", "resume", "resume", "resumed", [status.SUSPENDED], all)
 
     #endregion Service interface helpers
 

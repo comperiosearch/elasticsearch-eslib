@@ -72,7 +72,7 @@ class HttpService(Service):
             # The host:port endpoint where this service will listen for management commands
             management_endpoint = "localhost:4444",
 
-            connection_timeout = (3.5, 10.0)  # Whe connecting to other services
+            connection_timeout = (3.5, 60)  # Whe connecting to other services
         )
 
         self.metadata = {}
