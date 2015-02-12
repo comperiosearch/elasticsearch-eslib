@@ -47,6 +47,9 @@ class BlacklistFilter(Processor):
         self._filters = []  # List of tuples of three elements: (token_regex, blacklist_regex, whitelist_regex)
         self._global_whitelist_regex = None
 
+        self.count_passed  = 0
+        self.count_dropped = 0
+
     def _create_regex(self, terms, name):
         if not terms:
             return None
@@ -79,6 +82,9 @@ class BlacklistFilter(Processor):
 
         # Create global whitelist regex
         self._global_whitelist_regex = self._create_regex(self.config.whitelist, "global whitelist")
+
+        self.count_passed  = 0
+        self.count_dropped = 0
 
     def _check_text(self, text):
         if not text:
@@ -129,13 +135,17 @@ class BlacklistFilter(Processor):
     def _incoming_esdoc(self, doc):
         if self.output_esdoc.has_output or self.output_dropped.has_output:
             if (not self._fields or not self._filters) or self._check(doc):
+                self.count_passed  += 1
                 self.output_esdoc.send(doc)
             else:
+                self.count_dropped += 1
                 self.output_dropped.send(doc)
 
     def _incoming_str(self, doc):
         if self.output_str.has_output or self.output_dropped.has_output:
             if (not self._filters) or self._check(doc):
+                self.count_passed  += 1
                 self.output_str.send(doc)
             else:
+                self.count_dropped += 1
                 self.output_dropped.send(doc)

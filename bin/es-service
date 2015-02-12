@@ -27,8 +27,8 @@ def remote(host, verb, path, data):
 
 #region Template management commands
 
-# list [options] [<name_pattern>]
-def cmd_list(host, format, name_patterns):
+# list [options] [--verbose] [<name_pattern>]
+def cmd_list(host, format, name_patterns, rich):
     data = {
         "names": name_patterns,
     }
@@ -41,17 +41,35 @@ def cmd_list(host, format, name_patterns):
 
     hfmt = "%-20s %-10s %6s %-20s %9s %9s"
     ifmt = "%-20s %-10s %6s %-20s %9s %9s"
-    print hfmt % ("NAME", "STATUS", "PID", "HOST", "ELAPSED", "ETA")
+    hfmt_rich = " %6s %8s %7s %3s"
+    ifmt_rich = " %6s %8s %7s %3s"
+
+    header1 = hfmt % ("NAME", "STATUS", "PID", "HOST", "ELAPSED", "ETA")
     d = "-"
-    print hfmt % (d*20, d*10, d*6, d*20, d*9, d*9)
+    header2 = hfmt % (d*20, d*10, d*6, d*20, d*9, d*9)
+
+    if rich:
+        header1 += hfmt_rich % ("DOCS/s", "MEMORY", "CPU", "#TH")
+        header2 += hfmt_rich % (d*6, d*8, d*7, d*3)
+
+    print header1
+    print header2
+
     for key in sorted(list(res.keys())):
         r = res[key]
         elapsed = ""
         eta     = ""
-        if r.get("stats"):
-            v = r["stats"]["elapsed"]
+        dps     = ""
+        memory  = ""
+        cpu     = ""
+        threads = ""
+        stats = r.get("stats")
+        if stats:
+            # Elapsed
+            v = stats["elapsed"]
             if v is not None:
                 elapsed = _hms_str(v)
+            # ETA
             s = r["status"]
             if s == status.SUSPENDED:
                 eta = "paused"
@@ -62,6 +80,19 @@ def cmd_list(host, format, name_patterns):
                         eta = "infinite"
                     else:
                         eta = _hms_str(v)
+            # Memory
+            memory = _byte_str(stats["memory"])
+            # CPU
+            cpu = _pct_str(stats["cpu_percent"])
+            # Threads
+            threads = stats["threads"]
+            # DPS
+            dps_val = stats.get("dps")
+            if dps_val is not None:
+                if 0 < dps_val < 10:
+                    dps = "%.2f" % dps_val
+                else:
+                    dps = "%.0f" % dps_val
 
         addr = r["host"]
         if r["port"]:
@@ -69,7 +100,12 @@ def cmd_list(host, format, name_patterns):
                 addr += ":%s" % str(r["port"])
             else:
                 addr += ":(%s)" % str(r["port"])
-        print ifmt % (key, r["status"][:10], r["pid"], addr, elapsed, eta)
+        info = ifmt % (key, r["status"][:10], r["pid"], addr, elapsed, eta)
+
+        if rich:
+            info += ifmt_rich % (dps, memory, cpu, threads)
+
+        print info
 
 #region Value formatters
 
@@ -131,6 +167,8 @@ def cmd_stats(host, format, name, stat_fields):
                         value = _pct_str(value)
                     elif key in ["memory", "memory_max"]:
                         value = _byte_str(value)
+                    elif key in ["dps"]:
+                        value = "" if value is None else ("%.2f" % value)
                     print "    %-15s = %s" % (key, value)
 
 # add [options] [--start] <name> [-c <config_tag>] [-s <server>]
@@ -167,10 +205,12 @@ def cmd_remove(host, format, names, auto_stop):
     if error:
         print >>sys.stderr, "Error removing service(s) %s: %s" % (names, error)
 
-# run [options] <names...>
-def cmd_run(host, format, names):
+# run [options] [-all] [--start] <names...>
+def cmd_run(host, format, names, all, start):
     data = {
-        "ids"   : names
+        "ids"   : names,
+        "all"   : all,
+        "start" : start,
     }
     res = remote(host, "post", "run", data)
     if format: return dump_formatted(format, res)
@@ -178,10 +218,11 @@ def cmd_run(host, format, names):
     if error:
         print >>sys.stderr, "Error launching service(s) %s: %s" % (names, error)
 
-# shutdown [options] [--wait] <names...>
-def cmd_shutdown(host, format, names, wait):
+# shutdown [options] [--all] [--wait] <names...>
+def cmd_shutdown(host, format, names, all, wait):
     data = {
         "ids"   : names,
+        "all"   : all,
         "wait"  : wait,
     }
     res = remote(host, "delete", "shutdown", data)
@@ -268,7 +309,7 @@ def main():
     usage = \
 """
 Usage:
-  %(prog)s list     [options] [<name_patterns...>]
+  %(prog)s list     [options] [--verbose] [<name_patterns...>]
   %(prog)s stats    [options] <name> [<stat_fields...>]
 
   %(prog)s add      [options] [--start] <name> [-c <config_tag>] [-s <server_address>]
@@ -323,11 +364,12 @@ Common options:
     # nargs="2" => 2 (list)
     # nargs="1" => 1 (list)
 
-    # list [<name_patterns...>]
+    # list [options] [--verbose] [<name_patterns...>]
     desc = "List services."
     parser_list = subparsers.add_parser("list", description=desc, parents=[parser_common])
     parser_list._actions[0].help = argparse.SUPPRESS
     parser_list.add_argument("names", type=str, nargs="*")
+    parser_list.add_argument("-v", "--verbose", "--rich", dest="rich", action="store_true")
     # stats [options] [<name>] [<stat_fields...>]
     desc = "Display runtime statistics for service."
     parser_stats = subparsers.add_parser("stats", description=desc, parents=[parser_common])
@@ -350,17 +392,20 @@ Common options:
     parser_remove.add_argument("names", type=str, nargs="+")
     parser_remove.add_argument("--stop", dest="auto_stop", action="store_true")
 
-    # run [options] <names...>
+    # run [options] [--all] [--start] <names...>
     desc = "Start the registered service as an OS process and run the service. (Not !document processing!)"
     parser_run = subparsers.add_parser("run", description=desc, parents=[parser_common])
     parser_run._actions[0].help = argparse.SUPPRESS
     parser_run.add_argument("names", type=str, nargs="+")
-    # shutdown [options] [--wait] <names...>
+    parser_run.add_argument("--all", action="store_true")
+    parser_run.add_argument("--start", dest="auto_start", action="store_true")
+    # shutdown [options] [--all] [--wait] <names...>
     desc = "Stop processing and shut down service."
     parser_shutdown = subparsers.add_parser("shutdown", description=desc, parents=[parser_common])
     parser_shutdown._actions[0].help = argparse.SUPPRESS
     parser_shutdown.add_argument("names", type=str, nargs="+")
     parser_shutdown.add_argument("--wait", action="store_true")
+    parser_shutdown.add_argument("--all", action="store_true")
     # kill [options] [--force] <names...>
     desc = "Kill OS process. Meant for cleaning up dead/hanging processes."
     parser_kill = subparsers.add_parser("kill", description=desc, parents=[parser_common])
@@ -414,12 +459,12 @@ Common options:
 
     # Call commands according to parsed verbs
 
-    if   args.command == "list"      : cmd_list    (host, format, args.names)
+    if   args.command == "list"      : cmd_list    (host, format, args.names, args.rich)
     elif args.command == "stats"     : cmd_stats   (host, format, args.name if args.name else None, args.fields)
     elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.config_tag, args.server, args.auto_start)
     elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.auto_stop)
-    elif args.command == "run"       : cmd_run     (host, format, args.names)
-    elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.wait)
+    elif args.command == "run"       : cmd_run     (host, format, args.names, args.all, args.auto_start)
+    elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.all, args.wait)
     elif args.command == "kill"      : cmd_kill    (host, format, args.names, args.force)
     elif args.command == "start"     : cmd_start   (host, format, args.names)
     elif args.command == "stop"      : cmd_stop    (host, format, args.names, args.wait)

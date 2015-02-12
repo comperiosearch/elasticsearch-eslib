@@ -64,6 +64,7 @@ class Service(Configurable):
 
         self.stat_count              = 0
         self.stat_count_total        = None  # There might not be a total count..
+        self.stat_dps                = None
         self.stat_eta                = None  # If there is no total count... it may never end..
 
         self._last_stat_tick         = 0
@@ -71,6 +72,7 @@ class Service(Configurable):
         self._count_at_resume        = 0
         self._total_cpu_time         = 0
         self._process_cpu_time       = 0
+        self._last_count             = 0
 
         self._stat_thread_interval   = 10  # 10 seconds
         self._stat_thread_running    = False
@@ -340,6 +342,7 @@ class Service(Configurable):
             self.stat_processing_ended   = 0
             self._time_at_resume         = self.stat_processing_started
             self._count_at_resume        = 0
+            self._last_count             = 0
         elif raise_on_error:
             raise ServiceOperationError("Processing failed to start.")
         return ok
@@ -596,6 +599,9 @@ class Service(Configurable):
         stats["count"] = self.stat_count
         stats["count_total"] = self.stat_count_total
 
+        # velocity, dps
+        stats["dps"] = self.stat_dps
+
         return stats
 
 
@@ -625,7 +631,14 @@ class Service(Configurable):
         self.stat_count = self.on_count() or 0
         self.stat_count_total = self.on_count_total()
 
-        # Estimated time remaining
+        # Velocity, dps (since last tick)
+        if self.processing and self._last_stat_tick:
+            self.stat_dps = (self.stat_count - self._last_count) / interval
+        else:
+            self.stat_dps = None
+        self._last_count = self.stat_count
+
+        # Estimated time remaining (calculated as average since last resume)
         if not self.processing:
             self.stat_eta = None
         else:

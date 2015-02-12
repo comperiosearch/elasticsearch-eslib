@@ -146,7 +146,7 @@ class ElasticsearchReader(Generator):
                 self.log.debug("Congestion in dependencies; sleeping 10 seconds.")
                 self.congestion_sleep(10.0)
             else:
-                self.log.info("Fetching follow-up scan batch from Elasticsearch.")
+                self.log.debug("Fetching follow-up scan batch from Elasticsearch.")
                 res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)
                 self._scroll_id = res["_scroll_id"]
                 hits = res["hits"]["hits"]

@@ -91,4 +91,11 @@ class PipelineService(Service):
         else:
             return True
 
+    def on_count(self):
+        # It is probably better to count what has been handled by the tail, than what the head received or generaterd, so:
+        return self.tail.count
+
+    def on_count_total(self):
+        return self.head.total
+
     #endregion Service overrides

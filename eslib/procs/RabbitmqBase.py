@@ -224,5 +224,8 @@ class RabbitmqBase(Configurable):
         if not ok:
             self.log.warning("Missing connection to RabbitMQ. Max retries exceeded. Document lost. Aborting.")
             self.abort()
+            return False
+        else:
+            return True
 
     #endregion Pika connection management helpers

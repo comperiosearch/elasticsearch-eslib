@@ -332,9 +332,6 @@ class ServiceManager(HttpService,):
             if error:
                 msg = "Failed to retrieve stats from service '%s' at '%s': %s" % (service.id, service.addr, error)
                 self.log.error(msg)
-            # Transfer these via the 'stats' section:
-            stats["type"]       = content.get("type")
-            stats["config_key"] = content.get("config_key")
         except Exception as e:
             error = str(e)
             msg = "Failed to communicate with service '%s' at '%s': %s" % (service.id, service.addr, e)

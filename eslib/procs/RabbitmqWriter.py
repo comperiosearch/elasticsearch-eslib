@@ -42,7 +42,7 @@ class RabbitmqWriter(Processor, RabbitmqBase):
     def __init__(self, **kwargs):
         super(RabbitmqWriter, self).__init__(**kwargs)
 
-        self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
+        self._connector = self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 
     def on_open(self):
         self.count = 0
@@ -77,6 +77,8 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             msg_type = "str" #type(document).__name__
             self.doclog.warning("Writing document of unsupported type '%s' as type 'str'." % type(document).__name__)
 
-        self.count += 1
+        if self._publish(msg_type, data):
+            self.count += 1
 
-        self._publish(msg_type, data)
+    def is_congested(self):
+        return self._connector.queue.qsize() > 10000
