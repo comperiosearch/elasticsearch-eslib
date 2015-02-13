@@ -31,6 +31,11 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         reconnect_timeout = 3          :
     """
 
+    CALC_TOTAL          = True  # Whether to check our the RabbitMQ at intervals and calculate a total
+                                # from current count and remaining in queue. It thus becomes a moving
+                                # target for ETA calculations.
+    CALC_TOTAL_INTERVAL = 10.0  # seconds
+
     def __init__(self, **kwargs):
         super(RabbitmqMonitor, self).__init__(**kwargs)
 
@@ -42,6 +47,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         )
 
         self._reconnecting = 0
+        self._last_calc_total = 0
 
     #region Processor stuff
 
@@ -50,6 +56,7 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         self.log.info("Connected to RabbitMQ.")
 
     def on_close(self):
+        self._calc_total()
         if self._close_connection():
             self.log.info("Connection to RabbitMQ closed.")
 
@@ -65,7 +72,9 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
             self._channel.basic_cancel(self._consumer_tag)
 
     def on_startup(self):
-        self.total = 0
+        if self.CALC_TOTAL:
+            self.total = 0  # We will collect this from message queue, otherwise it should be set to None
+            self._last_calc_total = 0
         self.count = 0
         self._start_consuming()
 
@@ -103,11 +112,28 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
             return
 
         try:
+            self._calc_total()
             self._channel.connection.process_data_events()
         except Exception as e:
             if self._reconnecting >= 0:
                 self.log.info("No open connection to RabbitMQ. Trying to reconnect.")
                 self._reconnecting = self.config.max_reconnects  # Number of reconnect attempts; will start reconnecting on next tick
+
+    def _calc_total(self):
+        """
+        Calculate total number of messages.
+        That is the sum of what is processed so far, and what remains in the queue.
+        """
+        if not self.CALC_TOTAL:
+            return
+
+        now = time.time()
+        if now - self._last_calc_total > self.CALC_TOTAL_INTERVAL:
+            try:
+                self.total = self.get_queue_size() + self.count
+            except Exception as e:
+                self.log.warning("Failed to get queue size for queue '%s': %s" % (self._queue_name, e))
+            self._last_calc_total = now
 
     def _callback(self, callback, method, properties, body):
         #print "*** RabbitmqMonitor received:"
@@ -115,7 +141,6 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         #print "***    Body: ", body
 
         self.count += 1
-        self.total += 1
 
         if not self.output.has_output: # Don't bother deserializing, etc, in this case
             return
