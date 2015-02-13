@@ -390,6 +390,7 @@ Common options:
     parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
     parser_remove._actions[0].help = argparse.SUPPRESS
     parser_remove.add_argument("names", type=str, nargs="+")
+    parser_remove.add_argument("--all", action="store_true")
     parser_remove.add_argument("--stop", dest="auto_stop", action="store_true")
 
     # run [options] [--all] [--start] <names...>
