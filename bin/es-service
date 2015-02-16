@@ -200,7 +200,7 @@ def cmd_stats(host, format, name, stat_fields):
                 print "%s%-15s = %s" % (indent, key, value)
 
 # add [options] [--start] <name> [-c <config_tag>] [-s <server>]
-def cmd_add(host, format, name, config_tag, server_address, auto_start):
+def cmd_add(host, format, name, boot_state, config_tag, server_address, auto_start):
     remote_host = server_address or "localhost"
     remote_port = None
     addr = remote_host.split(":")
@@ -212,6 +212,7 @@ def cmd_add(host, format, name, config_tag, server_address, auto_start):
         "id"         : name,
         "host"       : remote_host,
         "port"       : remote_port,
+        "boot_state" : boot_state,
         "config_key" : config_tag,
         "start"      : auto_start,
     }
@@ -370,6 +371,38 @@ def cmd_resume(host, format, names, all):
     if error:
         print >>sys.stderr, "Error resuming processing for service(s) %s: %s" % (names, error)
 
+# boot [options] [--all] <names...>
+def cmd_boot(host, format, names, all):
+    # Default to all if no service names are given
+    if not names:
+        all = True
+
+    data = {
+        "ids"   : names,
+        "all"   : all,
+    }
+    res = remote(host, "post", "boot", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error booting service(s) %s: %s" % (names, error)
+
+# set-boot [options] <boot-state> [--all] <names...>
+def cmd_set_boot(host, format, boot_state, names, all):
+    if not names and not all:
+        print >>sys.stderr, "Missing service name(s) or '--all'."
+        sys.exit(2)
+
+    data = {
+        "ids"        : names,
+        "boot_state" : boot_state,
+        "all"        : all,
+    }
+    res = remote(host, "post", "set_boot_state", data)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error setting boot state for service(s) %s: %s" % (names, error)
 
 #endregion Template management commands
 
@@ -383,7 +416,8 @@ Usage:
   %(prog)s list     [options] [--verbose] [<name_patterns...>]
   %(prog)s stats    [options] <name> [<stat_fields...>]
 
-  %(prog)s add      [options] [--start] <name> [-c <config_tag>] [-s <server_address>]
+  %(prog)s add      [options] [--start] <name>
+                    [-b <boot_state>] -c <config_tag>] [-s <server_address>]
   %(prog)s remove   [options] [--stop] <names...>
 
   %(prog)s run      [options] [--all] <names...>
@@ -396,12 +430,10 @@ Usage:
   %(prog)s suspend  [options] [--all] <names...>
   %(prog)s resume   [options] [--all] <names...>
 
-  # DEBUG:
+  %(prog)s boot     [options] [--all] <names...>
+  %(prog)s set-boot [options] <state> [--all] <names...>
 
-  %(prog)s hello       [options] <name> # fake keepalive
-  %(prog)s push_hello  [options] <name> # fake keepalive
-  %(prog)s guest_register   [options] <name> <address> [<meta_sections...>]
-  %(prog)s guest_unregister [options] <name>
+  # DEBUG:
 
   %(prog)s update [options] [-f file] [path] #post
   %(prog)s meta   [options] #get
@@ -411,6 +443,8 @@ Common options:
   --host=<host>
   --json
   --yaml
+
+Boot states are one of 'dead', 'idle', 'processing'.
 """
 
     # Set up parser
@@ -455,6 +489,7 @@ Common options:
     parser_add.add_argument("name", type=str, nargs=1)
     parser_add.add_argument("-c", "--tag", dest="config_tag", type=str, required=False)
     parser_add.add_argument("-s", "--server", type=str, required=False)
+    parser_add.add_argument("-b", "--boot-state", dest="boot_state", type=str, required=False)
     parser_add.add_argument("--all", action="store_true")
     parser_add.add_argument("--start", dest="auto_start", action="store_true")
     # remove [options] [--all] [--stop] <names...>
@@ -518,6 +553,20 @@ Common options:
     parser_resume.add_argument("names", type=str, nargs="*")
     parser_resume.add_argument("--all", action="store_true")
 
+    # boot [options] [--all] <names...>
+    desc = "Spin up services with boot state and make sure they are running or processing according to their boot states."
+    parser_boot = subparsers.add_parser("boot", description=desc, parents=[parser_common])
+    parser_boot._actions[0].help = argparse.SUPPRESS
+    parser_boot.add_argument("names", type=str, nargs="*")
+    parser_boot.add_argument("--all", action="store_true")
+    # set-boot [options] <boot-state> [--all] <names...>
+    desc = "Set boot state; one of 'dead', 'idle', 'processing'."
+    parser_setboot = subparsers.add_parser("set-boot", description=desc, parents=[parser_common])
+    parser_setboot._actions[0].help = argparse.SUPPRESS
+    parser_setboot.add_argument("boot-state", dest="boot_state", type=str, nargs=1)
+    parser_setboot.add_argument("names", type=str, nargs="*")
+    parser_setboot.add_argument("--all", action="store_true")
+
     # Parse
 
     if len(sys.argv) == 1:
@@ -539,7 +588,7 @@ Common options:
 
     if   args.command == "list"      : cmd_list    (host, format, args.names, args.rich)
     elif args.command == "stats"     : cmd_stats   (host, format, args.name if args.name else None, args.fields)
-    elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.config_tag, args.server, args.auto_start)
+    elif args.command == "add"       : cmd_add     (host, format, args.name[0], args.boot_state, args.config_tag, args.server, args.auto_start)
     elif args.command == "remove"    : cmd_remove  (host, format, args.names, args.all, args.auto_stop)
     elif args.command == "run"       : cmd_run     (host, format, args.names, args.all, args.auto_start)
     elif args.command == "shutdown"  : cmd_shutdown(host, format, args.names, args.all, args.wait)
@@ -549,6 +598,8 @@ Common options:
     elif args.command == "abort"     : cmd_abort   (host, format, args.names, args.all)
     elif args.command == "suspend"   : cmd_suspend (host, format, args.names, args.all)
     elif args.command == "resume"    : cmd_resume  (host, format, args.names, args.all)
+    elif args.command == "boot"      : cmd_boot    (host, format, args.names, args.all)
+    elif args.command == "set-boot"  : cmd_set_boot(host, format, args.boot_state, args.names, args.all)
 
 
 if __name__ == '__main__':

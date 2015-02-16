@@ -502,6 +502,12 @@ class Service(Configurable):
     def on_count_total(self):
         return None
 
+    def on_stats(self, stats):
+        """
+        :param stats: Dictionary of stats data
+        """
+        pass
+
     #endregion Statistics provider methods for override
 
     #region Service management methods for override
@@ -548,7 +554,6 @@ class Service(Configurable):
         return True  # No update is an ok update
 
     #endregion Processing management methods for override
-
 
     def get_stats(self):
         proc = psutil.Process()
@@ -602,8 +607,10 @@ class Service(Configurable):
         # velocity, dps
         stats["dps"] = self.stat_dps
 
-        return stats
+        # Allow implementations to add their custom stats
+        self.on_stats(stats)
 
+        return stats
 
     def _stat_tick(self):
         "Retrieve counts and ETA plus cpu load."

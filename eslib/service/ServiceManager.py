@@ -4,25 +4,27 @@
 from eslib.service import HttpService, status
 from eslib.procs import Timer
 from eslib.time import utcdate
-import json, datetime, Queue, os, signal, subprocess, sys
+import datetime, Queue, os, signal, subprocess, sys
 
 from elasticsearch import Elasticsearch
 from elasticsearch.client.indices import IndicesClient
 from elasticsearch.helpers import scan
 
+
 class ServiceInfo(object):
     def __init__(self):
         # Persisted permanent data
         self.id         = None
-        self.guest      = False  # Guests register/unregister themselves
-        self.host       = None   # Host name (not port) where service should run (or guest IS running)
+        self.guest      = False        # Guests register/unregister themselves
+        self.host       = None         # Host name (not port) where service should run (or guest IS running)
         self.type       = None
-        self.config_key = None   # Section tag for service config in global config
-        self.metadata_keys = []  # Sections/fields in the metadata that the service subscribes to
-        self.fixed_port = False  # Whether port is given and insisted on, as opposed to dynamic
+        self.config_key = None         # Section tag for service config in global config
+        self.metadata_keys = []        # Sections/fields in the metadata that the service subscribes to
+        self.fixed_port = False        # Whether port is given and insisted on, as opposed to dynamic
+        self.boot_state = status.DEAD  # Whether it should be dead, running idle or processing after boot
         # Persisted temporary data
-        self.port       = None   # Port number assigned by manager or insisted by guest
-        self.pid        = None   # OS Process ID
+        self.port       = None         # Port number assigned by manager or insisted by guest
+        self.pid        = None         # OS Process ID
         self.last_seen  = None
         # Not persisted
         self.fail_count = 0
@@ -98,6 +100,9 @@ class ServiceManager(HttpService,):
         self.add_route(self._mgmt_processing_abort  , "POST|PUT", "/processing_abort"  , None)
         self.add_route(self._mgmt_processing_suspend, "POST|PUT", "/processing_suspend", None)
         self.add_route(self._mgmt_processing_resume , "POST|PUT", "/processing_resume" , None)
+
+        self.add_route(self._mgmt_service_boot      , "POST|PUT", "/boot"              , None)
+        self.add_route(self._mgmt_service_set_boot  , "POST|PUT", "/set_boot_state"    , None)
 
     @property
     def _now(self):
@@ -191,6 +196,7 @@ class ServiceManager(HttpService,):
             service.config_key    = s["config_key"]
             service.metadata_keys = s["metadata_keys"]
             service.fixed_port    = s["fixed_port"]
+            service.boot_state    = s.get("boot_state")
             service.port          = s["port"]
             service.pid           = s["pid"]
             service.last_seen     = utcdate(s.get("last_seen") or self._now)
@@ -204,6 +210,7 @@ class ServiceManager(HttpService,):
             "config_key"   : service.config_key,
             "metadata_keys": service.metadata_keys,
             "fixed_port"   : service.fixed_port,
+            "boot_state"   : service.boot_state,
             "port"         : service.port,
             "pid"          : service.pid,
             "last_seen"    : service.last_seen  # elasticsearch api will serialize this properly
@@ -379,8 +386,9 @@ class ServiceManager(HttpService,):
             payload.get("id"),              # service id
             payload.get("host"),            # hostname for where to run this service (or where guest IS running)
             payload.get("port"),            # port service insists to run admin port on
+            payload.get("boot_state") or status.DEAD,  # boot state
             payload.get("config_key"),      # config key
-            payload.get("start") or False   # auto_start
+            payload.get("start") or False,  # auto_start
         )
 
     def _mgmt_service_remove(self, request_handler, payload, **kwargs):
@@ -427,6 +435,7 @@ class ServiceManager(HttpService,):
             "guest"      : True,
             "host"       : host,
             "type"       : self.__class__.__name__,
+            # no "boot_state" for this one..
             "config_key" : self.config_key,
             "meta_keys"  : [],
             "fixed_port" : True,
@@ -454,6 +463,7 @@ class ServiceManager(HttpService,):
                     "guest"      : service.guest,
                     "host"       : service.host,
                     "type"       : service.type,
+                    "boot_state" : service.boot_state,
                     "config_key" : service.config_key,
                     "meta_keys"  : service.metadata_keys,
                     "fixed_port" : service.fixed_port,
@@ -551,11 +561,40 @@ class ServiceManager(HttpService,):
             payload.get("all") or False
         )
 
+    def _mgmt_set_boot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        self.log.debug("called: set boot state for service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._set_boot(
+            ids,
+            payload.get("boot_state"),
+            payload.get("all") or False
+        )
+
+    def _mgmt_boot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        all = payload.get("all")
+        if not ids:
+            all = True
+        self.log.debug("called: boot service(s) [%s]" % ("(all)" if all else ", ".join(ids)))
+        return self._boot(
+            ids,
+            all
+        )
+
     #endregion Service interface commands
 
     #region Service interface helpers
 
-    def _add_service(self, guest, id, host, port, config_key, auto_start, save=True):
+    def _parse_boot_state(self, boot_state_str):
+        if boot_state_str is None:
+            return status.DEAD
+        boot_state_str = boot_state_str.lower()
+        for s in [status.DEAD, status.IDLE, status.PROCESSING]:
+            if boot_state_str == s.lower():
+                return s
+        return None  # Parsing failed; illegal string
+
+    def _add_service(self, guest, id, host, port, boot_state, config_key, auto_start, save=True):
         if port is not None and type(port) is not int:
             port = int(port)
 
@@ -584,6 +623,9 @@ class ServiceManager(HttpService,):
             service.port       = port
             # dynamic port will be assigned upon service exec/run
 
+        boot_state_parsed = self._parse_boot_state(boot_state)
+        service.boot_state = boot_state_parsed or status.DEAD
+
         self._services[id] = service
         if save:
             self._storage_save_service(service)
@@ -602,6 +644,8 @@ class ServiceManager(HttpService,):
         ret = {"message": msg}
         if error:
             ret["error"] = error
+        if boot_state is None:
+            ret["warning"] = "Unknown or illegal boot state '%s' ignored."
         return ret
 
     def _remove_services(self, ids, all, auto_stop):
@@ -954,17 +998,88 @@ class ServiceManager(HttpService,):
     def _resume_processing(self, ids, all):
         return self._processing_operation(ids, "post", "resume", "resume", "resumed", [status.SUSPENDED], all)
 
+    def _set_boot(self, ids, boot_state, all=False, wait=False):
+        boot_state_parsed = self._parse_boot_state(boot_state)
+        if boot_state_parsed is None:
+            return {"error": "Unknown or illegal boot state '%s'." % boot_state}
+
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to set boot state for a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                service.boot_state = boot_state_parsed
+                succeeded.append(id)
+                # Persist
+                self._storage_save_service(service)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Failed to set boot state for services: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Boot state set to '%s' for services: [%s]" % (boot_state_parsed, ", ".join(succeeded))
+        return ret
+
+    def _boot(self, ids, all=False, wait=False):
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to boot a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                boot_state = service.boot_state
+                if boot_state is None or boot_state == status.DEAD:
+                    continue  # Booting not required
+                # Check the current status...
+                ss = self._get_status(service)
+                if ss == status.DEAD:
+                    # Launch service
+                    start = False
+                    if boot_state == status.PROCESSING:
+                        start = True
+                    ok = self._launch_service(service, start)
+                    if ok:
+                        succeeded.append(id)
+                    else:
+                        failed.append(id)
+                elif ss in [status.PROCESSING, status.SUSPENDED, status.PENDING, status.STOPPING, status.CLOSING]:
+                    continue  # Already running, so booting not required
+                else:
+                    # Start processing
+                    res = self._start_processing([id])
+                    error = res.get("error")
+                    if error:
+                        failed.append(id)
+                    else:
+                        succeeded.append(id)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Services that failed to boot: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Services booted: [%s]" % (", ".join(succeeded))
+        return ret
+
     #endregion Service interface helpers
 
     #region Service overrides
 
-    def get_stats(self):
-        stats = super(ServiceManager, self).get_stats()
+    def on_stats(self, stats):
         available_ports = {}
         for host, ports in self._available_ports.iteritems():
             available_ports[host] = len(ports)
         stats["available_ports"] = available_ports
-        return stats
 
     #TODO: ALL OF THE BELOW++, fix them when I work with metadata
 
