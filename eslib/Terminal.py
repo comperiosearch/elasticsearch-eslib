@@ -48,9 +48,11 @@ class Terminal(object):
             return True
         # In case the socket is set to mimic the protocol of one of its connectors, we check for that
         # instead of the directly registered protocol.
-        ss = socket.mimiced_protocol.split(".")
+        ss = socket.protocol.split(".")
+        sm = socket.mimiced_protocol.split(".")
         cc = connector.protocol.split(".")
-        #print "SS=", ss[:len(cc)]
-        #print "CC=", cc[:len(cc)]
-        #print "%s == %s" % (ss[:len(cc)], cc[:len(cc)])
-        return ss[:len(cc)] == cc[:len(cc)]
+        # print "SS=", ss[:len(cc)]
+        # print "SM=", sm[:len(cc)]
+        # print "CC=", cc[:len(cc)]
+        # print "%s == %s" % (sm[:len(cc)], cc[:len(cc)])
+        return (ss[:len(cc)] == cc[:len(cc)]) or (sm[:len(cc)] == cc[:len(cc)])

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from eslib.service import HttpService, status
+from eslib.service import HttpService, status, PipelineService
 from eslib.procs import Timer
 from eslib.time import utcdate
 import datetime, Queue, os, signal, subprocess, sys
@@ -40,7 +40,7 @@ class ServiceInfo(object):
         self.fail_count = 0
 
 
-class ServiceManager(HttpService,):
+class ServiceManager(HttpService, PipelineService):
 
     def __init__(self, **kwargs):
         super(ServiceManager, self).__init__(**kwargs)
@@ -73,6 +73,9 @@ class ServiceManager(HttpService,):
         self._timer = None
         self._upload_queue = None
 
+        self._reboot_wait  = []  # List of services we are currently rebooting; just waiting for 'goodbye' first.
+        self._reboot_ready = []  # Services that we can now safely try to boot again. (TODO: May require a grace time to endure lingering locks to limited resources, such as ip-ports, limited number of DB connections, etc.)
+
         # Clear routes and re-enable a minimal set of calls that make sense here
         self._routes = []
         # Use those in HttpService:
@@ -101,8 +104,9 @@ class ServiceManager(HttpService,):
         self.add_route(self._mgmt_processing_suspend, "POST|PUT", "/processing_suspend", None)
         self.add_route(self._mgmt_processing_resume , "POST|PUT", "/processing_resume" , None)
 
-        self.add_route(self._mgmt_service_boot      , "POST|PUT", "/boot"              , None)
         self.add_route(self._mgmt_service_set_boot  , "POST|PUT", "/set_boot_state"    , None)
+        self.add_route(self._mgmt_service_boot      , "POST|PUT", "/boot"              , None)
+        self.add_route(self._mgmt_service_reboot    , "POST|PUT", "/reboot"            , None)
 
     @property
     def _now(self):
@@ -132,21 +136,36 @@ class ServiceManager(HttpService,):
         self._timer = Timer(actions=[(1, 1, "ping")])
         self._timer.add_callback(self._ping)
 
+        procs = [self._timer]
+
+        # Link procs (just one in this case..)
+        self.link(*procs)
+
+        #  Register them for debug dumping
+        self.register_procs(*procs)
+
         return True
 
     def _ping(self, doc):
+        # Reboot handling
+        if self._reboot_ready:
+            # Only do one each tick...
+            service = self._reboot_ready.pop(0)
+            self.log.info("Booting service '%s' as part of reboot request." % service.id)
+            self._boot([service.id])
+
         return  # DEBUG
 
-        # TODO: Use a thread pool for pushing configs, and only pop off the queue if the thread pool is ready
-        if self._upload_queue and self._upload_queue.qsize():
-            while self._upload_queue.qsize():
-                service = self._upload_queue.get_nowait()
-                if service:
-                    if service["fail_count"] >= 3:  # Three strikes, and you're out!
-                        continue  # Ignore it for now... it must be re-registered
-                        # TODO: Later we should just let if wait a bit longer before we try again
-                    self._push_to_service(service)
-
+        # # TODO: Use a thread pool for pushing configs, and only pop off the queue if the thread pool is ready
+        # if self._upload_queue and self._upload_queue.qsize():
+        #     while self._upload_queue.qsize():
+        #         service = self._upload_queue.get_nowait()
+        #         if service:
+        #             if service["fail_count"] >= 3:  # Three strikes, and you're out!
+        #                 continue  # Ignore it for now... it must be re-registered
+        #                 # TODO: Later we should just let if wait a bit longer before we try again
+        #             self._push_to_service(service)
+        #
     # def _push_to_service(self, service):
     #     self.log.debug("Pushing config to service '%s'." % service["id"])
     #
@@ -561,7 +580,15 @@ class ServiceManager(HttpService,):
             payload.get("all") or False
         )
 
-    def _mgmt_set_boot(self, request_handler, payload, **kwargs):
+    def _mgmt_service_reboot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        self.log.debug("called: shutdown service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._reboot_services(
+            ids,
+            payload.get("all") or False,
+        )
+
+    def _mgmt_service_set_boot(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
         self.log.debug("called: set boot state for service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._set_boot(
@@ -570,7 +597,7 @@ class ServiceManager(HttpService,):
             payload.get("all") or False
         )
 
-    def _mgmt_boot(self, request_handler, payload, **kwargs):
+    def _mgmt_service_boot(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
         all = payload.get("all")
         if not ids:
@@ -765,6 +792,13 @@ class ServiceManager(HttpService,):
             return {"error": "No such registered service '%s'." % id}
 
         service = self._services[id]
+
+        # Reboot handling
+        if service in self._reboot_wait:
+            self._reboot_wait.remove(service)
+            self._reboot_ready.append(service)
+            # The runner thread should now launch the service when it sees fit.
+
         extra_info = ""
         if self._release_port(service.host, service.port):
             extra_info = " Dynamic port '%s' released back to pool." % (service.addr)
@@ -1026,7 +1060,7 @@ class ServiceManager(HttpService,):
             ret["message"] = "Boot state set to '%s' for services: [%s]" % (boot_state_parsed, ", ".join(succeeded))
         return ret
 
-    def _boot(self, ids, all=False, wait=False):
+    def _boot(self, ids, all=False):
         succeeded = []
         failed = []
         if all:
@@ -1071,6 +1105,48 @@ class ServiceManager(HttpService,):
             ret["message"] = "Services booted: [%s]" % (", ".join(succeeded))
         return ret
 
+    def _reboot_services(self, ids, all):
+        # When we reboot a service, we first register that we are rebooting, then we shut it down,
+        # and when we get a 'goodbye' message, we mark it to be booted again. The service tick should
+        # do the actual rebooting.
+
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to reboot a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                ss = self._get_status(service)
+                if ss == status.DEAD:
+                    self._reboot_ready.append(service)
+
+                error = None
+                try:
+                    data = None
+                    content = self.remote(service.addr, "delete", "shutdown", data)
+                    error = content.get("error")
+                except Exception as e:
+                    error = str(e)
+                if error:
+                    self.log.warning("Service '%s' failed to shut down: %s" % (id, error))
+                    failed.append(id)
+                else:
+                    self.log.info("Shutdown message sent to service '%s'." % id)
+                    succeeded.append(id)
+                    self._reboot_wait.append(service)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Service not shut down for reboot: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Services now pending reboot: [%s]" % (", ".join(succeeded))
+        return ret
+
     #endregion Service interface helpers
 
     #region Service overrides
@@ -1080,37 +1156,6 @@ class ServiceManager(HttpService,):
         for host, ports in self._available_ports.iteritems():
             available_ports[host] = len(ports)
         stats["available_ports"] = available_ports
-
-    #TODO: ALL OF THE BELOW++, fix them when I work with metadata
-
-    def on_status(self):
-        return {"timer": self._timer.status}
-
-    def on_start(self):
-        self._timer.start()
-        return True
-
-    def on_restart(self):
-        self._timer.restart()
-        return True
-
-    def on_stop(self):
-        self._timer.stop()
-        self._timer.wait()
-        return True
-
-    def on_abort(self):
-        self._timer.abort()
-        self._timer.wait()
-        return True
-
-    def on_suspend(self):
-        self._timer.suspend()
-        return True
-
-    def on_resume(self):
-        self._timer.resume()
-        return True
 
     #endregion Service overrides
 
