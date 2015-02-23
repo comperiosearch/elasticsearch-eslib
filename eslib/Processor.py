@@ -661,13 +661,15 @@ class Processor(Configurable):
             self._thread.join()
         self._thread = None
 
-    def restart(self):
+    def restart(self, start=True):
         if self.stopping:
             return
 
         if not self.running:
-            self._start()
+            if start:
+                self._start()
         else:
+            self.log.debug("Restarting processor '%s'." % self.name)
             self.restarting = True  # This will make stopping and staring behave differently
             self._stop()
             self._wait(True)

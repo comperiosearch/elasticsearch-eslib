@@ -82,11 +82,8 @@ class ServiceManager(HttpService, PipelineService):
         self.add_route(self._mgmt_hello             , "GET"     , "/hello"      , None)
         self.add_route(self._mgmt_help              , "GET"     , "/help"       , None)
 
-        # self.add_route("GET"     , "status"    , self._mgmt_status)
-
         self.add_route(self._mgmt_service_register  , "POST|PUT" , "/hello"     , None)
         self.add_route(self._mgmt_service_unregister, "DELETE"   , "/goodbye"   , None)
-
 
         self.add_route(self._mgmt_service_list      , "GET"     , "/list"       , None)
         self.add_route(self._mgmt_service_stats     , "GET"     , "/stats"      , None)
@@ -107,6 +104,20 @@ class ServiceManager(HttpService, PipelineService):
         self.add_route(self._mgmt_service_set_boot  , "POST|PUT", "/set_boot_state"    , None)
         self.add_route(self._mgmt_service_boot      , "POST|PUT", "/boot"              , None)
         self.add_route(self._mgmt_service_reboot    , "POST|PUT", "/reboot"            , None)
+
+        # TODO: GET (all or sections, specific changeset)
+        # TODO: CHANGE (overwrite given sections with given data)
+        # TODO: DELETE (given sections)
+        # TODO: APPEND (add/merge in given data to given sections)
+        # TODO: REMOVE (given data from given sections)
+        self.add_route(self._mgmt_metadata_get      , "GET"     , "/metadata"          , None)
+        self.add_route(self._mgmt_metadata_update   , "PUT"     , "/metadata"          , None)
+        self.add_route(self._mgmt_metadata_alter    , "POST"    , "/metadata"          , None)
+        self.add_route(self._mgmt_metadata_remote   , "DELETE"  , "/metadata"          , None)
+        # TODO: LIST CHANGESETS
+        # TODO: APPLY CHANGESET
+        # TODO: COMMIT AND APPLY LATEST CHANGESET
+        # TODO: DELETE CHANGESET (cannot delete current)
 
     @property
     def _now(self):

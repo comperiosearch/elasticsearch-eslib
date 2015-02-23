@@ -3,6 +3,7 @@ __author__ = 'Hans Terje Bakke'
 import logging
 import time, os, threading
 from ..Configurable import Configurable
+from .. import esdoc
 import psutil
 
 
@@ -47,11 +48,13 @@ class Service(Configurable):
         self._processing_stopping = False
         self._closing             = False
 
-        self._metadata_initialized = False
+        # For debugging
         self._registered_procs = []
 
-        # Overriding classes should set this to True if the service needs metadata
-        self.requires_metadata = False  # TODO: NOW OBSOLETE??
+        # Metadata management
+        self.metadata_version        = None
+        self.metadata                = {}
+        self._metadata_initialized   = False
 
         # Initialize statistics counters
         self.stat_processing_started = 0
@@ -128,7 +131,7 @@ class Service(Configurable):
             return status.SUSPENDED
         if self.processing:
             return status.PROCESSING
-        if self.requires_metadata and not self._metadata_initialized:
+        if self.metadata_keys and not self._metadata_initialized:
             return status.PENDING
         return status.IDLE
 
@@ -332,6 +335,17 @@ class Service(Configurable):
                 raise ServiceOperationError("Service is already processing.")
             else:
                 return False  # Not started; was already running
+        return self._processing_start(raise_on_error)
+
+    def _processing_start(self, raise_on_error):
+        if self.status == status.PENDING:
+            msg = "Cannot start processing until metadata is set."
+            self.log.warning(msg)
+            if raise_on_error:
+                raise ServiceOperationError(msg)
+            else:
+                return False  # Not started; was already running
+
         self.log.info("Starting processing.")
         ok = self.on_processing_start()
         if ok:
@@ -350,7 +364,6 @@ class Service(Configurable):
     def processing_restart(self, wait=False, raise_on_error=False):
         # NOTE: 'wait' is currently not used
 
-        ok = False
         if self.processing:
             # RESTART
 
@@ -364,16 +377,7 @@ class Service(Configurable):
             return ok
         else:
             # START
-
-            self.log.info("Starting processing.")
-            ok = self.on_processing_start()
-            if ok:
-                self._processing = True
-                self._processing_aborted = False
-                self.log.status("Processing started.")
-            elif raise_on_error:
-                raise ServiceOperationError("Processing failed to start.")
-        return ok
+            return self._processing_start(raise_on_error)
 
     def processing_stop(self, wait=False, raise_on_error=False):
         if not self.processing:
@@ -479,9 +483,28 @@ class Service(Configurable):
             time.sleep(0.1)
         return True
 
-    def update_metadata(self, metadata):
-        # TODO
-        return self.on_update_metadata(metadata)
+    def update_metadata(self, version, metadata, wait=False):
+        if wait:
+            return self._update_metadata(version, metadata)
+        else:
+            thread = threading.Thread(target=self._update_metadata, args=(version, metadata))
+            thread.daemon = False  # Program shall not exit while this thread is running
+            thread.start()
+            # no waiting
+            return True  # It is processing the after-effects of a updated metadata
+
+    def _update_metadata(self, version, metadata):
+        ok = False
+        try:
+            ok = self.on_metadata(metadata)
+        except Exception as e:
+            self.log.exception("Unhandled exception while updating metadata.")
+            return False
+            # Note that we may now be in a half-state where only some of the new data has been applied.
+        self.metadata_version = version
+        self.metadata = metadata
+        self._metadata_initialized = True
+        return ok
 
     #endregion Processing management commands
 
@@ -550,7 +573,7 @@ class Service(Configurable):
         return True
     def on_processing_resume(self):
         return True
-    def on_update_metadata(self, metadata):
+    def on_metadata(self, metadata):
         return True  # No update is an ok update
 
     #endregion Processing management methods for override
@@ -659,3 +682,25 @@ class Service(Configurable):
                     self.stat_eta = max(0.0, (self.stat_count_total - self.stat_count) / speed)
 
         self._last_stat_tick = now
+
+    #region Metadata helpers
+
+    @staticmethod
+    def get_meta_section(metadata, path):
+        return esdoc.getfield(metadata, path)
+
+    @staticmethod
+    def get_meta_array(metadata, path, subpath, flatten=False):
+        items = []
+        section = esdoc.getfield(metadata, path, [])
+        if section:
+            for part in section:
+                subpart = esdoc.getfield(part, subpath, [])
+                if subpart:
+                    if flatten:  # Expect an array to be joined
+                        items.extend(subpart)
+                    else:
+                        items.append(subpart)
+        return items
+
+    #endregion Metadata helpers
