@@ -154,7 +154,14 @@ class HttpService(Service):
                 self.log.error("Communication with manager failed for 'hello' message: %s" % e)
                 return False
             data["port"] = content["port"]
-            self._metadata = content["metadata"]
+            # Apply metadata from response
+            metablock = content.get("metadata")
+            if metablock:
+                try:
+                    self.update_metadata(metablock.get("version"), metablock.get("data"), wait=True)
+                except Exception as e:
+                    self.log.exception("Error parsing metadata. But proceeding...")
+                    # Not returning false here, but letting it start with metadata still pending.
         else:
             self.log.info("No manager endpoint specified. Running stand-alone.")
             if not data["port"]:

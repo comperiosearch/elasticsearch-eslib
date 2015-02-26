@@ -1,0 +1,329 @@
+#!/usr/bin/env python
+
+import json, yaml, requests, math
+import eslib.debug
+from eslib.service.ServiceManager import Metadata
+
+
+def dump_formatted(format, data):
+    if format == "yaml":
+        yaml.safe_dump(data, sys.stdout, default_flow_style=False)
+    elif format == "json":
+        json.dump(data, sys.stdout)
+    else:
+        print >>sys.stderr, "Unrecognized output format '%s'." % format
+
+def remote(host, verb, path, data):
+    res = requests.request(
+        verb.lower(),
+        "http://%s/%s" % (host, path),
+        data=json.dumps(data),
+        headers={"content-type": "application/json"},
+        timeout=(3.5, 60)
+    )
+    if res.content:
+        return json.loads(res.content)
+    else:
+        return None
+
+#region Metadata management commands
+
+#region Value formatters
+
+def _hm_str(value):
+    if value is None: return ""
+    minutes = int(math.ceil(value / 60))  # rounding minutes up
+    hm = "%d:%02d" % (minutes / 60, minutes % 60)
+    return hm
+
+def _hms_str(value):
+    if value is None: return ""
+    seconds = int(value) % 60
+    minutes = int(value) / 60
+    hms = "%d:%02d:%02d" % (minutes / 60, minutes % 60, seconds)
+    return hms
+
+def _pct_str(value):
+    if value is None: return ""
+    return "%0.1f%%" % value
+
+def _byte_str(value):
+    if value is None: return ""
+    return eslib.debug.byte_size_string(value, 1)
+
+#endregion Value formatters
+
+def _get_data(format, data):
+    # Don't bother with exception handling; just let it fail...
+
+    raw_data = None
+    if data:
+        if data[0] == "@":
+            filename = data[1:]
+            with open(filename, "r") as file:
+                raw_data = file.read()
+        else:
+            raw_data = data
+    else:
+        raw_data = sys.stdin.read()
+
+    if format == "yaml":
+        return yaml.load(raw_data)
+    return json.loads(raw_data)
+
+# list [options] [--verbose]
+def cmd_list(host, format, rich):
+    res = remote(host, "get", "meta/list")
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error listing metadata versions: %s" % (error)
+
+    versions = (res.get("versions") or []).sort(key=lambda x: x["version"])
+
+    hfmt = "%7s %-8s %-20s %s"
+    ifmt = "%7s %-8s %-20s %s"
+
+    header1 = hfmt % ("VERSION", "STATUS", "UPDATED", "DESCRIPTION")
+    d = "-"
+    header2 = hfmt % (d*7, d*8, d*20, d*40)
+
+    print header1
+    print header2
+
+    for v in versions:
+        desc = v["description"] or ""
+        if not rich:
+            if len(desc) <= 40:
+                desc = desc[:38] + ".."
+        print ifmt % (v["version"], v["status"], v["updated"], desc)
+
+# commit [options]
+def cmd_commit(host, format):
+    res = remote(host, "post", "meta/commit")
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error committing. %s: %s" % error
+    message = res.get("message")
+    if message:
+        print message
+
+# rollback [options] <version>
+def cmd_rollback(host, format, version):
+    res = remote(host, "post", "meta/rollback/%s" % version)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error rolling back metadata to version '%s': %s" % (version, error)
+    message = res.get("message")
+    if message:
+        print message
+
+# drop [options] <version>
+def cmd_drop(host, format, version):
+    res = remote(host, "delete", "meta/%s" % version)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Error deleting metadata version '%s': %s" % (version, error)
+    message = res.get("message")
+    if message:
+        print message
+
+# import [options] DATA
+def cmd_import(host, format, data):
+    payload = _get_data(format, data)
+    res = remote(host, "post", "meta", payload)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Import failed on server: %s" % error
+    message = res.get("message")
+    if message:
+        print message
+
+
+# get [options] [<version> | active | edit]   (defaults to 'edit')
+def cmd_get(host, format, version):
+    # NOTE:
+    # The returned message does not only include the metadata, but also metadata about the metadata, such as 'status' and 'updated' time.
+    # But we only print the pure metadata.
+
+    if not version:
+        version = Metadata.EDIT
+    res = remote(host, "get", "meta/" + version)
+    if format: return dump_formatted(format, res)
+    error = res.get("error")
+    if error:
+        print >>sys.stderr, "Failed to get metadata for version '%s': %s" % (version, error)
+    content = res.get("data")
+    if content is None:
+        print >>sys.stderr, "Content missing: %s" % error
+    else:
+        print content
+
+# add [options] [DATA]
+def cmd_add(host, format, data):
+    print "NOT IMPLEMENTED"
+
+# remove [options] [DATA]
+def cmd_remove(host, format, data):
+    print "NOT IMPLEMENTED"
+
+# update [options] [DATA]
+def cmd_update(host, format, data):
+    print "NOT IMPLEMENTED"
+
+# delete [options] <sections...>
+def cmd_delete(host, format, sections):
+    print "NOT IMPLEMENTED"
+
+#endregion Metadata management commands
+
+
+import argparse, sys, os
+
+def main():
+    usage = \
+"""
+Usage:
+  %(prog)s list     [options] [--verbose]
+  %(prog)s commit   [options]
+  %(prog)s rollback [options] <version>
+  %(prog)s drop     [options] <version>
+  %(prog)s import   [options] DATA
+
+  %(prog)s get      [options] [<version> | active | edit]   (defaults to 'edit')
+  %(prog)s add      [options] [DATA]
+  %(prog)s remove   [options] [DATA]
+  %(prog)s update   [options] [DATA]
+  %(prog)s delete   [options] <sections...>
+
+Common options:
+  --host=<host>
+  --json
+  --yaml
+
+DATA is a JSON (or YAML if --yaml) structure. It can be taken from stdin, as a direct
+data string from the command line, or from a file addressed with a '@' prefix to the
+DATA to the argument. Missing argument expects input from stdin.
+
+The following commands affect data in the current edit set:
+
+'delete' takes a list of sections to delete from the metadata (with dot notation allowed).
+'update' replaces all specified sections in the metadata.
+'add' merges data at the lowest level.
+'remove' removes data at the lowest level.
+'import' replaces the current edit set.
+"""
+
+    # Set up parser
+
+    parser_desc = "Metadata management client for document processing services."
+    parser = argparse.ArgumentParser(description=parser_desc)
+    parser._actions[0].help = argparse.SUPPRESS
+    subparsers = parser.add_subparsers(
+        title = "subcommands",
+        #description = "valid subcommands",
+        help = "additional help",
+        dest = "command")  # Name of variable to host which command was specified
+
+    parser_common = argparse.ArgumentParser(add_help=False)
+    parser_common.add_argument("--host", type=str, required=False)
+    parser_common.add_argument("--yaml", action="store_true")
+    parser_common.add_argument("--json", action="store_true")
+
+    # nargs="?" => 0 or 1 (NOT A LIST; either value or None... this is the weird shit)
+    # nargs="*" => 0 or more (list)
+    # nargs="+" => 1 or more (list)
+    # nargs="2" => 2 (list)
+    # nargs="1" => 1 (list)
+
+    # list [options] [--verbose]
+    desc = "List services."
+    parser_list = subparsers.add_parser("list", description=desc, parents=[parser_common])
+    parser_list._actions[0].help = argparse.SUPPRESS
+    parser_list.add_argument("-v", "--verbose", "--rich", dest="rich", action="store_true")
+    # commit [options]
+    desc = "Commit edit set to make it the active metadata set."
+    parser_commit = subparsers.add_parser("commit", description=desc, parents=[parser_common])
+    parser_commit._actions[0].help = argparse.SUPPRESS
+    # rollback [options] <version>
+    desc = "Activate a previous metadata version."
+    parser_rollback = subparsers.add_parser("rollback", description=desc, parents=[parser_common])
+    parser_rollback._actions[0].help = argparse.SUPPRESS
+    parser_rollback.add_argument("version", type=str, nargs=1)
+    # drop [options] <version>
+    desc = "Delete a metadata version. Cannot delete currently active or edit set."
+    parser_drop = subparsers.add_parser("drop", description=desc, parents=[parser_common])
+    parser_drop._actions[0].help = argparse.SUPPRESS
+    parser_drop.add_argument("version", type=str, nargs="+")
+
+    # import [options] DATA
+    desc = "Upload data from string, file or stdin."
+    parser_import = subparsers.add_parser("import", description=desc, parents=[parser_common])
+    parser_import._actions[0].help = argparse.SUPPRESS
+    parser_import.add_argument("data", type=str, nargs="?")
+    # get [options] [<version> | active | edit]   (defaults to 'edit')
+    desc = "Get (download) specified metadata set. Output on stdout. Version arguments are version number, 'active', or 'edit'. Defaults to 'edit'."
+    parser_get = subparsers.add_parser("get", description=desc, parents=[parser_common])
+    parser_get._actions[0].help = argparse.SUPPRESS
+    parser_get.add_argument("version", type=str, nargs="?")
+    # add [options] [DATA]
+    desc = "Add (merge in) specified data to the metadata."
+    parser_add = subparsers.add_parser("add", description=desc, parents=[parser_common])
+    parser_add._actions[0].help = argparse.SUPPRESS
+    parser_add.add_argument("data", type=str, nargs="?")
+    # remove [options] [DATA]
+    desc = "Remove specified data from the metadata."
+    parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
+    parser_remove._actions[0].help = argparse.SUPPRESS
+    parser_remove.add_argument("data", type=str, nargs="?")
+    # update [options] [DATA]
+    desc = "Replace specified sections of the metadata, entirely."
+    parser_update = subparsers.add_parser("update", description=desc, parents=[parser_common])
+    parser_update._actions[0].help = argparse.SUPPRESS
+    parser_update.add_argument("data", type=str, nargs="?")
+    # delete [options] <sections...>
+    desc = "Delete sections (addressed in dot notation) of the metadata."
+    parser_delete = subparsers.add_parser("delete", description=desc, parents=[parser_common])
+    parser_delete._actions[0].help = argparse.SUPPRESS
+    parser_delete.add_argument("sections", type=str, nargs="+")
+
+    # Parse
+
+    if len(sys.argv) == 1:
+        print usage.strip() % {
+            "prog": parser.prog,
+            "boot_states" :  ", ".join([("'%s'" % b) for b in BOOT_STATES])
+        }
+        sys.exit(1)
+
+    args = parser.parse_args()
+
+    # Prepare common vars from parsing
+
+    format = None
+    if args.yaml:
+        format = "yaml"
+    elif args.json:
+        format = "json"
+    host = args.host or os.environ.get("ESLIB_SERVICE_MANAGER") or "localhost:5000"
+
+    # Call commands according to parsed verbs
+
+    if   args.command == "list"      : cmd_list    (host, format, args.rich)
+    elif args.command == "commit"    : cmd_commit  (host, format)
+    elif args.command == "rollback"  : cmd_rollback(host, format, args.version[0])
+    elif args.command == "drop"      : cmd_drop    (host, format, args.version[0])
+    elif args.command == "import"    : cmd_import  (host, format, args.data)
+    elif args.command == "get"       : cmd_get     (host, format, args.version)
+    elif args.command == "add"       : cmd_add     (host, format, args.data)
+    elif args.command == "remove"    : cmd_remove  (host, format, args.data)
+    elif args.command == "update"    : cmd_update  (host, format, args.data)
+    elif args.command == "delete"    : cmd_delete  (host, format, args.sections)
+
+
+if __name__ == '__main__':
+    main()

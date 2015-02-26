@@ -29,7 +29,7 @@ def remote(host, verb, path, data):
     else:
         return None
 
-#region Template management commands
+#region Service management commands
 
 # list [options] [--verbose] [<name_pattern>]
 def cmd_list(host, format, name_patterns, rich):
@@ -429,7 +429,7 @@ def cmd_set_boot(host, format, boot_state, names, all):
     if error:
         print >>sys.stderr, "Error setting boot state for service(s) %s: %s" % (names, error)
 
-#endregion Template management commands
+#endregion Service management commands
 
 
 import argparse, sys, os

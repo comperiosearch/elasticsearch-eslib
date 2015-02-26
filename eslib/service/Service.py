@@ -85,7 +85,7 @@ class Service(Configurable):
         # self._stat_thread = threading.Thread(target=self._stat_thread_run, name="stat")
         # self._stat_thread.daemon = True
         # self._stat_thread.start()
-        #
+
     def __del__(self):
         # if self.stat_thread:
         #     self.log.debug("Stopping stat thread.")
