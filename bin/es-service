@@ -2,6 +2,7 @@
 
 import json, yaml, requests, math
 import eslib.debug
+from eslib.esdoc import tojson
 from eslib.service import status
 
 
@@ -16,11 +17,12 @@ def dump_formatted(format, data):
     else:
         print >>sys.stderr, "Unrecognized output format '%s'." % format
 
-def remote(host, verb, path, data):
+def remote(host, verb, path, data=None, params=None):
     res = requests.request(
         verb.lower(),
         "http://%s/%s" % (host, path),
-        data=json.dumps(data),
+        data=tojson(data) if data else None,
+        params=params,
         headers={"content-type": "application/json"},
         timeout=(3.5, 60)
     )
@@ -42,6 +44,7 @@ def cmd_list(host, format, name_patterns, rich):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error listing services: %s" % (error)
+        sys.exit(1)
 
     hfmt = "%-20s %-10s %6s %-20s %9s %9s"
     ifmt = "%-20s %-10s %6s %-20s %9s %9s"
@@ -168,7 +171,7 @@ def cmd_stats(host, format, name, stat_fields):
         error = res[name].get("error")
     if error:
         print >>sys.stderr, "Error getting stats for service '%s': %s" % (name, error)
-        return
+        sys.exit(1)
 
     indent = "    " if not stat_fields else ""
 
@@ -227,6 +230,7 @@ def cmd_add(host, format, name, boot_state, config_tag, server_address, auto_sta
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error adding service '%s': %s" % (name, error)
+        sys.exit(1)
 
 # remove [options] [--all] [--stop] <name>
 def cmd_remove(host, format, names, all, auto_stop):
@@ -295,6 +299,7 @@ def cmd_kill(host, format, names, all, force):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error killing processes for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # reload [options] [-all] <names...>
 def cmd_reload(host, format, names, all):
@@ -311,6 +316,7 @@ def cmd_reload(host, format, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error reloading service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # start [options] [--all] <names...>
 def cmd_start(host, format, names, all):
@@ -327,6 +333,7 @@ def cmd_start(host, format, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error starting processing for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # stop [options] [--all] [--wait] <names...>
 def cmd_stop(host, format, names, all, wait):
@@ -344,6 +351,7 @@ def cmd_stop(host, format, names, all, wait):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # abort [options] [--all] <names...>
 def cmd_abort(host, format, names, all):
@@ -360,6 +368,7 @@ def cmd_abort(host, format, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error stopping processing for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # suspend [options] [--all] <names...>
 def cmd_suspend(host, format, names, all):
@@ -376,6 +385,7 @@ def cmd_suspend(host, format, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error suspending processing for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # resume [options] [--all] <names...>
 def cmd_resume(host, format, names, all):
@@ -392,6 +402,7 @@ def cmd_resume(host, format, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error resuming processing for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 # boot [options] [--all] <names...>
 def cmd_boot(host, format, names, all):
@@ -428,6 +439,7 @@ def cmd_set_boot(host, format, boot_state, names, all):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error setting boot state for service(s) %s: %s" % (names, error)
+        sys.exit(1)
 
 #endregion Service management commands
 
@@ -523,6 +535,7 @@ Boot states are one of %(boot_states)s.
     parser_remove = subparsers.add_parser("remove", description=desc, parents=[parser_common])
     parser_remove._actions[0].help = argparse.SUPPRESS
     parser_remove.add_argument("names", type=str, nargs="+")
+    parser_remove.add_argument("--all", action="store_true")
     parser_remove.add_argument("--stop", dest="auto_stop", action="store_true")
 
     # run [options] [--all] [--start] <names...>

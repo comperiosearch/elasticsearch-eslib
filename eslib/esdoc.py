@@ -31,8 +31,10 @@ def tojson(doc):
 
 def getfield(doc, fieldpath, default=None):
     "Get value for 'fieldpath' if it exits, otherwise return the default."
-    if not doc or not fieldpath:
+    if doc is None or fieldpath is None:
         return default
+    if fieldpath == "":
+        return doc
     fp = fieldpath.split(".")
     d = doc
     for f in fp[:-1]:
@@ -46,7 +48,8 @@ def getfield(doc, fieldpath, default=None):
 
 def putfield(doc, fieldpath, value):
     "Add or update 'fieldpath' with 'value'."
-    if not doc or not fieldpath: return
+    if doc is None or fieldpath is None:
+        return
     fp = fieldpath.split(".")
     d = doc
     for i, f in enumerate(fp[:-1]):

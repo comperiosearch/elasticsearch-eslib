@@ -3,6 +3,7 @@ __author__ = 'Hans Terje Bakke'
 from .Service import Service
 from .UrlParamParser import UrlParamParser
 from ..procs.HttpMonitor import HttpMonitor
+from ..esdoc import tojson
 import json, requests
 
 
@@ -116,7 +117,7 @@ class HttpService(Service):
         res = requests.request(
             verb.lower(),
             "http://%s/%s" % (host, path),
-            data=json.dumps(data) if data else None,
+            data=tojson(data) if data else None,
             headers={"content-type": "application/json"},
             timeout=self.config.connection_timeout  # either float or tuple of (connect, read) timeouts
             #, auth=('user', '*****')
@@ -175,7 +176,7 @@ class HttpService(Service):
         try:
             self._receiver.start()
         except Exception as e:
-            self.log.critical("Service managemnet listener failed to start.")
+            self.log.critical("Service management listener failed to start.")
             return False  # Not started; failed
 
         return True

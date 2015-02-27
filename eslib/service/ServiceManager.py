@@ -87,7 +87,7 @@ class ServiceManager(HttpService, PipelineService):
         self._es_index = None
 
         self._services = {}
-        self._metadata_versions = None
+        self._metadata_versions = {}
         self._metadata_use      = None
         self._metadata_edit     = None
         self._metadata_next_version = 0
@@ -138,9 +138,9 @@ class ServiceManager(HttpService, PipelineService):
 
         self.add_route(self._mgmt_metadata_list     , "GET"     , "/meta/list"         , None)
         self.add_route(self._mgmt_metadata_commit   , "PUT|POST", "/meta/commit"       , None)
-        self.add_route(self._mgmt_metadata_rollback , "PUT|POST", "/meta/rollback/{int:version}", None)
-        self.add_route(self._mgmt_metadata_drop     , "DELETE"  , "/meta/{int:version}", None)
-        self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta"              , None)
+        self.add_route(self._mgmt_metadata_rollback , "PUT|POST", "/meta/rollback/{version:int}", None)
+        self.add_route(self._mgmt_metadata_drop     , "DELETE"  , "/meta/{version:int}", None)
+        self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta"              , ["?commit:bool"])
         self.add_route(self._mgmt_metadata_get      , "GET"     , "/meta/{?version}"   , None)
 
         self.add_route(self._mgmt_metadata_add      , "POST"    , "/meta/add"          , None)
@@ -188,15 +188,15 @@ class ServiceManager(HttpService, PipelineService):
         return True
 
     def _get_metadata_for_service(self, metaitem, service):
+        # Note: expects metaitem to be constant during this operation
+
         meta = Metadata()
         meta.version = metaitem.version
         meta.updated = metaitem.updated
         # irrelevant: meta.status, meta.description
-        data = {}
         for path in service.metadata_keys:
             value = esdoc.getfield(metaitem.data, path)
-            esdoc.putfield(data, path, value)
-        meta.data = data
+            esdoc.putfield(meta.data, path, value)
         return meta
 
     def _ping(self, doc):
@@ -216,7 +216,7 @@ class ServiceManager(HttpService, PipelineService):
 
             # TODO: Create a diff to see which sections are monified...
 
-            for service in self._services[:]:
+            for service in list(self._services.values()):
                 # TODO: Ask each service for latest status instead?
                 if service.status != status.DEAD and service.metadata_keys:
                     # TODO: In this naiive implementation we do not know if there is an actual need to send a metadata update, so we send every time:
@@ -224,12 +224,17 @@ class ServiceManager(HttpService, PipelineService):
                     service.metadata_pending = meta
 
         # TODO: This could rather spawn a thread for each service and operate in parallell, but for now we loop through them:
-        for service in self._services[:]:
+        for service in list(self._services.values()):
             if service.metadata_pending:
                 meta = service.metadata_pending
                 service.metadata_pending = None
+                error = None
                 try:
-                    #TODO: PAYLOAD
+                    payload = {
+                        "version": meta.version,
+                        "updated": meta.updated,
+                        "data": meta.data
+                    }
                     content = self.remote(service.addr, "post", "metadata", payload)
                 except Exception as e:
                     error = str(e)
@@ -307,6 +312,7 @@ class ServiceManager(HttpService, PipelineService):
             ic = IndicesClient(self._es)
             ic.refresh(index=self._es_index)
             res = self._es.delete(index=self._es_index, doc_type="service", id=id)
+            return True
         except Exception as e:
             self.log.error("Failed to delete registered service '%s' from index. %s: %s" % (id, e.__class__.__name__, e))
             return False
@@ -339,20 +345,20 @@ class ServiceManager(HttpService, PipelineService):
         use_id = None
         edit_id = None
 
-        meta_versions = []
+        meta_versions = {}
         for doc in docs:
             s = doc["_source"]
             meta = Metadata()
-            meta.id            = doc["_id"]
+            meta.version       = int(doc["_id"])
             meta.status        = s["status"]
-            meta.updated       = s["updated"]
+            meta.updated       = utcdate(s["updated"])
             meta.description   = s["description"]
             if meta.status == Metadata.EDIT:
-                edit_id = meta.id
+                edit_id = meta.version
             elif meta.status == Metadata.ACTIVE:
-                use_id = meta.id
+                use_id = meta.version
             # no meta.data here
-            meta_versions.append(meta)
+            meta_versions[meta.version] = meta
         return (meta_versions, use_id, edit_id)
 
     def _storage_load_meta_item(self, version):
@@ -365,11 +371,12 @@ class ServiceManager(HttpService, PipelineService):
             doc = self._es.get(self._es_index, doc_type="metadata", id=version)
             s = doc["_source"]
             meta = Metadata()
-            meta.id            = doc["_id"]
+            meta.version       = int(doc["_id"])
             meta.status        = s["status"]
-            meta.updated       = s["updated"]
+            meta.updated       = utcdate(s["updated"])
             meta.description   = s["description"]
             meta.data          = s["data"]
+            return meta
         except Exception as e:
             self.log.error("Failed to load specific metadata item %d from index." % version)
             return None
@@ -383,9 +390,9 @@ class ServiceManager(HttpService, PipelineService):
         }
 
         try:
-            self._es.index(self._es_index, doc_type="metadata", id=metaitem.id, body=payload)
+            self._es.index(self._es_index, doc_type="metadata", id=metaitem.version, body=payload)
         except Exception as e:
-            self.log.error("Failed to save metadata item %d to index. %s: %s" % (metaitem.id, e.__class__.__name__, e))
+            self.log.error("Failed to save metadata item %d to index. %s: %s" % (metaitem.version, e.__class__.__name__, e))
             # Report it as operation failed, but it is only persisting that has failed... no big deal.
             return False
 
@@ -394,6 +401,7 @@ class ServiceManager(HttpService, PipelineService):
             ic = IndicesClient(self._es)
             ic.refresh(index=self._es_index)
             res = self._es.delete(index=self._es_index, doc_type="metadata", id=version)
+            return True
         except Exception as e:
             self.log.error("Failed to delete metadata item %d from index. %s: %s" % (version, e.__class__.__name__, e))
             return False
@@ -453,7 +461,7 @@ class ServiceManager(HttpService, PipelineService):
                 id       = content["id"]
                 pid      = content["pid"]
                 status   = content["status"]
-                metakeys = content.get("metakeys")
+                metakeys = content["meta_keys"]
 
                 if not id == service.id:
                     error = "ID mismatch in 'hello' response at '%s'. Expected '%s', got '%s'." % (addr, service.id, id)
@@ -545,7 +553,7 @@ class ServiceManager(HttpService, PipelineService):
 
     #region Helper methods :: metadata
 
-    def _load_or_create_meta_item(self, version, status):
+    def _load_or_create_meta_item(self, version, status, data=None):
         meta = None
         if version is None:
             meta = Metadata()
@@ -553,26 +561,28 @@ class ServiceManager(HttpService, PipelineService):
             self._metadata_next_version += 1
             meta.updated = self._now
             meta.status = status
-            self.log.debug("Creating new metadata item, '%s'." % meta.status)
-            self._metadata_versions.append(meta)
+            if data:
+                meta.data = data
+            self.log.debug("Creating new metadata item; version=%d, status='%s'." % (meta.version, meta.status))
+            self._metadata_versions[meta.version] = meta
             self._storage_save_meta_item(meta)
         else:
             meta = self._storage_load_meta_item(version)
-        self._metadata_use = meta
+            self._metadata_versions[meta.version] = meta
         return meta
 
     def _load_metadata(self):
         self._metadata_versions, use_id, edit_id = self._storage_load_meta_list()
 
-        self._metadata_next_version = edit_id +1 if edit_id else 0
+        self._metadata_next_version = (edit_id +1 if edit_id else 0)
 
         # Load or create active item and edit item
         self._metadata_use  = self._load_or_create_meta_item(use_id, Metadata.ACTIVE)
-        self._metadata_edit = self._load_or_create_meta_item(use_id, Metadata.EDIT)
+        self._metadata_edit = self._load_or_create_meta_item(edit_id, Metadata.EDIT)
 
         self.log.info("Metadata loaded.")
 
-    def _commit_metadata_edit_set(self):
+    def _commit_metadata_edit_set(self, description=None):
 
         self.log.debug("Committing metadata edit set.")
 
@@ -582,8 +592,9 @@ class ServiceManager(HttpService, PipelineService):
             old_active = self._metadata_use
 
             # Create a new edit set
-            self._metadata_edit = self._load_or_create_meta_item(None, Metadata.EDIT)  # This will create and save
+            self._metadata_edit = self._load_or_create_meta_item(None, Metadata.EDIT, deepcopy(old_edit.data))  # This will create and save
             # Make old edit set active
+            old_edit.description = description or ""
             old_edit.status = Metadata.ACTIVE
             old_edit.updated = self._now
             self._metadata_use = old_edit
@@ -591,9 +602,10 @@ class ServiceManager(HttpService, PipelineService):
             # Make old active set historic
             old_active.status = Metadata.HISTORIC
             old_active.updated = self._now
-            old_active_clone = old_active.status.clone()
-            old_active.data = {}  # No longer needed
+            old_active_clone = old_active.clone()
             self._storage_save_meta_item(old_active)
+            # The old data is not needed in the versions cache one we have saved it:
+            old_active.data = {}
 
             self._metadata_pending = (old_active_clone, self._metadata_use.clone())
 
@@ -608,13 +620,13 @@ class ServiceManager(HttpService, PipelineService):
 
             # Load old version
             loaded = None
-            for i, item in self._metadata_versions:
+            for item in self._metadata_versions.values():
                 if item.version == version:
                     if item.status != Metadata.HISTORIC:
                         self.log.error("Tried to rollback metadata to non-historic version %d; status='%s'." % (item.version, item.status))
                         return False
                     loaded =  self._storage_load_meta_item(item.version)
-                    self._metadata_version[i] = loaded
+                    self._metadata_versions[item.version] = loaded
                     break
 
             if not loaded:
@@ -631,9 +643,10 @@ class ServiceManager(HttpService, PipelineService):
             # Make old active set historic
             old_active.status = Metadata.HISTORIC
             old_active.updated = self._now
-            old_active_clone = old_active.status.clone()
-            old_active.data = {}  # No longer needed
+            old_active_clone = old_active.clone()
             self._storage_save_meta_item(old_active)
+            # The old data is not needed in the versions cache one we have saved it:
+            old_active.data = {}
 
             self._metadata_pending = (old_active_clone, self._metadata_use.clone())
 
@@ -650,7 +663,7 @@ class ServiceManager(HttpService, PipelineService):
 
             # Find old version
             found = None
-            for i, item in self._metadata_versions:
+            for item in self._metadata_versions.values():
                 if item.version == version:
                     if item.status != Metadata.HISTORIC:
                         self.log.error("Tried to delete a non-historic version of metadata; version=%d, status='%s'." % (item.version, item.status))
@@ -662,20 +675,25 @@ class ServiceManager(HttpService, PipelineService):
                 self.log.error("Failed to delete metadata version %d; version not found." % version)
                 return False
 
-            deleted = self._storage_delete_meta_item(version)
+            deleted = self._storage_delete_meta_item(found.version)
             if deleted:
-                self._metadata_versions.remove(found)
-                self.log.info("Historic metadata version %d deleted." % version)
+                del self._metadata_versions[found.version]
+                self.log.info("Historic metadata version %d deleted." % found.version)
             return deleted
 
         return True
 
-    def _import_metadata(self, data):
+    def _import_metadata(self, data, commit):
         # expects data to be valid dict
 
         with self._metadata_lock:
             self._metadata_edit.data = data
+            self._metadata_edit.updated = self._now
+            if not commit:  # Will otherwise be saved during the commit
+                self._storage_save_meta_item(self._metadata_edit)
         self.log.info("New metadata imported to edit set.")
+        if commit:
+            self._commit_metadata_edit_set()
 
     #endregion Helper methods :: metadata
 
@@ -1045,7 +1063,8 @@ class ServiceManager(HttpService, PipelineService):
         if not id in self._services:
             self.log.debug("Hello from unknown service '%s'; treating it as a guest." % id)
             guest = True
-            self._add_service(guest, id, host, port, None, False, save=False)
+            self._add_service(guest, id, host, port, None, None, False, save=False)
+
         service = self._services[id]
         service.config_key    = config_key
         service.type          = service_type
@@ -1056,12 +1075,19 @@ class ServiceManager(HttpService, PipelineService):
         service.last_seen     = self._now
         service.error         = None
         service.fail_count    = 0
+        service.metadata_pending = None
         self._storage_save_service(service)
 
-        # TODO: We might want to return some more stuff here...(?)
+        meta = self._get_metadata_for_service(self._metadata_use.clone(), service)
+        meta_payload = {
+            "version": meta.version,
+            "updated": meta.updated,
+            "data": meta.data
+        }
+
         ret = {
             "port": service.port,
-            "metadata": self._get_metadata_for_service(metadata, service)
+            "metadata": meta_payload
         }
         if guest:
             ret["message"] = "Service '%s' registered as guest." % id
@@ -1438,9 +1464,9 @@ class ServiceManager(HttpService, PipelineService):
         self.log.debug("called: list metadata versions")
 
         retlist = []
-        for v in self._metadata_versions[:]:
+        for v in list(self._metadata_versions.values()):
             retlist.append({
-                "versions"   : v.version,
+                "version"    : v.version,
                 "status"     : v.status,
                 "updated"    : v.updated,
                 "description": v.description
@@ -1450,7 +1476,7 @@ class ServiceManager(HttpService, PipelineService):
     def _mgmt_metadata_commit(self, request_handler, payload, **kwargs):
         self.log.debug("called: commit metadata")
 
-        self._commit_metadata_edit_set()
+        self._commit_metadata_edit_set(payload.get("description"))
         return {"message": "Metadata edit set version %d committed to active." % self._metadata_use.version}
 
     def _mgmt_metadata_rollback(self, request_handler, payload, **kwargs):
@@ -1469,18 +1495,21 @@ class ServiceManager(HttpService, PipelineService):
         version = kwargs["version"]  # Should be an int when it gets here
 
         if self._delete_metadata_version(version):
-            return {"message": "Metadata version %d deleted." % self._metadata_use.version}
+            return {"message": "Metadata version %d deleted." % version}
         else:
             return {"error": "Failed to delete metadata version %d." % version}
 
     def _mgmt_metadata_import(self, request_handler, payload, **kwargs):
         self.log.debug("called: import metadata")
 
+        commit = kwargs.get("commit") or False
+
         if not type(payload) is dict:
             return {"error": "Payload is not a valid dict."}
 
-        self._import_metadata(payload)
-        return {"message": "New metadata imported to current edit set, %d." % self._metadata_edit.version}
+        self._import_metadata(payload, commit)
+        extra_str = " and committed" if commit else ""
+        return {"message": "New metadata imported to current edit set%s." % extra_str}
 
     def _mgmt_metadata_get(self, request_handler, payload, **kwargs):
         self.log.debug("called: get metadata")
@@ -1503,12 +1532,12 @@ class ServiceManager(HttpService, PipelineService):
             elif version == Metadata.ACTIVE:
                 metaitem = self._metadata_use
             else:
-                for item in self._metadata_versions[:]:
+                for item in self._metadata_versions.values():
                     if item.version == version:
                         metaitem = self._storage_load_meta_item(version)
                         break
             if not metaitem:
-                return {"error": "Failed to get metadata version %d." % version}
+                return {"error": "Failed to get metadata version %s." % version}
 
             # The data could possibly be modified between this method returns and the lock
             # is released, and the data is json serialized in the http service layer.
@@ -1548,17 +1577,3 @@ class ServiceManager(HttpService, PipelineService):
         stats["available_ports"] = available_ports
 
     #endregion Service overrides
-
-    #
-    # # TODO: OLD STUFF
-    # def _mgmt_push(self, payload, *args, **kwargs):
-    #     print "Pushing configs"
-    #     for remote_id, value in self._registered_services.iteritems():
-    #         remote_endpoint, remote_config_keys = value
-    #         print "Pushing config to '%s' at '%s'" % (remote_id, remote_endpoint)
-    #         # Push config to remote host
-    #         req = json.dumps(self._config) #payload)
-    #         res = requests.post("http://%s/update" % remote_endpoint, req) #, auth=('user', '*****'))
-    #
-    #     return {"message": "Config pushed."}
-

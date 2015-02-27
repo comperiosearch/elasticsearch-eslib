@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import json, yaml, requests, math
-import eslib.debug
+import json, yaml, requests
+from eslib.esdoc import tojson
 from eslib.service.ServiceManager import Metadata
 
 
@@ -13,11 +13,12 @@ def dump_formatted(format, data):
     else:
         print >>sys.stderr, "Unrecognized output format '%s'." % format
 
-def remote(host, verb, path, data):
+def remote(host, verb, path, data=None, params=None):
     res = requests.request(
         verb.lower(),
         "http://%s/%s" % (host, path),
-        data=json.dumps(data),
+        data=tojson(data) if data else None,
+        params=params,
         headers={"content-type": "application/json"},
         timeout=(3.5, 60)
     )
@@ -28,31 +29,6 @@ def remote(host, verb, path, data):
 
 #region Metadata management commands
 
-#region Value formatters
-
-def _hm_str(value):
-    if value is None: return ""
-    minutes = int(math.ceil(value / 60))  # rounding minutes up
-    hm = "%d:%02d" % (minutes / 60, minutes % 60)
-    return hm
-
-def _hms_str(value):
-    if value is None: return ""
-    seconds = int(value) % 60
-    minutes = int(value) / 60
-    hms = "%d:%02d:%02d" % (minutes / 60, minutes % 60, seconds)
-    return hms
-
-def _pct_str(value):
-    if value is None: return ""
-    return "%0.1f%%" % value
-
-def _byte_str(value):
-    if value is None: return ""
-    return eslib.debug.byte_size_string(value, 1)
-
-#endregion Value formatters
-
 def _get_data(format, data):
     # Don't bother with exception handling; just let it fail...
 
@@ -60,7 +36,7 @@ def _get_data(format, data):
     if data:
         if data[0] == "@":
             filename = data[1:]
-            with open(filename, "r") as file:
+            with open(os.path.expanduser(filename), "r") as file:
                 raw_data = file.read()
         else:
             raw_data = data
@@ -78,8 +54,10 @@ def cmd_list(host, format, rich):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error listing metadata versions: %s" % (error)
+        sys.exit(1)
 
-    versions = (res.get("versions") or []).sort(key=lambda x: x["version"])
+    versions = (res.get("versions") or [])
+    versions.sort(key=lambda x: x["version"])
 
     hfmt = "%7s %-8s %-20s %s"
     ifmt = "%7s %-8s %-20s %s"
@@ -94,17 +72,21 @@ def cmd_list(host, format, rich):
     for v in versions:
         desc = v["description"] or ""
         if not rich:
-            if len(desc) <= 40:
+            if len(desc) >= 40:
                 desc = desc[:38] + ".."
         print ifmt % (v["version"], v["status"], v["updated"], desc)
 
-# commit [options]
-def cmd_commit(host, format):
-    res = remote(host, "post", "meta/commit")
+# commit [options] [<message>]
+def cmd_commit(host, format, message):
+    data = {
+        "description": message
+    }
+    res = remote(host, "post", "meta/commit", data)
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error committing. %s: %s" % error
+        sys.exit(1)
     message = res.get("message")
     if message:
         print message
@@ -116,6 +98,7 @@ def cmd_rollback(host, format, version):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error rolling back metadata to version '%s': %s" % (version, error)
+        sys.exit(1)
     message = res.get("message")
     if message:
         print message
@@ -127,18 +110,21 @@ def cmd_drop(host, format, version):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error deleting metadata version '%s': %s" % (version, error)
+        sys.exit(1)
     message = res.get("message")
     if message:
         print message
 
-# import [options] DATA
-def cmd_import(host, format, data):
+# import [options] [--commit] DATA
+def cmd_import(host, format, data, commit):
     payload = _get_data(format, data)
-    res = remote(host, "post", "meta", payload)
+
+    res = remote(host, "post", "meta", payload, {"commit": commit})
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
         print >>sys.stderr, "Import failed on server: %s" % error
+        sys.exit(1)
     message = res.get("message")
     if message:
         print message
@@ -157,9 +143,10 @@ def cmd_get(host, format, version):
     error = res.get("error")
     if error:
         print >>sys.stderr, "Failed to get metadata for version '%s': %s" % (version, error)
+        sys.exit(1)
     content = res.get("data")
     if content is None:
-        print >>sys.stderr, "Content missing: %s" % error
+        print >>sys.stderr, "Content missing."
     else:
         print content
 
@@ -189,10 +176,10 @@ def main():
 """
 Usage:
   %(prog)s list     [options] [--verbose]
-  %(prog)s commit   [options]
+  %(prog)s commit   [options] [<message>]
   %(prog)s rollback [options] <version>
   %(prog)s drop     [options] <version>
-  %(prog)s import   [options] DATA
+  %(prog)s import   [options] [--commit] [DATA]
 
   %(prog)s get      [options] [<version> | active | edit]   (defaults to 'edit')
   %(prog)s add      [options] [DATA]
@@ -205,17 +192,19 @@ Common options:
   --json
   --yaml
 
-DATA is a JSON (or YAML if --yaml) structure. It can be taken from stdin, as a direct
-data string from the command line, or from a file addressed with a '@' prefix to the
-DATA to the argument. Missing argument expects input from stdin.
+DATA is a JSON (or YAML if --yaml) structure. It can be taken from stdin,
+as a direct data string from the command line, or from a file addressed
+with a '@' prefix to the DATA to the argument. Missing argument expects
+input from stdin.
 
 The following commands affect data in the current edit set:
 
-'delete' takes a list of sections to delete from the metadata (with dot notation allowed).
-'update' replaces all specified sections in the metadata.
-'add' merges data at the lowest level.
-'remove' removes data at the lowest level.
-'import' replaces the current edit set.
+  delete: takes a list of sections to delete from the metadata
+          (with dot notation allowed).
+  update: replaces all specified sections in the metadata.
+  add   : merges data at the lowest level.
+  remove: removes data at the lowest level.
+  import: replaces the current edit set.
 """
 
     # Set up parser
@@ -245,10 +234,11 @@ The following commands affect data in the current edit set:
     parser_list = subparsers.add_parser("list", description=desc, parents=[parser_common])
     parser_list._actions[0].help = argparse.SUPPRESS
     parser_list.add_argument("-v", "--verbose", "--rich", dest="rich", action="store_true")
-    # commit [options]
+    # commit [options] [<message>]
     desc = "Commit edit set to make it the active metadata set."
     parser_commit = subparsers.add_parser("commit", description=desc, parents=[parser_common])
     parser_commit._actions[0].help = argparse.SUPPRESS
+    parser_commit.add_argument("message", type=str, nargs="?")
     # rollback [options] <version>
     desc = "Activate a previous metadata version."
     parser_rollback = subparsers.add_parser("rollback", description=desc, parents=[parser_common])
@@ -260,10 +250,11 @@ The following commands affect data in the current edit set:
     parser_drop._actions[0].help = argparse.SUPPRESS
     parser_drop.add_argument("version", type=str, nargs="+")
 
-    # import [options] DATA
+    # import [options] [--commit] DATA
     desc = "Upload data from string, file or stdin."
     parser_import = subparsers.add_parser("import", description=desc, parents=[parser_common])
     parser_import._actions[0].help = argparse.SUPPRESS
+    parser_import.add_argument("--commit", action="store_true")
     parser_import.add_argument("data", type=str, nargs="?")
     # get [options] [<version> | active | edit]   (defaults to 'edit')
     desc = "Get (download) specified metadata set. Output on stdout. Version arguments are version number, 'active', or 'edit'. Defaults to 'edit'."
@@ -295,9 +286,7 @@ The following commands affect data in the current edit set:
 
     if len(sys.argv) == 1:
         print usage.strip() % {
-            "prog": parser.prog,
-            "boot_states" :  ", ".join([("'%s'" % b) for b in BOOT_STATES])
-        }
+            "prog": parser.prog        }
         sys.exit(1)
 
     args = parser.parse_args()
@@ -314,10 +303,10 @@ The following commands affect data in the current edit set:
     # Call commands according to parsed verbs
 
     if   args.command == "list"      : cmd_list    (host, format, args.rich)
-    elif args.command == "commit"    : cmd_commit  (host, format)
+    elif args.command == "commit"    : cmd_commit  (host, format, args.message)
     elif args.command == "rollback"  : cmd_rollback(host, format, args.version[0])
     elif args.command == "drop"      : cmd_drop    (host, format, args.version[0])
-    elif args.command == "import"    : cmd_import  (host, format, args.data)
+    elif args.command == "import"    : cmd_import  (host, format, args.data, args.commit)
     elif args.command == "get"       : cmd_get     (host, format, args.version)
     elif args.command == "add"       : cmd_add     (host, format, args.data)
     elif args.command == "remove"    : cmd_remove  (host, format, args.data)
