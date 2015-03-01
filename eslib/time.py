@@ -73,7 +73,7 @@ def date_dict(date):
     }
 
 
-_agoRegex = re.compile("^(?P<number>\d)+\s*(?P<unit>\w+)( ago)?$")
+_agoRegex = re.compile("^(?P<number>\d+)\s*(?P<unit>\w+)( ago)?$")
 
 def ago2date(ago, from_date_utc=None):
     """

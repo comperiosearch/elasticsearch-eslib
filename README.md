@@ -502,3 +502,83 @@ p1.attach(middle.attach(p2))
 p1.start()
 p2.wait()
 ```
+
+# TODO: SERVICE DOCUMENTATION
+
+## TODO: The idea
+
+## TODO: Usage
+
+### TODO: Configuration and directory structure
+
+### TODO: Running services
+
+* es-service
+* es-run
+
+## TODO: The manager
+
+* storage
+
+## Metadata
+
+Metadata is the data that the services need for runtime (re)configuration. It is not the static
+service configuration that describes how the service should be set up and ran, but rather the
+data that is expected to change while the services are running. Multiple services will share the
+same metadata.
+
+Metadata exists in committed "change sets". The manager keeps one change set active, and another
+for editing. Once a change set is committed it becomes active, and all dependent services are
+updated with the new set. A new change set then becomes the current one for editing.
+
+It is possible to roll back to a previous change set. It will then become the active set, and all
+dependent services will be updated.
+
+### Subscription and Exchange
+
+Services that subscribe to metadata do so by enlisting the metadata keys as a list of strings with
+dot notation that addresses the metadata sections. These are registered with the manager when the
+service communicates the initial 'hello' message, as 'meta_keys'. The metadata requested is 
+initially returned as part of the 'hello' message response, under 'metadata'. After that it is updated
+by a call from the manager (or other..) via the service's 'metadata' interface.
+
+Example subscription registration in 'hello' message:
+
+```json
+"meta_keys": ["twitter.terms"]
+```
+
+Example payload in 'hello':
+
+```json
+"metadata": {
+    "version": "12345",
+    "data": {
+        "twitter": {
+            "terms": ["watch", "these", "terms"]
+        }
+    }
+}
+```
+
+A service that is dependent on metadata cannot start until it receives the data. If it is missing for
+some reason, then the server should be in the 'pending' state.
+
+## TODO: Manager REST API
+
+
+### TODO: Service operations
+
+### TODO: Metadata exchange
+
+        # TODO: GET SHOULD ALSO RETURN CHANGESET ID; UPDATE SHOULD ALSO RECEIVE CHANGESET ID
+        self.add_route(self._mgmt_metadata_get   , "GET"     , "/metadata"  , None)
+        self.add_route(self._mgmt_metadata_update, "PUT|POST", "/metadata"  , None)
+
+## TODO: Service/manager communication (REST interface)
+
+### Metadata exchange
+
+## TODO: Writing services
+
+* big section...

@@ -174,7 +174,7 @@ class ElasticsearchWriter(Generator):
             self._send()
             self.log.trace("Batch submitted.")  # TODO: DEBUG: REMOVE
         elif self.config.batchtime and self._queue.qsize() and (time.time() - self._last_batch_time > self.config.batchtime):
-            self.log.debug("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
+            self.log.trace("Submitting partial batch (%d) due to batch timeout." % self._queue.qsize())
             self._send()
 
     #endregion Generator

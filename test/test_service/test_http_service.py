@@ -35,6 +35,12 @@ class TestService(Service):
     def is_processing(self):
         return self._pc.running
 
+    def is_aborted(self):
+        return self._pc.aborted
+
+    def is_suspended(self):
+        return self._pc.suspended
+
     # on_start_processing (should be ran async)
     def on_processing_start(self):
         self._timer.start()
@@ -69,7 +75,6 @@ class HttpTestService(HttpService, TestService):
         parameters = kwargs
         print "TEST1:", parameters
         return {"echo": parameters}
-
 
 class TestTestService(unittest.TestCase):
 

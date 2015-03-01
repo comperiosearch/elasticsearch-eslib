@@ -1,6 +1,5 @@
 from . import HttpService, PipelineService
 from ..procs import Timer, Transformer
-from . import get_first_meta_item
 from .. import esdoc
 import time
 
@@ -66,14 +65,11 @@ class DummyService(HttpService, PipelineService):
 
     #region Service overrides
 
-    # TODO
-    def on_update(self, config):
-        self._variable = get_first_meta_item(config, self.VARIABLE_CONFIG_PATH)
+    def on_metadata(self, metadata):
+        print "***METADATA", metadata
+        self._variable = self.get_meta_section(metadata, self.VARIABLE_CONFIG_PATH)
         print "VAR=", self._variable
-        if not self.head.running:
-            self.processing_start()
-        else:
-            pass  # Note: No restart needed
+        self.head.restart(start=False)
         return True
 
     #endregion Service overrides

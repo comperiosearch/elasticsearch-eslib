@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-eslib.text
+eslib.esdoc
 ~~~~~~~~~~
 
 Module containing operations on "Elasticsearch type" documents (really just a dict).
@@ -30,33 +30,37 @@ def tojson(doc):
 
 
 def getfield(doc, fieldpath, default=None):
-    "Get value for 'fieldpath' if it exits, otherwise return the default."
-    if not doc or not fieldpath:
+    "Get value for 'fieldpath' if it exits and is not None, otherwise return the default."
+    if doc is None or fieldpath is None:
         return default
+    if fieldpath == "":
+        return doc
     fp = fieldpath.split(".")
     d = doc
     for f in fp[:-1]:
-        if not d or not f in d or not type(d[f]) is dict:
+        if not d or not f in d or not isinstance(d[f], dict):
             return default
         d = d[f]
-    if not d:
+    if d is None:
         return default
-    return d.get(fp[-1]) or default
+    v = d.get(fp[-1])
+    return default if v is None else v
 
 
 def putfield(doc, fieldpath, value):
     "Add or update 'fieldpath' with 'value'."
-    if not doc or not fieldpath: return
+    if doc is None or fieldpath is None:
+        return
     fp = fieldpath.split(".")
     d = doc
     for i, f in enumerate(fp[:-1]):
         if f in d:
             d = d[f]
-            if not type(d) is dict:
-                raise Exception("Node at '%s' is not a dict." % ".".join(fp[:i+1]))
+            if not isinstance(d, dict):
+                raise AttributeError("Node at '%s' is not a dict." % ".".join(fp[:i+1]))
         else:
             dd = {}
-            d.update({f:dd})
+            d[f] = dd
             d = dd
     d[fp[-1]] = value  # OBS: This also overwrites a node if this is was a node
 
@@ -88,3 +92,5 @@ def createdoc(source, index=None, doctype=None, id=None):
     if type : doc['_type' ]  = doctype
     if id   : doc['_id'   ]  = id
     return doc
+
+

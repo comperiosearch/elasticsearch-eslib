@@ -1,33 +1,39 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from eslib.service import HttpService, status
+from eslib.service import HttpService, status, PipelineService
 from eslib.procs import Timer
 from eslib.time import utcdate
-import json, datetime, Queue, os, signal, subprocess, sys
+from eslib import esdoc
+import datetime, Queue, os, signal, subprocess, sys
+from threading import Lock
+from copy import deepcopy
 
 from elasticsearch import Elasticsearch
 from elasticsearch.client.indices import IndicesClient
 from elasticsearch.helpers import scan
 
+
 class ServiceInfo(object):
     def __init__(self):
         # Persisted permanent data
         self.id         = None
-        self.guest      = False  # Guests register/unregister themselves
-        self.host       = None   # Host name (not port) where service should run (or guest IS running)
+        self.guest      = False        # Guests register/unregister themselves
+        self.host       = None         # Host name (not port) where service should run (or guest IS running)
         self.type       = None
-        self.config_key = None   # Section tag for service config in global config
-        self.metadata_keys = []  # Sections/fields in the metadata that the service subscribes to
-        self.fixed_port = False  # Whether port is given and insisted on, as opposed to dynamic
+        self.config_key = None         # Section tag for service config in global config
+        self.metadata_keys = []        # Sections/fields in the metadata that the service subscribes to
+        self.fixed_port = False        # Whether port is given and insisted on, as opposed to dynamic
+        self.boot_state = status.DEAD  # Whether it should be dead, running idle or processing after boot
         # Persisted temporary data
-        self.port       = None   # Port number assigned by manager or insisted by guest
-        self.pid        = None   # OS Process ID
+        self.port       = None         # Port number assigned by manager or insisted by guest
+        self.pid        = None         # OS Process ID
         self.last_seen  = None
         # Not persisted
         self.fail_count = 0
         self.status     = status.DEAD
         self.error      = None
+        self.metadata_pending = None
 
     @property
     def addr(self):
@@ -37,8 +43,30 @@ class ServiceInfo(object):
         self.error = None
         self.fail_count = 0
 
+class Metadata(object):
+    # status/state constants
+    HISTORIC = "historic"
+    EDIT     = "edit"
+    ACTIVE   = "active"
 
-class ServiceManager(HttpService,):
+    def __init__(self):
+        self.version     = 0
+        self.updated     = None
+        self.status      = None
+        self.description = ""
+        self.data        = {}
+
+    def clone(self):
+        "Create and return a shallow clone."
+        item = Metadata()
+        item.version = self.version
+        item.updated = self.updated
+        item.status  = self.status
+        item.data    = self.data
+        return item
+
+
+class ServiceManager(HttpService, PipelineService):
 
     def __init__(self, **kwargs):
         super(ServiceManager, self).__init__(**kwargs)
@@ -59,7 +87,12 @@ class ServiceManager(HttpService,):
         self._es_index = None
 
         self._services = {}
-        self._config = {}
+        self._metadata_versions = {}
+        self._metadata_use      = None
+        self._metadata_edit     = None
+        self._metadata_next_version = 0
+        self._metadata_lock     = Lock()
+        self._metadata_pending  = None
 
         # For dynamic port allocation:
         self._available_ports = {}
@@ -71,17 +104,17 @@ class ServiceManager(HttpService,):
         self._timer = None
         self._upload_queue = None
 
+        self._reboot_wait  = []  # List of services we are currently rebooting; just waiting for 'goodbye' first.
+        self._reboot_ready = []  # Services that we can now safely try to boot again. (TODO: May require a grace time to endure lingering locks to limited resources, such as ip-ports, limited number of DB connections, etc.)
+
         # Clear routes and re-enable a minimal set of calls that make sense here
         self._routes = []
         # Use those in HttpService:
         self.add_route(self._mgmt_hello             , "GET"     , "/hello"      , None)
         self.add_route(self._mgmt_help              , "GET"     , "/help"       , None)
 
-        # self.add_route("GET"     , "status"    , self._mgmt_status)
-
         self.add_route(self._mgmt_service_register  , "POST|PUT" , "/hello"     , None)
         self.add_route(self._mgmt_service_unregister, "DELETE"   , "/goodbye"   , None)
-
 
         self.add_route(self._mgmt_service_list      , "GET"     , "/list"       , None)
         self.add_route(self._mgmt_service_stats     , "GET"     , "/stats"      , None)
@@ -98,6 +131,21 @@ class ServiceManager(HttpService,):
         self.add_route(self._mgmt_processing_abort  , "POST|PUT", "/processing_abort"  , None)
         self.add_route(self._mgmt_processing_suspend, "POST|PUT", "/processing_suspend", None)
         self.add_route(self._mgmt_processing_resume , "POST|PUT", "/processing_resume" , None)
+
+        self.add_route(self._mgmt_service_set_boot  , "POST|PUT", "/set_boot_state"    , None)
+        self.add_route(self._mgmt_service_boot      , "POST|PUT", "/boot"              , None)
+        self.add_route(self._mgmt_service_reboot    , "POST|PUT", "/reboot"            , None)
+
+        self.add_route(self._mgmt_metadata_list     , "GET"     , "/meta/list"         , None)
+        self.add_route(self._mgmt_metadata_commit   , "PUT|POST", "/meta/commit"       , None)
+        self.add_route(self._mgmt_metadata_rollback , "PUT|POST", "/meta/rollback/{version:int}", None)
+        self.add_route(self._mgmt_metadata_drop     , "DELETE"  , "/meta/{version:int}", None)
+        self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta"              , ["?commit:bool"])
+        self.add_route(self._mgmt_metadata_get      , "GET"     , "/meta/{?version}"   , None)
+
+        self.add_route(self._mgmt_metadata_put      , "PUT|POST", "/meta/put"          , None)
+        self.add_route(self._mgmt_metadata_remove   , "DELETE"  , "/meta/remove"       , None)
+        self.add_route(self._mgmt_metadata_delete   , "DELETE"  , "/meta/delete"       , None)
 
     @property
     def _now(self):
@@ -120,6 +168,7 @@ class ServiceManager(HttpService,):
         self._es_index = self.config.elasticsearch_index
 
         self._load_services()
+        self._load_metadata()
         self._probe_loaded_services()  # find PID and IP port for services
 
         self._upload_queue = Queue.Queue()
@@ -127,46 +176,80 @@ class ServiceManager(HttpService,):
         self._timer = Timer(actions=[(1, 1, "ping")])
         self._timer.add_callback(self._ping)
 
+        procs = [self._timer]
+
+        # Link procs (just one in this case..)
+        self.link(*procs)
+
+        #  Register them for debug dumping
+        self.register_procs(*procs)
+
         return True
 
+    def _get_metadata_for_service(self, metaitem, service):
+        # Note: expects metaitem to be constant during this operation
+
+        meta = Metadata()
+        meta.version = metaitem.version
+        meta.updated = metaitem.updated
+        # irrelevant: meta.status, meta.description
+        for path in service.metadata_keys:
+            value = esdoc.getfield(metaitem.data, path)
+            esdoc.putfield(meta.data, path, value)
+        return meta
+
     def _ping(self, doc):
-        return  # DEBUG
+        # Reboot handling
+        if self._reboot_ready:
+            # Only do one each tick...
+            service = self._reboot_ready.pop(0)
+            self.log.info("Booting service '%s' as part of reboot request." % service.id)
+            self._boot([service.id])
 
-        # TODO: Use a thread pool for pushing configs, and only pop off the queue if the thread pool is ready
-        if self._upload_queue and self._upload_queue.qsize():
-            while self._upload_queue.qsize():
-                service = self._upload_queue.get_nowait()
-                if service:
-                    if service["fail_count"] >= 3:  # Three strikes, and you're out!
-                        continue  # Ignore it for now... it must be re-registered
-                        # TODO: Later we should just let if wait a bit longer before we try again
-                    self._push_to_service(service)
+        # Metadata change handling
+        if self._metadata_pending:
+            old_item, new_item = self._metadata_pending
+            self._metadata_pending = None
 
-    # def _push_to_service(self, service):
-    #     self.log.debug("Pushing config to service '%s'." % service["id"])
-    #
-    #     # Push config to remote host
-    #     try:
-    #         req = json.dumps(service)
-    #         res = requests.post("http://%s:%d/update" % (service["host"], service["port"]), data=req, headers={'content-type': 'application/json'}) #, auth=('user', '*****'))
-    #     except Exception as e:
-    #         self.log.error("Failed to push config to service '%s'.")
-    #         service["fail_count"] += 1
-    #         return
-    #
-    #     self.log.info("Config pushed to service '%s'." % service["id"])
-    #     # Now finally register that we have seen this service:
-    #     service["fail_count"] = 0
-    #     self._save_registered_service(service["id"])
+            # TODO: Create a diff to see which sections are monified...
 
+            for service in list(self._services.values()):
+                # TODO: Ask each service for latest status instead?
+                if service.status != status.DEAD and service.metadata_keys:
+                    # TODO: In this naiive implementation we do not know if there is an actual need to send a metadata update, so we send every time:
+                    meta = self._get_metadata_for_service(new_item, service)
+                    service.metadata_pending = meta
 
-    #region Storage
+        # TODO: This could rather spawn a thread for each service and operate in parallell, but for now we loop through them:
+        for service in list(self._services.values()):
+            if service.metadata_pending:
+                meta = service.metadata_pending
+                service.metadata_pending = None
+                error = None
+                try:
+                    payload = {
+                        "version": meta.version,
+                        "updated": meta.updated,
+                        "data": meta.data
+                    }
+                    content = self.remote(service.addr, "post", "metadata", payload)
+                except Exception as e:
+                    error = str(e)
+                    msg = "Failed to communicate with service '%s' at '%s': %s" % (service.id, service.addr, e)
+                    self.log.warning(msg)
+
+                if error:
+                    service.error = error
+                    service.fail_count += 1
+                    if service.fail_count >= 0:  # TODO: Always remove it for now
+                        self._remove_dead_service(service)
+
+    #region Storage :: services
 
     _matchall_query = {'query': {'match_all': {}}}
 
     def _storage_load_services(self):
         self.log.info("Loading registered services.")
-        # ensure all documents are indexed before executing query
         docs = []
         try:
             ic = IndicesClient(self._es)
@@ -174,7 +257,9 @@ class ServiceManager(HttpService,):
             if not ic.exists(self._es_index):
                 self.log.info("Management index '%s' did not exist. Creating it." % self._es_index)
                 ic.create(self._es_index)
+            # ensure all documents are indexed before executing query
             ic.refresh(self._es_index)
+
             scan_resp = scan(self._es, index=self._es_index, doc_type='service', query=self._matchall_query)
             docs = [doc for doc in scan_resp]
         except Exception as e:
@@ -191,6 +276,7 @@ class ServiceManager(HttpService,):
             service.config_key    = s["config_key"]
             service.metadata_keys = s["metadata_keys"]
             service.fixed_port    = s["fixed_port"]
+            service.boot_state    = s.get("boot_state")
             service.port          = s["port"]
             service.pid           = s["pid"]
             service.last_seen     = utcdate(s.get("last_seen") or self._now)
@@ -204,6 +290,7 @@ class ServiceManager(HttpService,):
             "config_key"   : service.config_key,
             "metadata_keys": service.metadata_keys,
             "fixed_port"   : service.fixed_port,
+            "boot_state"   : service.boot_state,
             "port"         : service.port,
             "pid"          : service.pid,
             "last_seen"    : service.last_seen  # elasticsearch api will serialize this properly
@@ -213,7 +300,7 @@ class ServiceManager(HttpService,):
         try:
             self._es.index(self._es_index, doc_type="service", id=service.id, body=payload)
         except Exception as e:
-            self.log.error("Failed to save registered service '%s' to index. %s: %s" % (id, e.__class__.__name__, e))
+            self.log.error("Failed to save registered service '%s' to index. %s: %s" % (service.id, e.__class__.__name__, e))
             # Report it as operation failed, but it is only persisting that has failed... no big deal.
             return False
 
@@ -222,11 +309,101 @@ class ServiceManager(HttpService,):
             ic = IndicesClient(self._es)
             ic.refresh(index=self._es_index)
             res = self._es.delete(index=self._es_index, doc_type="service", id=id)
+            return True
         except Exception as e:
             self.log.error("Failed to delete registered service '%s' from index. %s: %s" % (id, e.__class__.__name__, e))
             return False
 
-    #endregion Storage
+    #endregion Storage :: services
+
+    #region Storage :: metadata
+
+    _meta_versions_query = {"_source": ["status", "updated", "description"]}
+
+    def _storage_load_meta_list(self):
+        self.log.info("Loading metadata.")
+        docs = []
+        try:
+            ic = IndicesClient(self._es)
+            # If index does not exist, create it:
+            if not ic.exists(self._es_index):
+                self.log.info("Management index '%s' did not exist. Creating it." % self._es_index)
+                ic.create(self._es_index)
+            # ensure all documents are indexed before executing query
+            ic.refresh(self._es_index)
+
+            # Load version list
+            scan_resp = scan(self._es, index=self._es_index, doc_type='metadata', query=self._meta_versions_query)
+            docs = [doc for doc in scan_resp]
+        except Exception as e:
+            self.log.critical("Failed to load metadata version list from index. Aborting. %s: %s" % (e.__class__.__name__, e))
+            exit()
+
+        use_id = None
+        edit_id = None
+
+        meta_versions = {}
+        for doc in docs:
+            s = doc["_source"]
+            meta = Metadata()
+            meta.version       = int(doc["_id"])
+            meta.status        = s["status"]
+            meta.updated       = utcdate(s["updated"])
+            meta.description   = s["description"]
+            if meta.status == Metadata.EDIT:
+                edit_id = meta.version
+            elif meta.status == Metadata.ACTIVE:
+                use_id = meta.version
+            # no meta.data here
+            meta_versions[meta.version] = meta
+        return (meta_versions, use_id, edit_id)
+
+    def _storage_load_meta_item(self, version):
+        self.log.debug("Loading metadata item with version %d." % version)
+        # ensure all documents are indexed before executing query
+        try:
+            ic = IndicesClient(self._es)
+            ic.refresh(self._es_index)
+
+            doc = self._es.get(self._es_index, doc_type="metadata", id=version)
+            s = doc["_source"]
+            meta = Metadata()
+            meta.version       = int(doc["_id"])
+            meta.status        = s["status"]
+            meta.updated       = utcdate(s["updated"])
+            meta.description   = s["description"]
+            meta.data          = s["data"]
+            return meta
+        except Exception as e:
+            self.log.error("Failed to load specific metadata item %d from index." % version)
+            return None
+
+    def _storage_save_meta_item(self, metaitem):
+        payload = {
+            "status"       : metaitem.status,
+            "updated"      : metaitem.updated,
+            "description"  : metaitem.description,
+            "data"         : metaitem.data
+        }
+
+        try:
+            self._es.index(self._es_index, doc_type="metadata", id=metaitem.version, body=payload)
+        except Exception as e:
+            self.log.error("Failed to save metadata item %d to index. %s: %s" % (metaitem.version, e.__class__.__name__, e))
+            # Report it as operation failed, but it is only persisting that has failed... no big deal.
+            return False
+
+    def _storage_delete_meta_item(self, version):
+        try:
+            ic = IndicesClient(self._es)
+            ic.refresh(index=self._es_index)
+            res = self._es.delete(index=self._es_index, doc_type="metadata", id=version)
+            return True
+        except Exception as e:
+            self.log.error("Failed to delete metadata item %d from index. %s: %s" % (version, e.__class__.__name__, e))
+            return False
+
+    #endregion Storage :: metadata
 
     #region Dynamic port allocation helpers
 
@@ -255,7 +432,7 @@ class ServiceManager(HttpService,):
 
     #endregion Dynamic port allocation helpers
 
-    #region Helper methods
+    #region Helper methods :: services
 
     def _load_services(self):
         self._services = self._storage_load_services()
@@ -281,7 +458,7 @@ class ServiceManager(HttpService,):
                 id       = content["id"]
                 pid      = content["pid"]
                 status   = content["status"]
-                metakeys = content.get("metakeys")
+                metakeys = content["meta_keys"]
 
                 if not id == service.id:
                     error = "ID mismatch in 'hello' response at '%s'. Expected '%s', got '%s'." % (addr, service.id, id)
@@ -355,6 +532,7 @@ class ServiceManager(HttpService,):
     def _remove_dead_service(self, service):
         service.pid = None
         service.status = status.DEAD
+        service.metadata_pending = None
         #service.last_seen = self._now
 
         # Remove port from pool if it's in the dynamic pool
@@ -368,7 +546,153 @@ class ServiceManager(HttpService,):
         else:
             self._storage_save_service(service)
 
-    #endregion Helper methods
+    #endregion Helper methods :: services
+
+    #region Helper methods :: metadata
+
+    def _load_or_create_meta_item(self, version, status, data=None):
+        meta = None
+        if version is None:
+            meta = Metadata()
+            meta.version = self._metadata_next_version
+            self._metadata_next_version += 1
+            meta.updated = self._now
+            meta.status = status
+            if data:
+                meta.data = data
+            self.log.debug("Creating new metadata item; version=%d, status='%s'." % (meta.version, meta.status))
+            self._metadata_versions[meta.version] = meta
+            self._storage_save_meta_item(meta)
+        else:
+            meta = self._storage_load_meta_item(version)
+            self._metadata_versions[meta.version] = meta
+        return meta
+
+    def _load_metadata(self):
+        self._metadata_versions, use_id, edit_id = self._storage_load_meta_list()
+
+        self._metadata_next_version = (edit_id +1 if edit_id else 0)
+
+        # Load or create active item and edit item
+        self._metadata_use  = self._load_or_create_meta_item(use_id, Metadata.ACTIVE)
+        self._metadata_edit = self._load_or_create_meta_item(edit_id, Metadata.EDIT)
+
+        self.log.info("Metadata loaded.")
+
+    def _commit_metadata_edit_set(self, description=None):
+
+        self.log.debug("Committing metadata edit set.")
+
+        with self._metadata_lock:
+
+            old_edit   = self._metadata_edit
+            old_active = self._metadata_use
+
+            # Create a new edit set
+            self._metadata_edit = self._load_or_create_meta_item(None, Metadata.EDIT, deepcopy(old_edit.data))  # This will create and save
+            # Make old edit set active
+            old_edit.description = description or ""
+            old_edit.status = Metadata.ACTIVE
+            old_edit.updated = self._now
+            self._metadata_use = old_edit
+            self._storage_save_meta_item(self._metadata_use)
+            # Make old active set historic
+            old_active.status = Metadata.HISTORIC
+            old_active.updated = self._now
+            old_active_clone = old_active.clone()
+            self._storage_save_meta_item(old_active)
+            # The old data is not needed in the versions cache one we have saved it:
+            old_active.data = {}
+
+            self._metadata_pending = (old_active_clone, self._metadata_use.clone())
+
+            self.log.status("Metadata edit set committed to active; version=%d." % self._metadata_use.version)
+
+    def _rollback_active_metadata(self, version):
+        # version must be int
+
+        self.log.debug("Attempting to roll back metadata to version %d." % version)
+
+        with self._metadata_lock:
+
+            # Load old version
+            loaded = None
+            for item in self._metadata_versions.values():
+                if item.version == version:
+                    if item.status != Metadata.HISTORIC:
+                        self.log.error("Tried to rollback metadata to non-historic version %d; status='%s'." % (item.version, item.status))
+                        return False
+                    loaded =  self._storage_load_meta_item(item.version)
+                    self._metadata_versions[item.version] = loaded
+                    break
+
+            if not loaded:
+                self.log.error("Failed to load version %d for rollback; version not found." % version)
+                return False
+
+            loaded.status = Metadata.ACTIVE
+            loaded.updated = self._now
+            self._storage_save_meta_item(loaded)
+
+            old_active = self._metadata_use
+            self._metadata_use = loaded
+
+            # Make old active set historic
+            old_active.status = Metadata.HISTORIC
+            old_active.updated = self._now
+            old_active_clone = old_active.clone()
+            self._storage_save_meta_item(old_active)
+            # The old data is not needed in the versions cache one we have saved it:
+            old_active.data = {}
+
+            self._metadata_pending = (old_active_clone, self._metadata_use.clone())
+
+            self.log.status("Active metadata set rolled back to version %d." % self._metadata_use.version)
+
+        return True
+
+    def _delete_metadata_version(self, version):
+        # version must be int
+
+        self.log.debug("Attempting to delete metadata version %d." % version)
+
+        with self._metadata_lock:
+
+            # Find old version
+            found = None
+            for item in self._metadata_versions.values():
+                if item.version == version:
+                    if item.status != Metadata.HISTORIC:
+                        self.log.error("Tried to delete a non-historic version of metadata; version=%d, status='%s'." % (item.version, item.status))
+                        return False
+                    found = item
+                    break
+
+            if not found:
+                self.log.error("Failed to delete metadata version %d; version not found." % version)
+                return False
+
+            deleted = self._storage_delete_meta_item(found.version)
+            if deleted:
+                del self._metadata_versions[found.version]
+                self.log.info("Historic metadata version %d deleted." % found.version)
+            return deleted
+
+        return True
+
+    def _import_metadata(self, data, commit):
+        # expects data to be valid dict
+
+        with self._metadata_lock:
+            self._metadata_edit.data = data
+            self._metadata_edit.updated = self._now
+            if not commit:  # Will otherwise be saved during the commit
+                self._storage_save_meta_item(self._metadata_edit)
+        self.log.info("New metadata imported to edit set.")
+        if commit:
+            self._commit_metadata_edit_set()
+
+    #endregion Helper methods :: metadata
 
     #region Service interface commands
 
@@ -379,8 +703,9 @@ class ServiceManager(HttpService,):
             payload.get("id"),              # service id
             payload.get("host"),            # hostname for where to run this service (or where guest IS running)
             payload.get("port"),            # port service insists to run admin port on
+            payload.get("boot_state") or status.DEAD,  # boot state
             payload.get("config_key"),      # config key
-            payload.get("start") or False   # auto_start
+            payload.get("start") or False,  # auto_start
         )
 
     def _mgmt_service_remove(self, request_handler, payload, **kwargs):
@@ -418,55 +743,6 @@ class ServiceManager(HttpService,):
         services = list(self._services.values())
         self.log.debug("called: list services")
         return self._get_service_info(services)
-
-    def _get_own_service_info(self):
-        host, port = self.config.management_endpoint.split(":")
-
-        return {
-            "id"         : self.name,
-            "guest"      : True,
-            "host"       : host,
-            "type"       : self.__class__.__name__,
-            "config_key" : self.config_key,
-            "meta_keys"  : [],
-            "fixed_port" : True,
-            "port"       : port,
-            "pid"        : self.pid,
-            "last_seen"  : self._now,
-            "fail_count" : 0,
-            "fail_reason": None,
-            "status"     : self.status,
-            # Runtime statistics from service:
-            "stats"      : self.get_stats()
-        }
-
-    def _get_service_info(self, services, return_missing=False):
-        ret = {}
-        for service in services:
-            ss, stats = self._get_stats(service)
-            # The service may have been removed in the call to _get_status:
-            if not service.id in self._services:
-                if return_missing:
-                    ret[service.id] = {"error": "Service '%s' no longer exists." % service.id}
-            else:
-                ret[service.id] = {
-                    "id"         : service.id,
-                    "guest"      : service.guest,
-                    "host"       : service.host,
-                    "type"       : service.type,
-                    "config_key" : service.config_key,
-                    "meta_keys"  : service.metadata_keys,
-                    "fixed_port" : service.fixed_port,
-                    "port"       : service.port,
-                    "pid"        : service.pid,
-                    "last_seen"  : service.last_seen,
-                    "fail_count" : service.fail_count,
-                    "fail_reason": service.error,
-                    "status"     : ss,
-                    # Runtime statistics from service:
-                    "stats"      : stats
-                }
-        return ret
 
     def _mgmt_service_stats(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
@@ -551,11 +827,99 @@ class ServiceManager(HttpService,):
             payload.get("all") or False
         )
 
+    def _mgmt_service_reboot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        self.log.debug("called: shutdown service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._reboot_services(
+            ids,
+            payload.get("all") or False,
+        )
+
+    def _mgmt_service_set_boot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        self.log.debug("called: set boot state for service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        return self._set_boot(
+            ids,
+            payload.get("boot_state"),
+            payload.get("all") or False
+        )
+
+    def _mgmt_service_boot(self, request_handler, payload, **kwargs):
+        ids = payload.get("ids") or []
+        all = payload.get("all")
+        if not ids:
+            all = True
+        self.log.debug("called: boot service(s) [%s]" % ("(all)" if all else ", ".join(ids)))
+        return self._boot(
+            ids,
+            all
+        )
+
     #endregion Service interface commands
 
     #region Service interface helpers
 
-    def _add_service(self, guest, id, host, port, config_key, auto_start, save=True):
+    def _get_own_service_info(self):
+        host, port = self.config.management_endpoint.split(":")
+
+        return {
+            "id"         : self.name,
+            "guest"      : True,
+            "host"       : host,
+            "type"       : self.__class__.__name__,
+            # no "boot_state" for this one..
+            "config_key" : self.config_key,
+            "meta_keys"  : [],
+            "fixed_port" : True,
+            "port"       : port,
+            "pid"        : self.pid,
+            "last_seen"  : self._now,
+            "fail_count" : 0,
+            "fail_reason": None,
+            "status"     : self.status,
+            # Runtime statistics from service:
+            "stats"      : self.get_stats()
+        }
+
+    def _get_service_info(self, services, return_missing=False):
+        ret = {}
+        for service in services:
+            ss, stats = self._get_stats(service)
+            # The service may have been removed in the call to _get_status:
+            if not service.id in self._services:
+                if return_missing:
+                    ret[service.id] = {"error": "Service '%s' no longer exists." % service.id}
+            else:
+                ret[service.id] = {
+                    "id"         : service.id,
+                    "guest"      : service.guest,
+                    "host"       : service.host,
+                    "type"       : service.type,
+                    "boot_state" : service.boot_state,
+                    "config_key" : service.config_key,
+                    "meta_keys"  : service.metadata_keys,
+                    "fixed_port" : service.fixed_port,
+                    "port"       : service.port,
+                    "pid"        : service.pid,
+                    "last_seen"  : service.last_seen,
+                    "fail_count" : service.fail_count,
+                    "fail_reason": service.error,
+                    "status"     : ss,
+                    # Runtime statistics from service:
+                    "stats"      : stats
+                }
+        return ret
+
+    def _parse_boot_state(self, boot_state_str):
+        if boot_state_str is None:
+            return status.DEAD
+        boot_state_str = boot_state_str.lower()
+        for s in [status.DEAD, status.IDLE, status.PROCESSING]:
+            if boot_state_str == s.lower():
+                return s
+        return None  # Parsing failed; illegal string
+
+    def _add_service(self, guest, id, host, port, boot_state, config_key, auto_start, save=True):
         if port is not None and type(port) is not int:
             port = int(port)
 
@@ -584,6 +948,9 @@ class ServiceManager(HttpService,):
             service.port       = port
             # dynamic port will be assigned upon service exec/run
 
+        boot_state_parsed = self._parse_boot_state(boot_state)
+        service.boot_state = boot_state_parsed or status.DEAD
+
         self._services[id] = service
         if save:
             self._storage_save_service(service)
@@ -602,6 +969,8 @@ class ServiceManager(HttpService,):
         ret = {"message": msg}
         if error:
             ret["error"] = error
+        if boot_state is None:
+            ret["warning"] = "Unknown or illegal boot state '%s' ignored."
         return ret
 
     def _remove_services(self, ids, all, auto_stop):
@@ -691,23 +1060,31 @@ class ServiceManager(HttpService,):
         if not id in self._services:
             self.log.debug("Hello from unknown service '%s'; treating it as a guest." % id)
             guest = True
-            self._add_service(guest, id, host, port, None, False, save=False)
+            self._add_service(guest, id, host, port, None, None, False, save=False)
+
         service = self._services[id]
-        service.config_key = config_key
-        service.type = service_type
-        service.pid = pid
-        service.status = status
+        service.config_key    = config_key
+        service.type          = service_type
+        service.pid           = pid
+        service.status        = status
         service.metadata_keys = metakeys or []
-        service.port = port or dynport
-        service.last_seen = self._now
-        service.error = None
-        service.fail_count = 0
+        service.port          = port or dynport
+        service.last_seen     = self._now
+        service.error         = None
+        service.fail_count    = 0
+        service.metadata_pending = None
         self._storage_save_service(service)
 
-        # TODO: We might want to return some more stuff here...(?)
+        meta = self._get_metadata_for_service(self._metadata_use.clone(), service)
+        meta_payload = {
+            "version": meta.version,
+            "updated": meta.updated,
+            "data": meta.data
+        }
+
         ret = {
             "port": service.port,
-            "metadata": {}  # TODO: METADATA
+            "metadata": meta_payload
         }
         if guest:
             ret["message"] = "Service '%s' registered as guest." % id
@@ -721,6 +1098,13 @@ class ServiceManager(HttpService,):
             return {"error": "No such registered service '%s'." % id}
 
         service = self._services[id]
+
+        # Reboot handling
+        if service in self._reboot_wait:
+            self._reboot_wait.remove(service)
+            self._reboot_ready.append(service)
+            # The runner thread should now launch the service when it sees fit.
+
         extra_info = ""
         if self._release_port(service.host, service.port):
             extra_info = " Dynamic port '%s' released back to pool." % (service.addr)
@@ -954,61 +1338,301 @@ class ServiceManager(HttpService,):
     def _resume_processing(self, ids, all):
         return self._processing_operation(ids, "post", "resume", "resume", "resumed", [status.SUSPENDED], all)
 
+    def _set_boot(self, ids, boot_state, all=False, wait=False):
+        boot_state_parsed = self._parse_boot_state(boot_state)
+        if boot_state_parsed is None:
+            return {"error": "Unknown or illegal boot state '%s'." % boot_state}
+
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to set boot state for a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                service.boot_state = boot_state_parsed
+                succeeded.append(id)
+                # Persist
+                self._storage_save_service(service)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Failed to set boot state for services: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Boot state set to '%s' for services: [%s]" % (boot_state_parsed, ", ".join(succeeded))
+        return ret
+
+    def _boot(self, ids, all=False):
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to boot a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                boot_state = service.boot_state
+                if boot_state is None or boot_state == status.DEAD:
+                    continue  # Booting not required
+                # Check the current status...
+                ss = self._get_status(service)
+                if ss == status.DEAD:
+                    # Launch service
+                    start = False
+                    if boot_state == status.PROCESSING:
+                        start = True
+                    ok = self._launch_service(service, start)
+                    if ok:
+                        succeeded.append(id)
+                    else:
+                        failed.append(id)
+                elif ss in [status.PROCESSING, status.SUSPENDED, status.PENDING, status.STOPPING, status.CLOSING]:
+                    continue  # Already running, so booting not required
+                else:
+                    # Start processing
+                    res = self._start_processing([id])
+                    error = res.get("error")
+                    if error:
+                        failed.append(id)
+                    else:
+                        succeeded.append(id)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Services that failed to boot: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Services booted: [%s]" % (", ".join(succeeded))
+        return ret
+
+    def _reboot_services(self, ids, all):
+        # When we reboot a service, we first register that we are rebooting, then we shut it down,
+        # and when we get a 'goodbye' message, we mark it to be booted again. The service tick should
+        # do the actual rebooting.
+
+        succeeded = []
+        failed = []
+        if all:
+            ids = self._services.keys()[:]
+        for id in ids:
+            if not id in self._services:
+                self.log.debug("Tried to reboot a non-existing service '%s'." % id)
+                failed.append(id)
+                continue
+            else:
+                service = self._services[id]
+                ss = self._get_status(service)
+                if ss == status.DEAD:
+                    self._reboot_ready.append(service)
+
+                error = None
+                try:
+                    data = None
+                    content = self.remote(service.addr, "delete", "shutdown", data)
+                    error = content.get("error")
+                except Exception as e:
+                    error = str(e)
+                if error:
+                    self.log.warning("Service '%s' failed to shut down: %s" % (id, error))
+                    failed.append(id)
+                else:
+                    self.log.info("Shutdown message sent to service '%s'." % id)
+                    succeeded.append(id)
+                    self._reboot_wait.append(service)
+
+        ret = {}
+        if failed:
+            ret["error"] = "Service not shut down for reboot: [%s]" % (", ".join(failed))
+        if succeeded:
+            ret["message"] = "Services now pending reboot: [%s]" % (", ".join(succeeded))
+        return ret
+
     #endregion Service interface helpers
+
+    #region Metadata interface commands
+
+    def _mgmt_metadata_list(self, request_handler, payload, **kwargs):
+        self.log.debug("called: list metadata versions")
+
+        retlist = []
+        for v in list(self._metadata_versions.values()):
+            retlist.append({
+                "version"    : v.version,
+                "status"     : v.status,
+                "updated"    : v.updated,
+                "description": v.description
+            })
+        return {"versions": retlist}
+
+    def _mgmt_metadata_commit(self, request_handler, payload, **kwargs):
+        self.log.debug("called: commit metadata")
+
+        self._commit_metadata_edit_set(payload.get("description"))
+        return {"message": "Metadata edit set version %d committed to active." % self._metadata_use.version}
+
+    def _mgmt_metadata_rollback(self, request_handler, payload, **kwargs):
+        self.log.debug("called: rollback metadata")
+
+        version = kwargs["version"]  # Should be an int when it gets here
+
+        if self._rollback_active_metadata(version):
+            return {"message": "Metadata active set rolled back to version %d." % self._metadata_use.version}
+        else:
+            return {"error": "Failed to roll back active metadata set to version %d." % version}
+
+    def _mgmt_metadata_drop(self, request_handler, payload, **kwargs):
+        self.log.debug("called: delete (drop) metadata set")
+
+        version = kwargs["version"]  # Should be an int when it gets here
+
+        if self._delete_metadata_version(version):
+            return {"message": "Metadata version %d deleted." % version}
+        else:
+            return {"error": "Failed to delete metadata version %d." % version}
+
+    def _mgmt_metadata_import(self, request_handler, payload, **kwargs):
+        self.log.debug("called: import metadata")
+
+        commit = kwargs.get("commit") or False
+
+        if not type(payload) is dict:
+            return {"error": "Payload is not a valid dict."}
+
+        self._import_metadata(payload, commit)
+        extra_str = " and committed" if commit else ""
+        return {"message": "New metadata imported to current edit set%s." % extra_str}
+
+    def _mgmt_metadata_get(self, request_handler, payload, **kwargs):
+        self.log.debug("called: get metadata")
+
+        version = kwargs.get("version")
+        if version is None or version == "":
+            version = Metadata.EDIT
+        elif not version in [Metadata.ACTIVE, Metadata.EDIT]:
+            # Make sure it is numeric
+            try:
+                version = int(version)
+            except ValueError:
+                return {"error": "Version must be one of '%s', '%s', or numeric (int)." % (Metadata.ACTIVE, Metadata.EDIT)}
+
+        with self._metadata_lock:
+            metaitem = None
+
+            if version == Metadata.EDIT:
+                metaitem = self._metadata_edit
+            elif version == Metadata.ACTIVE:
+                metaitem = self._metadata_use
+            else:
+                for item in self._metadata_versions.values():
+                    if item.version == version:
+                        metaitem = self._storage_load_meta_item(version)
+                        break
+            if not metaitem:
+                return {"error": "Failed to get metadata version %s." % version}
+
+            # The data could possibly be modified between this method returns and the lock
+            # is released, and the data is json serialized in the http service layer.
+            # So we'd better deep clone here already.
+
+            return {
+                "version": metaitem.version,
+                "status" : metaitem.status,
+                "updated": metaitem.updated,
+                "data"   : deepcopy(metaitem.data)
+            }
+
+    def _mgmt_metadata_put(self, request_handler, payload, **kwargs):
+        # Can take list in data, and optionally merge instead of replace.
+        self.log.debug("called: put/append metadata")
+
+        path = payload.get("path")
+        data = payload.get("data")
+        merge_list = payload.get("merge") or False
+
+        if not path:
+            return {"error": "Missing path."}
+        if not data:
+            return {"error": "Missing list items."}
+
+        removed = False
+        error = False
+        with self._metadata_lock:
+            try:
+                changed = esdoc.put(self._metadata_edit, path, data, merge_list)
+                if removed:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to put data at path '%s': %s" (path, e)}
+        else:
+            return {"message": "Nothing changed." if not changed else "Something was changed."}
+
+    def _mgmt_metadata_remove(self, request_handler, payload, **kwargs):
+        self.log.debug("called: remove metadata list items")
+
+        path = payload.get("path")
+        data_list = payload.get("list")
+
+        if not path:
+            return {"error": "Missing path."}
+        if not data_list:
+            return {"error": "Missing list items."}
+
+        removed = False
+        error = False
+        with self._metadata_lock:
+            try:
+                removed = esdoc.remove_list_items(self._metadata_edit, path, data_list)
+                if removed:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to remove data at path '%s': %s" (path, e)}
+        else:
+            return {"message": "Nothing removed." if not removed else "Something was remove."}
+
+    def _mgmt_metadata_delete(self, request_handler, payload, **kwargs):
+        self.log.debug("called: delete metadata sections")
+
+        paths = payload.get("paths")
+        collapse = payload.get("collapse") or False
+
+        if not paths:
+            return {"error": "Missing paths."}
+
+        deleted = False
+        error = False
+        with self._metadata_lock:
+            try:
+                deleted = esdoc.delete(self._metadata_edit, paths, collapse)
+                if deleted:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to delete sections [%s]: %s" (", ".join(paths), e)}
+        else:
+            return {"message": "Nothing deleted." if not deleted else "Something was deleted."}
+
+    #endregion Metadata interface commands
 
     #region Service overrides
 
-    def get_stats(self):
-        stats = super(ServiceManager, self).get_stats()
+    def on_stats(self, stats):
         available_ports = {}
         for host, ports in self._available_ports.iteritems():
             available_ports[host] = len(ports)
         stats["available_ports"] = available_ports
-        return stats
-
-    #TODO: ALL OF THE BELOW++, fix them when I work with metadata
-
-    def on_status(self):
-        return {"timer": self._timer.status}
-
-    def on_start(self):
-        self._timer.start()
-        return True
-
-    def on_restart(self):
-        self._timer.restart()
-        return True
-
-    def on_stop(self):
-        self._timer.stop()
-        self._timer.wait()
-        return True
-
-    def on_abort(self):
-        self._timer.abort()
-        self._timer.wait()
-        return True
-
-    def on_suspend(self):
-        self._timer.suspend()
-        return True
-
-    def on_resume(self):
-        self._timer.resume()
-        return True
 
     #endregion Service overrides
-
-    #
-    # # TODO: OLD STUFF
-    # def _mgmt_push(self, payload, *args, **kwargs):
-    #     print "Pushing configs"
-    #     for remote_id, value in self._registered_services.iteritems():
-    #         remote_endpoint, remote_config_keys = value
-    #         print "Pushing config to '%s' at '%s'" % (remote_id, remote_endpoint)
-    #         # Push config to remote host
-    #         req = json.dumps(self._config) #payload)
-    #         res = requests.post("http://%s/update" % remote_endpoint, req) #, auth=('user', '*****'))
-    #
-    #     return {"message": "Config pushed."}
-

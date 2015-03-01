@@ -152,6 +152,8 @@ class UrlParamParser(object):
             cv = None
             if issubclass(param_type, basestring):
                 cv = pv
+            elif issubclass(param_type, bool):
+                cv = False if pv in [None, "", "off", "no", "False", "false", "FALSE", "None", "none", "null", "NULL"] else True
             elif not pv is None:
                 try:
                     cv = param_type(pv)

@@ -3,6 +3,7 @@ __author__ = 'Hans Terje Bakke'
 from .Service import Service
 from .UrlParamParser import UrlParamParser
 from ..procs.HttpMonitor import HttpMonitor
+from ..esdoc import tojson
 import json, requests
 
 
@@ -30,12 +31,16 @@ class HttpService(Service):
 
         POST hello
             id
+            type
+            config_key
+            host
+            port
             pid
             status
-            metakeys
+            meta_keys              List of addresses to metadata sections, with dot notation.
         => returns:
-            assigned_port
-            metadata
+            port                   The assigned IP port.
+            metadata               Metadata according to requested meta_keys.
         DELETE goodbye
             id
 
@@ -44,21 +49,27 @@ class HttpService(Service):
         GET  hello
         => returns:
             id
+            type
+            config_key
+            host
+            port
             pid
             status
-            metakeys
+            meta_keys
 
         # TODO:
         GET  help
         GET  status
         GET  stats
         POST shutdown
-        POST update       # causes (re)start
         POST start
         POST stop
         POST abort
         POST suspend
         POST resume
+
+        GET  metadata              Return changeset and metadata used by this service.
+        POST metadata              Receive changeset and *altered* metadata sections according to subscription.
     """
 
     metadata_keys = []
@@ -95,8 +106,9 @@ class HttpService(Service):
         self.add_route(self._mgmt_abort     , "GET|PUT|POST", "/abort"     , None)
         self.add_route(self._mgmt_suspend   , "GET|PUT|POST", "/suspend"   , None)
         self.add_route(self._mgmt_resume    , "GET|PUT|POST", "/resume"    , None)
-        # TODO (update):
-        self.add_route(self._mgmt_update    , "PUT|POST"    , "/update"    , None)
+
+        self.add_route(self._mgmt_metadata_get   , "GET"     , "/metadata"  , None)
+        self.add_route(self._mgmt_metadata_update, "PUT|POST", "/metadata"  , None)
 
         self._receiver = HttpMonitor(service=self, name="receiver", hook=self._hook)
         self.register_procs(self._receiver)
@@ -105,7 +117,7 @@ class HttpService(Service):
         res = requests.request(
             verb.lower(),
             "http://%s/%s" % (host, path),
-            data=json.dumps(data) if data else None,
+            data=tojson(data) if data else None,
             headers={"content-type": "application/json"},
             timeout=self.config.connection_timeout  # either float or tuple of (connect, read) timeouts
             #, auth=('user', '*****')
@@ -127,8 +139,11 @@ class HttpService(Service):
     #region Service management overrides
 
     def on_run(self):
+        if self.config.manager_endpoint == "standalone":
+            self.config.manager_endpoint = None
+
         data = self._build_hello_message(self.config.management_endpoint)
-        if self.config.manager_endpoint:
+        if self.config.manager_endpoint and not self.config.manager_endpoint == "standalone":
             # Say hello to manager, asking for a port number if we're missing one
             try:
                 content = self.remote(self.config.manager_endpoint, "post", "hello", data=data)
@@ -140,7 +155,14 @@ class HttpService(Service):
                 self.log.error("Communication with manager failed for 'hello' message: %s" % e)
                 return False
             data["port"] = content["port"]
-            self._metadata = content["metadata"]
+            # Apply metadata from response
+            metablock = content.get("metadata")
+            if metablock:
+                try:
+                    self.update_metadata(metablock.get("version"), metablock.get("data"), wait=True)
+                except Exception as e:
+                    self.log.exception("Error parsing metadata. But proceeding...")
+                    # Not returning false here, but letting it start with metadata still pending.
         else:
             self.log.info("No manager endpoint specified. Running stand-alone.")
             if not data["port"]:
@@ -154,7 +176,7 @@ class HttpService(Service):
         try:
             self._receiver.start()
         except Exception as e:
-            self.log.critical("Service managemnet listener failed to start.")
+            self.log.critical("Service management listener failed to start.")
             return False  # Not started; failed
 
         return True
@@ -343,12 +365,24 @@ class HttpService(Service):
         else:
             return {"error": "Processing was not resumed."}
 
-    # TODO
-    def _mgmt_update(self, request_handler, payload, **kwargs):
-        self.log.debug("called: update")
-        if self.update(payload):
-            return {"message": "Processing updated."}
-        else:
-            return {"error": "Processing was not updated."}
+    def _mgmt_metadata_get(self, request_handler, payload, **kwargs):
+        self.log.debug("called: get metadata")
+        ret = {
+            "version": self.metadata_version,
+            "keys": self.metadata_keys,
+            "data": self.metadata
+        }
+        return ret
+
+    def _mgmt_metadata_update(self, request_handler, payload, **kwargs):
+        self.log.debug("called: update metadata")
+        old_changeset = self.metadata_version
+        new_changeset = payload.get("version")
+        metadata = payload.get("data")
+
+        if new_changeset == old_changeset:
+            return {"warning": "Version '%s' is already in use; update ignored." % new_changeset}
+        self.update_metadata(new_changeset, metadata, wait=False)
+        return {"message": "Metadata updated to version '%s'. Reconfiguring now." % new_changeset}
 
     #endregion Command handlers
