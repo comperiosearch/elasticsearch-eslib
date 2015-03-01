@@ -391,6 +391,7 @@ class WebGetter(Generator):
 
 
     def on_open(self):
+        self.total = 0
         self._domains = []
         for domain_config in self.config.domains:
             self.add_domain(domain_config)

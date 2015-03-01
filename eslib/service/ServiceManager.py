@@ -143,9 +143,8 @@ class ServiceManager(HttpService, PipelineService):
         self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta"              , ["?commit:bool"])
         self.add_route(self._mgmt_metadata_get      , "GET"     , "/meta/{?version}"   , None)
 
-        self.add_route(self._mgmt_metadata_add      , "POST"    , "/meta/add"          , None)
+        self.add_route(self._mgmt_metadata_put      , "PUT|POST", "/meta/put"          , None)
         self.add_route(self._mgmt_metadata_remove   , "DELETE"  , "/meta/remove"       , None)
-        self.add_route(self._mgmt_metadata_update   , "PUT"     , "/meta/update"       , None)
         self.add_route(self._mgmt_metadata_delete   , "DELETE"  , "/meta/delete"       , None)
 
     @property
@@ -206,8 +205,6 @@ class ServiceManager(HttpService, PipelineService):
             service = self._reboot_ready.pop(0)
             self.log.info("Booting service '%s' as part of reboot request." % service.id)
             self._boot([service.id])
-
-# TODO: IF SERVICE IS MARKED DEAD; CLEAR service.metadata_pending QUEUE
 
         # Metadata change handling
         if self._metadata_pending:
@@ -1550,21 +1547,83 @@ class ServiceManager(HttpService, PipelineService):
                 "data"   : deepcopy(metaitem.data)
             }
 
-    def _mgmt_metadata_add(self, request_handler, payload, **kwargs):
-        self.log.debug("called: add metadata")
-        return {"error": "NOT IMPLEMENTED."}
+    def _mgmt_metadata_put(self, request_handler, payload, **kwargs):
+        # Can take list in data, and optionally merge instead of replace.
+        self.log.debug("called: put/append metadata")
+
+        path = payload.get("path")
+        data = payload.get("data")
+        merge_list = payload.get("merge") or False
+
+        if not path:
+            return {"error": "Missing path."}
+        if not data:
+            return {"error": "Missing list items."}
+
+        removed = False
+        error = False
+        with self._metadata_lock:
+            try:
+                changed = esdoc.put(self._metadata_edit, path, data, merge_list)
+                if removed:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to put data at path '%s': %s" (path, e)}
+        else:
+            return {"message": "Nothing changed." if not changed else "Something was changed."}
 
     def _mgmt_metadata_remove(self, request_handler, payload, **kwargs):
-        self.log.debug("called: remove metadata")
-        return {"error": "NOT IMPLEMENTED."}
+        self.log.debug("called: remove metadata list items")
 
-    def _mgmt_metadata_update(self, request_handler, payload, **kwargs):
-        self.log.debug("called: update metadata")
-        return {"error": "NOT IMPLEMENTED."}
+        path = payload.get("path")
+        data_list = payload.get("list")
+
+        if not path:
+            return {"error": "Missing path."}
+        if not data_list:
+            return {"error": "Missing list items."}
+
+        removed = False
+        error = False
+        with self._metadata_lock:
+            try:
+                removed = esdoc.remove_list_items(self._metadata_edit, path, data_list)
+                if removed:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to remove data at path '%s': %s" (path, e)}
+        else:
+            return {"message": "Nothing removed." if not removed else "Something was remove."}
 
     def _mgmt_metadata_delete(self, request_handler, payload, **kwargs):
-        self.log.debug("called: delete metadata")
-        return {"error": "NOT IMPLEMENTED."}
+        self.log.debug("called: delete metadata sections")
+
+        paths = payload.get("paths")
+        collapse = payload.get("collapse") or False
+
+        if not paths:
+            return {"error": "Missing paths."}
+
+        deleted = False
+        error = False
+        with self._metadata_lock:
+            try:
+                deleted = esdoc.delete(self._metadata_edit, paths, collapse)
+                if deleted:
+                    self._storage_save_meta_item(self._metadata_edit)
+            except Exception as e:
+                error = e
+
+        if error:
+            return {"error": "Failed to delete sections [%s]: %s" (", ".join(paths), e)}
+        else:
+            return {"message": "Nothing deleted." if not deleted else "Something was deleted."}
 
     #endregion Metadata interface commands
 
