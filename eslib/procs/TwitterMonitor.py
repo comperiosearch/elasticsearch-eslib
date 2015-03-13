@@ -50,6 +50,9 @@ class TwitterMonitor(Monitor):
         follow                 = []       : List of users to track.
         locations              = []       : List of locations to track. "longitude,latitude"
         drop_retweets          = False    : Do not report tweets from retweets if set. User relation "quote" will still be reported.
+        keep_languages         = []       : Keep only named language codes, or all if none specified.
+                                            ISO 639-1 alpha-2 or ISO 639-3 alpha-3.
+        drop_languages         = []       : Drop specified language codes.
         max_reconnect_attempts = 10    : Maximum number of attempts to try a reconnect to Twitter.
 
     For more information about what you can listen to and how it is matched, see:
@@ -73,6 +76,8 @@ class TwitterMonitor(Monitor):
             follow                 = [],
             locations              = [],
             drop_retweets          = False,
+            keep_languages         = [],
+            drop_languages         = [],
             max_reconnect_attempts = 10
         )
 
@@ -379,6 +384,16 @@ class TwitterMonitor(Monitor):
         # This user...
         raw_user = raw["user"]  # Always present
         user = { "id": raw_user["id_str"] }
+
+        # Drop languages according to config, unless user is on watch list. In that case we always keep it.
+        lang = raw["lang"].split("-", 1)[0]
+        if self.config.keep_languages:
+            if lang in self.config.keep_languages:
+                pass
+            else:
+                return (None, None)
+        elif self.config.drop_languages and lang in self.config.drop_languages:
+            return (None, None)
 
         ts["user"] = user
         self._setfield(raw_user, user, "screen_name")
