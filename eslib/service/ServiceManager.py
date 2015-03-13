@@ -1395,9 +1395,9 @@ class ServiceManager(HttpService, PipelineService):
                         failed.append(id)
                 elif ss in [status.PROCESSING, status.SUSPENDED, status.PENDING, status.STOPPING, status.CLOSING]:
                     continue  # Already running, so booting not required
-                else:
+                elif boot_state == status.PROCESSING:
                     # Start processing
-                    res = self._start_processing([id])
+                    res = self._start_processing([id], False)
                     error = res.get("error")
                     if error:
                         failed.append(id)
