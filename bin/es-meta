@@ -148,7 +148,7 @@ def cmd_get(host, format, version):
     if content is None:
         print >>sys.stderr, "Content missing."
     else:
-        print content
+        print tojson(content)
 
 # TODO: NOT TESTED
 # put [options] [--merge] <path> [DATA]

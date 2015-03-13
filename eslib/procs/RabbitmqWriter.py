@@ -34,7 +34,9 @@ class RabbitmqWriter(Processor, RabbitmqBase):
                                          from it, thus splitting workload (intended) or competing for the
                                          same data (unintended).
         queue             = "default"  : Not used if 'exchange' is specified.
-
+        persisting        = True       : When this is on, the exchange will store data in a queue until it
+                                         is consumed by a consuming monitor. Otherwise, data will only be
+                                         queued if there is a listener.
         max_reconnects    = 3          :
         reconnect_timeout = 3          :
     """
@@ -43,6 +45,10 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         super(RabbitmqWriter, self).__init__(**kwargs)
 
         self._connector = self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
+
+        self.config.set_default(
+            persisting = True
+        )
 
     def on_open(self):
         self.count = 0

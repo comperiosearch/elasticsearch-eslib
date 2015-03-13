@@ -36,6 +36,7 @@ from .CLIReader             import CLIReader
 from .RssMonitor            import RssMonitor
 from .Timer                 import Timer
 from .DateExpander          import DateExpander
+from .SmtpMailer            import SmtpMailer
 
 __all__ = (
     "ElasticsearchReader",
@@ -65,5 +66,6 @@ __all__ = (
     "CLIReader",
     "RssMonitor",
     "Timer",
-    "DateExpander"
+    "DateExpander",
+    "SmtpMailer"
 )

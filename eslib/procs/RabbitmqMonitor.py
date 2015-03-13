@@ -22,11 +22,10 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
         password          = guest      :
         virtual_host      = None       :
         exchange          = None       :
+        queue             = "default"  : Not used if 'exchange' is specified.
         consuming         = True       : Consume from the queue, rather than to listen on an
                                          exclusive queue that will be deleted when disconnect.
                                          Non-consuming behaviour only works with an 'exchange'.
-        queue             = "default"  : Not used if 'exchange' is specified.
-
         max_reconnects    = 3          :
         reconnect_timeout = 3          :
     """
@@ -113,7 +112,11 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
 
         try:
             self._calc_total()
-            self._channel.connection.process_data_events()
+            if self.congestion():
+                self.log.debug("Congestion in dependencies; sleeping 10 seconds.")
+                self.congestion_sleep(10.0)
+            else:
+                self._channel.connection.process_data_events()
         except Exception as e:
             if self._reconnecting >= 0:
                 self.log.info("No open connection to RabbitMQ. Trying to reconnect.")

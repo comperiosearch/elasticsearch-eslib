@@ -414,7 +414,8 @@ class TwitterMonitor(Monitor):
         if raw_retweet:
             # Find out who has been retweeted:
             ts["retweet_user_id"] = raw_retweet["user"]["id_str"]
-            if self.config.drop_retweets:
+            # Make sure we get retweets for users we follow, as we might not get them through term tracking
+            if self.config.drop_retweets and not user["id"] in self._twitter_filter["follow"]:
                 return (None, None)
 
         self._setfield(raw, ts, "text")
