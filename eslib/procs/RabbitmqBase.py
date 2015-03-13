@@ -22,7 +22,8 @@ class RabbitmqBase(Configurable):
             virtual_host = None,
             queue        = "default",
             exchange     = None,
-            consuming    = True
+            consuming    = True,  # Used by monitor/reader
+            persisting   = True,  # Used by writer
         )
 
         self.config.max_reconnects    = 3
@@ -142,11 +143,12 @@ class RabbitmqBase(Configurable):
             self._channel.exchange_declare(exchange=self.config.exchange, type="fanout")
 
             # Make sure one durable queue exists
-            result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
+            if self.config.persisting:
+                result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
             # If this is a writer or a shared/consuming reader, this is the queue we keep track of
 
             # Otherwise, use this exclusive queue that will be deleted when we close the connection:
-            if not self.config.consuming:
+            if not self.config.persisting or not self.config.consuming:
                 # This queue will be deleted when we close the connection.
                 # TODO: Perhaps create the ID ("queue") ourselves so it is easier to see which exchange it belongs to?
                 result = self._channel.queue_declare(exclusive=True)
