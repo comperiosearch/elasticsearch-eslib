@@ -65,7 +65,7 @@ class SmtpMailer(Processor):
 
 
     def _mail_text(self, smtp_server, recipients, subject, sender=None, content=None, username=None, password=None):
-        msg = MIMEText(content, "plain")
+        msg = MIMEText(content, "plain", "utf-8")
 
         if not sender:
             sender = "@".join((getpass.getuser(), platform.node()))
