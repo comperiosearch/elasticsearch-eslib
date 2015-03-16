@@ -1430,21 +1430,21 @@ class ServiceManager(HttpService, PipelineService):
                 ss = self._get_status(service)
                 if ss == status.DEAD:
                     self._reboot_ready.append(service)
-
-                error = None
-                try:
-                    data = None
-                    content = self.remote(service.addr, "delete", "shutdown", data)
-                    error = content.get("error")
-                except Exception as e:
-                    error = str(e)
-                if error:
-                    self.log.warning("Service '%s' failed to shut down: %s" % (id, error))
-                    failed.append(id)
                 else:
-                    self.log.info("Shutdown message sent to service '%s'." % id)
-                    succeeded.append(id)
-                    self._reboot_wait.append(service)
+                    error = None
+                    try:
+                        data = None
+                        content = self.remote(service.addr, "delete", "shutdown", data)
+                        error = content.get("error")
+                    except Exception as e:
+                        error = str(e)
+                    if error:
+                        self.log.warning("Service '%s' failed to shut down: %s" % (id, error))
+                        failed.append(id)
+                    else:
+                        self.log.info("Shutdown message sent to service '%s'." % id)
+                        succeeded.append(id)
+                        self._reboot_wait.append(service)
 
         ret = {}
         if failed:
