@@ -21,6 +21,7 @@ class SmtpMailer(Processor):
         username          = None
         password          = None
         sender            = None
+        from_name         = None          : Name to be added to sender into the From field, becomes: '"from_name" <user@domain.com>'
         recipients        = []            : List of recipient email addresses (no mail or brackets or other fuzz).
         subject           = None
     """
@@ -34,7 +35,7 @@ class SmtpMailer(Processor):
             username            = None,
             password            = None,
             sender              = None,
-            message_from        = None,
+            from_name           = None,
             recipients          = None,
             subject             = None,
         )
@@ -57,7 +58,7 @@ class SmtpMailer(Processor):
                 self.config.recipients,
                 self.config.subject,
                 self.config.sender,
-                self.config.message_from,
+                self.config.from_name,
                 content,
                 self.config.username,
                 self.config.password)
@@ -66,14 +67,16 @@ class SmtpMailer(Processor):
             self.log.exception("Failed to send email.")
 
 
-    def _mail_text(self, smtp_server, recipients, subject, sender=None, message_from=None, content=None, username=None, password=None):
+    def _mail_text(self, smtp_server, recipients, subject, sender=None, from_name=None, content=None, username=None, password=None):
         msg = MIMEText(content, "plain", "utf-8")
 
         if not sender:
             sender = "@".join((getpass.getuser(), platform.node()))
 
+        message_from = sender if not from_name else '"%s" <%s>' % (from_name, sender)
+
         msg['Subject'] = subject
-        msg['From']    = message_from or sender
+        msg['From']    = message_from
         msg['To']      = ", ".join(recipients)
 
         s = None
