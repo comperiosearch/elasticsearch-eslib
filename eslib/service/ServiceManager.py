@@ -1246,7 +1246,7 @@ class ServiceManager(HttpService, PipelineService):
             else:
                 service = self._services[id]
                 if not service.pid:
-                    self.log.debug("Missing pid for servivce '%s'; cannot kill." % id)
+                    self.log.debug("Missing pid for service '%s'; cannot kill." % id)
                     failed.append(id)
                 else:
                     dead = False
