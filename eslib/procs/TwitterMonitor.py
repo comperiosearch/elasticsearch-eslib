@@ -372,7 +372,11 @@ class TwitterMonitor(Monitor):
         now = datetime.datetime.utcnow()
 
         #print raw  # DEBUG
-        tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
+        tweet = None
+        try:
+            tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
+        except Exception as e:
+            self.doclog.debug("WTF is it with stuff missing id_str???:\n%s\n" % str(raw))
 
         ts = tweet["_source"] = {"id": raw["id_str"] }  # id repeated intentionally
 
