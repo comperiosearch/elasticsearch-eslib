@@ -14,6 +14,7 @@ from .Service            import Service, status
 from .HttpService        import HttpService
 from .PipelineService    import PipelineService
 from .ServiceManager     import ServiceManager
+from .ServiceLauncher    import ServiceLauncher
 from .DummyService       import DummyService
 
 
@@ -22,5 +23,6 @@ __all__ = (
     "HttpService",
     "PipelineService",
     "ServiceManager",
+    "ServiceLauncher",
     "DummyService"
 )

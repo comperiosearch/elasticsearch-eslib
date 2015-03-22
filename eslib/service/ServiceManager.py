@@ -13,6 +13,8 @@ from elasticsearch import Elasticsearch
 from elasticsearch.client.indices import IndicesClient
 from elasticsearch.helpers import scan
 
+from .ServiceLauncher import ServiceLauncher  # Just to get the type name
+
 
 class ServiceInfo(object):
     def __init__(self):
@@ -94,12 +96,7 @@ class ServiceManager(HttpService, PipelineService):
         self._metadata_lock     = Lock()
         self._metadata_pending  = None
 
-        # For dynamic port allocation:
         self._available_ports = {}
-        for dpr in self.config.dynamic_port_ranges:
-            ports = self._available_ports[dpr[0]] = []
-            for port in range(dpr[1], dpr[2]+1):
-                ports.append(port)
 
         self._timer = None
         self._upload_queue = None
@@ -160,7 +157,7 @@ class ServiceManager(HttpService, PipelineService):
             elasticsearch_hosts     = config["elasticsearch_hosts"],
             elasticsearch_index     = config["elasticsearch_index"],
 
-            dynamic_port_range      = config.get("dynamic_port_range")
+            dynamic_port_ranges     = config.get("dynamic_port_ranges")
         )
 
     def on_setup(self):
@@ -183,6 +180,13 @@ class ServiceManager(HttpService, PipelineService):
 
         #  Register them for debug dumping
         self.register_procs(*procs)
+
+        # For dynamic port allocation:
+        self._available_ports = {}
+        for dpr in self.config.dynamic_port_ranges:
+            ports = self._available_ports[dpr[0]] = []
+            for port in range(dpr[1], dpr[2]+1):
+                ports.append(port)
 
         return True
 
@@ -211,7 +215,7 @@ class ServiceManager(HttpService, PipelineService):
             old_item, new_item = self._metadata_pending
             self._metadata_pending = None
 
-            # TODO: Create a diff to see which sections are monified...
+            # TODO: Create a diff to see which sections are modified...
 
             for service in list(self._services.values()):
                 # TODO: Ask each service for latest status instead?
@@ -431,6 +435,21 @@ class ServiceManager(HttpService, PipelineService):
         return False
 
     #endregion Dynamic port allocation helpers
+
+    #region Remote launcher helpers
+
+    def _on_remote_host(self, service):
+        host, port = self.config.management_endpoint.split(":")
+        return service.host != host
+
+    def _get_remote_launcher(self, service):
+        launcher_type_name = ServiceLauncher.__name__
+        for candidate in self._services.values():
+            if (candidate.type == launcher_type_name) and (service.host == candidate.host):
+                return candidate
+        return None
+
+    #endregion Remote launcher helpers
 
     #region Helper methods :: services
 
@@ -1107,7 +1126,7 @@ class ServiceManager(HttpService, PipelineService):
 
         extra_info = ""
         if self._release_port(service.host, service.port):
-            extra_info = " Dynamic port '%s' released back to pool." % (service.addr)
+            extra_info = " Dynamic port '%s' released back to pool." % service.addr
             if not service.fixed_port:
                 service.port = None
         if service.guest:
@@ -1127,7 +1146,6 @@ class ServiceManager(HttpService, PipelineService):
             return {"message": "Manager waves goodbye back to service '%s'.%s" % (id, extra_info)}
 
     def _run_services(self, ids, all=False, start=None):
-        # TODO: Launch service on remote host
         succeeded = []
         failed = []
         if all:
@@ -1152,6 +1170,47 @@ class ServiceManager(HttpService, PipelineService):
         return ret
 
     def _launch_service(self, service, start):
+        if self._on_remote_host(service):
+            return self._launch_remote_service(service, start)
+        else:
+            return self._launch_local_service(service, start)
+
+    def _launch_remote_service(self, service, start):
+        self.log.debug("Launching service '%s' on remote host at '%s'." % (service.id, service.addr))
+
+        launcher = self._get_remote_launcher(service)
+        if not launcher:
+            self.log.error("Launching service '%s' requires a launcher on host '%s'. None found." % (service.id, service.host))
+            return False
+
+        data = {
+            "id"              : service.id,
+            "config_key"      : service.config_key,
+            "endpoint"        : service.addr,
+            "manager_endpoint": self.config.management_endpoint,  # This manager address
+            "start"           : start
+        }
+        error = None
+        try:
+            content = self.remote(launcher.addr, "post", "launch", data)
+            error = content.get("error")
+        except Exception as e:
+            error = str(e)
+        if error:
+            self.log.error("Error communicating with launcher at '%s': %s" % (launcher.addr, error))
+            return False
+        pid = content.get("pid")
+        if not pid:
+            return False
+
+        service.pid = pid
+        # No need to save this yet; wait for registration call to do that.
+
+        self.log.status("Service '%s' launched on remote host at '%s' with pid=%d." % (service.id, service.addr, service.pid))
+
+        return True
+
+    def _launch_local_service(self, service, start):
         #runner = "/Users/htb/git/elasticsearch-eslib/bin/es-run"
         #run_dir = "/Users/htb/git/customer-nets/services"
 
@@ -1232,8 +1291,6 @@ class ServiceManager(HttpService, PipelineService):
         # This is only for extreme cases.
         # Normally, a shutdown should do the trick.
 
-        # TODO: Kill service on remote host
-
         succeeded = []
         failed = []
         if all:
@@ -1250,29 +1307,66 @@ class ServiceManager(HttpService, PipelineService):
                     failed.append(id)
                 else:
                     dead = False
-                    try:
-                        if force:
-                            self.log.debug("Forcefully kill service '%s', pid=%d." % (id, service.pid))
-                        else:
-                            self.log.debug("Attempting to kill service '%s', pid=%d." % (id, service.pid))
-                        os.kill(service.pid, signal.SIGKILL if force else signal.SIGTERM)
-                    except OSError as e:
-                        self.log.debug("Killing service '%s', pid=%d, failed. errno=" % (id, service.pid, e.errno))
-                        failed.append(id)
-                        if e.errno == 3:  # does not exist
-                            dead = True  # Although kill failed, consider it dead (because it does no longer exist)
+                    if force:
+                        self.log.debug("Forcefully kill service '%s', pid=%d." % (id, service.pid))
                     else:
-                        # SIGTERM kills should cause a shutdown which will later cause a 'goodbye' notification back to this manager.
-                        if force:
-                            dead = True  # Consider it gone
-                        succeeded.append(id)
+                        self.log.debug("Attempting to kill service '%s', pid=%d." % (id, service.pid))
+
+                    if self._on_remote_host(service):
+
+                        # Kill on remote
+
+                        launcher = self._get_remote_launcher(service)
+                        if not launcher:
+                            self.log.error("Killing service '%s' requires a launcher on host '%s'. None found." % service.name, service.host)
+                            failed.append(id)
+                        else:
+                            data = {
+                                "id"   : service.id,
+                                "pid"  : service.pid,
+                                "force": force
+                            }
+                            error = None
+                            try:
+                                content = self.remote(launcher.addr, "delete", "kill", data)
+                                error = content.get("error")
+                            except Exception as e:
+                                error = str(e)
+                            if error:
+                                self.log.error("Error communicating with launcher at '%s': %s" % (launcher.addr, error))
+                                failed.append(id)
+                            dead = content.get("killed") or False
+                            # It may not be dead quite yet, but we have successfully submitted a kill signal,
+                            # so it is hopefully going down.
+                            succeeded.append(id)
+
+                    else:
+
+                        # Kill locally
+
+                        try:
+                            os.kill(service.pid, signal.SIGKILL if force else signal.SIGTERM)
+                        except OSError as e:
+                            self.log.debug("Killing service '%s', pid=%d, failed. errno=" % (id, service.pid, e.errno))
+                            failed.append(id)
+                            if e.errno == 3:  # does not exist
+                                dead = True  # Although kill failed, consider it dead (because it does no longer exist)
+                        else:
+                            # SIGTERM kills should cause a shutdown which will later cause a 'goodbye' notification back to this manager.
+                            if force:
+                                dead = True  # Consider it gone
+                                succeeded.append(id)
+                            else:
+                                # It may not be dead quite yet, but we have successfully submitted a kill signal,
+                                # so it is hopefully going down.
+                                succeeded.append(id)
 
                     if dead:
                         service.last_seen = self._now
                         self.error = None
                         self.fail_count = 0  # Because we killed it..
                         self._remove_dead_service(service)
-                        succeeded.append(id)
+                        #succeeded.append(id)
 
         ret = {}
         if failed:

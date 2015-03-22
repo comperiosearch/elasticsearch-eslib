@@ -4,11 +4,12 @@
 # The purpose of this service is to launch and kill local services as requested by the service manager.
 # Note: This service needs not enter "processing" mode, as there is no document processing or timer.
 
-from eslib.service import HttpService, status
-import datetime, os, signal, subprocess, sys
+from eslib.service import HttpService, PipelineService
+from eslib.procs import Timer
+import os, signal, subprocess, sys
 
 
-class ServiceLauncher(HttpService):
+class ServiceLauncher(HttpService, PipelineService):
 
     def __init__(self, **kwargs):
         super(ServiceLauncher, self).__init__(**kwargs)
@@ -17,9 +18,11 @@ class ServiceLauncher(HttpService):
             management_endpoint     = "localhost:5000", # for this service...
             service_runner          = None,
             service_dir             = None,
+
+            keepalive_frequency     = 60.0  # 10 seconds
         )
 
-        self.add_route(self._mgmt_service_launc     , "POST|PUT", "/launch"     , None)
+        self.add_route(self._mgmt_service_launch    , "POST|PUT", "/launch"     , None)
         self.add_route(self._mgmt_service_kill      , "DELETE"  , "/kill"       , None)
 
 
@@ -28,14 +31,56 @@ class ServiceLauncher(HttpService):
             management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
             service_runner          = config.get("service_runner"),
             service_dir             = config.get("service_dir"),
+
+            keepalive_frequency     = config.get("keepalive_frequency") or self.config.keepalive_frequency
         )
+
+    def on_setup(self):
+        self._timer = Timer(actions=[(self.config.keepalive_frequency, self.config.keepalive_frequency, "ping")])
+        self._timer.add_callback(self._say_hello)
+
+        procs = [self._timer]
+
+        # Link procs (just one in this case..)
+        self.link(*procs)
+
+        #  Register them for debug dumping
+        self.register_procs(*procs)
+
+        return True
+
+    def _say_hello(self, doc):
+        # The manager may have booted since this service registered, and in case we only registered as guest, we
+        # should attempt to re-register just to make sure the manager knows about us. If we are permanently registered,
+        # (i.e. not "guest", then this is unnecessary.
+
+        data = self._build_hello_message(self.config.management_endpoint)
+        if self.config.manager_endpoint and not self.config.manager_endpoint == "standalone":
+            # Say hello to manager
+            self.log.debug("Sending keepalive 'hello' message to manager.")
+            try:
+                content = self.remote(self.config.manager_endpoint, "post", "hello", data=data)
+                error = content.get("error")
+                if error:
+                    self.log.error("Error from manager: %s" % error)
+                    return
+            except Exception as e:
+                self.log.warning("Communication with manager failed for 'hello' message: %s" % e)
+                return
+            # Apply metadata from response
+            metablock = content.get("metadata")
+            if metablock:
+                try:
+                    self.update_metadata(metablock.get("version"), metablock.get("data"), wait=True)
+                except Exception as e:
+                    self.log.exception("Error parsing metadata. But proceeding...")
 
     #region Service interface commands
 
     def _mgmt_service_launch(self, request_handler, payload, **kwargs):
         id = payload.get("id") or []
         self.log.debug("called: launch service '%s'" % id)
-        return self._run_services(
+        return self._launch_service(
             id,
             payload.get("config_key"),
             payload["endpoint"],
@@ -44,7 +89,7 @@ class ServiceLauncher(HttpService):
         )
 
     def _mgmt_service_kill(self, request_handler, payload, **kwargs):
-        id = int(payload.get("id"))
+        id = payload.get("id")
         pid = int(payload.get("pid"))
         self.log.debug("called: kill service '%s', pid '%s'" % (id, pid))
         return self._kill_services(
@@ -126,7 +171,7 @@ class ServiceLauncher(HttpService):
                 self.log.debug("Attempting to kill service '%s', pid=%d." % (id, pid))
             os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
         except OSError as e:
-            self.log.debug("Killing service '%s', pid=%d, failed. errno=" % (id, pid, e.errno))
+            self.log.debug("Killing service '%s', pid=%d, failed. errno=%d" % (id, pid, e.errno))
             if e.errno == 3:  # does not exist
                 dead = True  # Although kill failed, consider it dead (because it does no longer exist)
         else:

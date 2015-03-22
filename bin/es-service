@@ -454,7 +454,7 @@ Usage:
   %(prog)s stats    [options] <name> [<stat_fields...>]
 
   %(prog)s add      [options] [--start] <name>
-                    [-b <boot_state>] -c <config_tag>] [-s <server_address>]
+  %(pspc)s          [-b <boot_state>] -c <config_tag>] [-s <server_address>]
   %(prog)s remove   [options] [--stop] <names...>
 
   %(prog)s run      [options] [--all] [--start] <names...>
@@ -470,12 +470,6 @@ Usage:
   %(prog)s set-boot [options] <state> [--all] <names...>
   %(prog)s boot     [options] [--all] <names...>
   %(prog)s reboot   [options] [--all] <names...>
-
-  # DEBUG:
-
-  %(prog)s update [options] [-f file] [path] #post
-  %(prog)s meta   [options] #get
-  # add/remove/replace meta sections?
 
 Common options:
   --host=<host>
@@ -617,6 +611,7 @@ Boot states are one of %(boot_states)s.
     if len(sys.argv) == 1:
         print usage.strip() % {
             "prog": parser.prog,
+            "pspc": " "*len(parser.prog),
             "boot_states" :  ", ".join([("'%s'" % b) for b in BOOT_STATES])
         }
         sys.exit(1)

@@ -264,7 +264,7 @@ def run_service(
         service = service_type(name=service_name)
         service.config_file = config_file_path  # The manager needs to know this so it can spawn processes based on the same config
         service.config_key = config_section
-        service.configure(credentials, global_config.get(config_section), global_config)
+        service.configure(credentials, global_config.get(config_section) or {}, global_config)
         if manager_endpoint:
             service.config.manager_endpoint = manager_endpoint
         if endpoint:

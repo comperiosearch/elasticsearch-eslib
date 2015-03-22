@@ -100,7 +100,6 @@ class HttpService(Service):
 
         self.add_route(self._mgmt_shutdown  , "DELETE"      , "/shutdown"  , None)
         self.add_route(self._mgmt_start     , "GET|PUT|POST", "/start"     , None)
-        # TODO (restart):
         self.add_route(self._mgmt_restart   , "GET|PUT|POST", "/restart"   , None)
         self.add_route(self._mgmt_stop      , "GET|PUT|POST", "/stop"      , None)
         self.add_route(self._mgmt_abort     , "GET|PUT|POST", "/abort"     , None)
