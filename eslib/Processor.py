@@ -348,7 +348,7 @@ class Processor(Configurable):
         """
         List of methods to be called after the processor has successfully started.
         Register with started.append(my_method), where my_method has signature
-        my_method().
+        my_method(proc).
         """
         return self._event_started
 
@@ -357,7 +357,7 @@ class Processor(Configurable):
         """
         List of methods to be called after the processor has successfully stopped/completed.
         Register with started.append(my_method), where my_method has signature
-        my_method().
+        my_method(proc).
         """
         return self._event_stopped
 
@@ -366,7 +366,7 @@ class Processor(Configurable):
         """
         List of methods to be called after the processor has been aborted.
         Register with started.append(my_method), where my_method has signature
-        my_method().
+        my_method(proc).
         """
         return self._event_aborted
 
@@ -483,13 +483,13 @@ class Processor(Configurable):
         if self.aborted:
             for func in self.event_aborted:
                 try:
-                    func()
+                    func(self)
                 except Exception as e:
                     self.log.exception("Unhandled exception in an event handler for 'aborted'.")
         else:
             for func in self.event_stopped:
                 try:
-                    func()
+                    func(self)
                 except Exception as e:
                     self.log.exception("Unhandled exception in an event handler for 'stopped'.")
 
@@ -543,7 +543,7 @@ class Processor(Configurable):
         # Notify everyone subscribing to 'event_started' events
         for func in self.event_started:
             try:
-                func()
+                func(self)
             except Exception as e:
                 self.log.exception("Unhandled exception in an event handler for 'started'.")
 
