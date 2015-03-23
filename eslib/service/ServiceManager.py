@@ -157,7 +157,9 @@ class ServiceManager(HttpService, PipelineService):
             elasticsearch_hosts     = config["elasticsearch_hosts"],
             elasticsearch_index     = config["elasticsearch_index"],
 
-            dynamic_port_ranges     = config.get("dynamic_port_ranges")
+            dynamic_port_ranges     = config.get("dynamic_port_ranges"),
+
+            all_interfaces          = config.get("all_interfaces")  # Listen on all interfaces (0.0.0.0) if set
         )
 
     def on_setup(self):

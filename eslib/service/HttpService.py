@@ -52,6 +52,7 @@ class HttpService(Service):
             type
             config_key
             host
+            all_interfaces = False   : Listen on all interfaces (0.0.0.0) if set.
             port
             pid
             status
@@ -82,6 +83,8 @@ class HttpService(Service):
             manager_endpoint    = None,
             # The host:port endpoint where this service will listen for management commands
             management_endpoint = "localhost:4444",
+            # Listen on all interfaces (0.0.0.0) if set.
+            all_interfaces = False,
 
             connection_timeout = (3.5, 60)  # Whe connecting to other services
         )
@@ -167,10 +170,11 @@ class HttpService(Service):
             if not data["port"]:
                 self.log.critical("Port must be specified when running stand-alone.")
                 exit(1)
-        self._receiver.config.host = data["host"]
+        listener_host = "0.0.0.0" if self.config.all_interfaces else data["host"]
+        self._receiver.config.host = listener_host
         self._receiver.config.port = data["port"]
 
-        self.log.info("Starting service management listener on '%s:%d'." % (self._receiver.config.host, self._receiver.config.port))
+        self.log.info("Starting service management listener on '%s:%d'." % (listener_host, self._receiver.config.port))
 
         try:
             self._receiver.start()
