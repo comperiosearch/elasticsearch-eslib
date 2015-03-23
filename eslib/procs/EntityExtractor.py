@@ -18,6 +18,7 @@ class EntityExtractor(Processor):
             pattern    str          # Pattern to use for finding a match. (Not always applicable.)
             weight     float        # How much weight to apply to this match. Will be multiplied with matching algorithm
                                       score to determine the final entity score.
+            weights    dict {str: float}  # Additional weights per language (as key) (ISO 639-1 alpha-2, ISO 639-3 alpha-3)
 
     The result pattern under the 'entities' section of the document:
 
@@ -57,9 +58,10 @@ class EntityExtractor(Processor):
         self.output_entities = self.create_socket("entities", "entities", "The extracted entities only.")
 
         self.config.set_default(
-            entities  = [],
-            fields    = [],
-            target    = "entities"
+            entities       = [],
+            fields         = [],
+            language_field = None,
+            target         = "entities"
         )
 
         self._regex_exact = {}
@@ -74,19 +76,21 @@ class EntityExtractor(Processor):
                     if pattern and not pattern in self._regex_exact:
                         self._regex_exact[pattern] =\
                             re.compile(
-                                self._regex_exact_format % pattern,
+                                self._regex_exact_format % pattern.replace("*", ".*"),
                                 flags=self._regex_exact_flags
                             )
 
     def _incoming_esdoc(self, doc):
         if self.has_output:
+            lang = esdoc.getfield(doc, "_source." + self.config.language_field) if self.config.language_field else None
+
             extracted = []
             for field in self.config.fields:
                 text = esdoc.getfield(doc, "_source." + field)
                 if text is not None:
-                    if not type(text) in [str, unicode]:
+                    if isinstance(text, basestring):
                         self.doclog.warning("Configured field '%s' of unsupported type '%s'. Doc id='%s'." % (field, type(text), doc.get("_id")))
-                    e = self._extract(field, text)
+                    e = self._extract(field, text, lang)
                     if e:
                         extracted.extend(e)
 
@@ -131,7 +135,7 @@ class EntityExtractor(Processor):
         return entities
 
 
-    def _extract(self, field, text):
+    def _extract(self, field, text, lang=None):
         """
         Extract as per entity extraction config from 'text'. 'field' is the name of the field containing the text, or None.
         Return type is a tuple of (category, name, match), where match is a dict.
@@ -147,6 +151,17 @@ class EntityExtractor(Processor):
                 weight = match.get("weight")
                 if weight is None:
                     weight = 1.0
+                language_weights = match.get("weights") or {}
+                language_weight = 1.0
+
+                if lang in language_weights:
+                    language_weight=language_weights[lang]
+                elif "*" in language_weights:
+                    language_weight = language_weights["*"]
+                # Skip 0-weights
+                if language_weights == 0.0 or weight == 0.0:
+                    continue
+
                 if t == "exact":
                     extracted = self._extract_exact(pattern, text)
                 elif t == "email":
@@ -171,7 +186,7 @@ class EntityExtractor(Processor):
                             "value"  : txt,
                             "indices": span,
                             "field"  : field,
-                            "score"  : score * weight
+                            "score"  : score * weight * language_weight
                         }
                     )
 

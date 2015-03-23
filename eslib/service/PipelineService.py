@@ -10,12 +10,12 @@ class PipelineService(Service):
         self.head = None
         self.tail = None
 
-    def _log_finished(self):
+    def _log_finished(self, proc):
         self.log.status("Processing finished.")
         self._processing = False  # This will shortcut further evaluation of whether we are processing
         self.stat_processing_ended = time.time()
 
-    def _log_aborted(self):
+    def _log_aborted(self, proc):
         self.log.status("Processing finished after abort.")
         self._processing_aborted = True  # This will shortcut further evaluation of whether we are aborted
         self.stat_processing_ended = time.time()
