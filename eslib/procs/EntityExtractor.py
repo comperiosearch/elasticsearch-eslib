@@ -76,7 +76,7 @@ class EntityExtractor(Processor):
                     if pattern and not pattern in self._regex_exact:
                         self._regex_exact[pattern] =\
                             re.compile(
-                                self._regex_exact_format % pattern.replace("*", ".*"),
+                                self._regex_exact_format % pattern.replace("*", ".*?"),  # Non greedy
                                 flags=self._regex_exact_flags
                             )
 
@@ -88,7 +88,7 @@ class EntityExtractor(Processor):
             for field in self.config.fields:
                 text = esdoc.getfield(doc, "_source." + field)
                 if text is not None:
-                    if isinstance(text, basestring):
+                    if not isinstance(text, basestring):
                         self.doclog.warning("Configured field '%s' of unsupported type '%s'. Doc id='%s'." % (field, type(text), doc.get("_id")))
                     e = self._extract(field, text, lang)
                     if e:
