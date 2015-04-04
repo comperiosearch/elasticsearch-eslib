@@ -41,6 +41,11 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         reconnect_timeout = 3          :
     """
 
+    MAX_CONNECTOR_QUEUE_SIZE = 10000
+    MAX_MQ_QUEUE_SIZE        = 100000
+
+    _is_reader = False  # This is a writer
+
     def __init__(self, **kwargs):
         super(RabbitmqWriter, self).__init__(**kwargs)
 
@@ -87,4 +92,10 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             self.count += 1
 
     def is_congested(self):
-        return self._connector.queue.qsize() > 10000
+        if self._connector.queue.qsize() > self.MAX_CONNECTOR_QUEUE_SIZE:
+            return True
+        elif not self.config.exchange or self.config.persisting:
+            if self.get_queue_size() > self.MAX_MQ_QUEUE_SIZE:
+                return True
+
+        return False

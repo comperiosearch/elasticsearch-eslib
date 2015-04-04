@@ -35,6 +35,8 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
                                 # target for ETA calculations.
     CALC_TOTAL_INTERVAL = 10.0  # seconds
 
+    _is_reader = True
+
     def __init__(self, **kwargs):
         super(RabbitmqMonitor, self).__init__(**kwargs)
 

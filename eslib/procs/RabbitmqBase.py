@@ -10,6 +10,9 @@ import pika
 import time
 
 class RabbitmqBase(Configurable):
+
+    _is_reader = True  # For inheriting classes to specify.
+
     def __init__(self, **kwargs):
         super(RabbitmqBase, self).__init__(**kwargs)
 
@@ -127,6 +130,7 @@ class RabbitmqBase(Configurable):
     #region Pika connection management helpers
 
     def _open_connection(self):
+
         credentials = None
         if self.config.username:
             credentials = pika.PlainCredentials(self.config.username, self.config.password)
@@ -138,28 +142,51 @@ class RabbitmqBase(Configurable):
             virtual_host=self.config.virtual_host,
             heartbeat_interval=60))
         self._channel = self._connection.channel()
-        # Make sure the exchange exists (if any)
+
         if self.config.exchange:
+            # Make sure the exchange exists
             self._channel.exchange_declare(exchange=self.config.exchange, type="fanout")
 
-            # Make sure one durable queue exists
-            if self.config.persisting:
-                result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
-            # If this is a writer or a shared/consuming reader, this is the queue we keep track of
+            if self._is_reader:
+                self._open_connection_reader()
+            else:
+                self._open_connection_writer()
 
-            # Otherwise, use this exclusive queue that will be deleted when we close the connection:
-            if not self.config.persisting or not self.config.consuming:
-                # This queue will be deleted when we close the connection.
-                # TODO: Perhaps create the ID ("queue") ourselves so it is easier to see which exchange it belongs to?
-                result = self._channel.queue_declare(exclusive=True)
-
-            # Bind queue to exchange
-            self._queue_name = result.method.queue
-            self._channel.queue_bind(exchange=self.config.exchange, queue=self._queue_name)
         else:
             # Make sure the queue exists
             result = self._channel.queue_declare(queue=self.config.queue, durable=True)
             self._queue_name = result.method.queue
+
+    def _open_connection_reader(self):
+
+        # Exchange mode only handled here. (Not queue-only mode.)
+
+        if self.config.consuming:
+            # Shared/consuming mode.
+            result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
+        else:
+            # Exclusive/non-consuming mode.
+            # This queue will be deleted when we close the connection.
+            # TODO: Perhaps create the queue ID ourselves so it is easier to see which exchange it belongs to?
+            result = self._channel.queue_declare(exclusive=True)
+
+        # Bind queue to exchange.
+        self._queue_name = result.method.queue
+        self._channel.queue_bind(exchange=self.config.exchange, queue=self._queue_name)
+
+    def _open_connection_writer(self):
+
+        # Exchange mode only handled here. (Not queue-only mode.)
+
+        if self.config.persisting:
+            # Make sure one durable queue exists.
+            result = self._channel.queue_declare(queue=self.config.exchange + "_shared", durable=True)
+            # Bind queue to exchange.
+            self._queue_name = result.method.queue
+            self._channel.queue_bind(exchange=self.config.exchange, queue=self._queue_name)
+        else:
+            # Exclusive/non-persisting mode: do nothing.
+            pass
 
 
     def _close_connection(self):
@@ -214,7 +241,7 @@ class RabbitmqBase(Configurable):
             try:
                 self._channel.basic_publish(
                     exchange=self.config.exchange or "",
-                    routing_key=self._queue_name,  # Fanout exchange will ignore this
+                    routing_key=self._queue_name or "",  # Fanout exchange will ignore this
                     body=data,
                     properties=properties)
                 ok = True
