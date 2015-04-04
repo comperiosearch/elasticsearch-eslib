@@ -82,7 +82,7 @@ class HttpService(Service):
             # A management server we can register with, that will manage this process through the 'mgmt_endpoint'
             manager_endpoint    = None,
             # The host:port endpoint where this service will listen for management commands
-            management_endpoint = "localhost:4444",
+            management_endpoint = "localhost",  # Note: In a multi-node scenario, localhost might mean something else to the manager... so beware.
             # Listen on all interfaces (0.0.0.0) if set.
             all_interfaces = False,
 

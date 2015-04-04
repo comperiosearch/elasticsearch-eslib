@@ -10,6 +10,7 @@ import yaml, logging, argparse
 import sys, os, imp, inspect, pwd, daemon, signal
 from setproctitle import setproctitle
 
+
 class ServiceRunner(object):
     def __init__(self, service, is_daemon):
         self._service = service
@@ -189,27 +190,6 @@ def run_service(
     log_console_path = "/".join([run_dir, "config", "logging-console.yaml"])
     log_dir          = "/".join([run_dir, "log"   , service_name])
 
-    if daemon_mode:
-        print "Daemonizing... redirecting output to run_dir: %s" % run_dir
-        daemon_context = daemon.DaemonContext(
-            stdout=open("daemon.stdout", "wb"),
-            stderr=open("daemon.stderr", "wb"),
-            files_preserve=None,
-            umask=022,
-            prevent_core=True,
-            detach_process=True,
-            #pidfile=,
-        )
-        daemon_context.open()
-        # From here on we are in a forked daemon process, and the original parent process is dead
-
-    # Change output dir to log_dir
-    os.system('mkdir -p %s' % log_dir)
-    os.chdir(log_dir)
-    # Write pid
-    with open("pid", "wt") as pidfile:
-        print >> pidfile, os.getpid()
-
     # Change executing user (if privileged to do so)
     if run_as_user:
         pw = pwd.getpwnam(run_as_user)
@@ -217,6 +197,32 @@ def run_service(
         gid = pw.pw_gid
         os.setgid(gid)
         os.setuid(uid)
+
+    # Change output dir to log_dir
+    os.system('mkdir -p %s' % log_dir)
+    os.chdir(log_dir)
+
+    if daemon_mode:
+        print "Daemonizing... redirecting output to directory %s" % log_dir
+        daemon_context = daemon.DaemonContext(
+            stdout=open(os.path.join(log_dir, "daemon.stdout"), "wb"),
+            stderr=open(os.path.join(log_dir, "daemon.stderr"), "wb"),
+            files_preserve=None,
+            umask=022,
+            prevent_core=True,
+            detach_process=True,
+            #pidfile=,
+            working_directory = log_dir
+        )
+        if run_as_user:
+            daemon_context.uid = uid
+            daemon_context.gid = gid
+        daemon_context.open()
+        # From here on we are in a forked daemon process, and the original parent process is dead
+
+    # Write pid
+    with open("pid", "wt") as pidfile:
+        print >> pidfile, os.getpid()
 
     # Change process name
     setproctitle("%s %s" % (os.path.basename(sys.argv[0]), service_name))
@@ -269,8 +275,6 @@ def run_service(
             service.config.manager_endpoint = manager_endpoint
         if endpoint:
             service.config.management_endpoint = endpoint
-        else:
-            service.config.management_endpoint = "localhost"  # TODO: Change to host we are running from, as "localhost" may mean another host to the manager if it is running on a different machine (i.e. the host IT is running on)
 
         reload = ServiceRunner(service, daemon_mode).run(auto_start)
 

@@ -762,7 +762,7 @@ class ServiceManager(HttpService, PipelineService):
         #ids = payload.get("names") or []
 
         services = list(self._services.values())
-        self.log.debug("called: list services")
+        self.log.trace("called: list services")
         return self._get_service_info(services)
 
     def _mgmt_service_stats(self, request_handler, payload, **kwargs):
