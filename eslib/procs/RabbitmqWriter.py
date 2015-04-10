@@ -1,11 +1,9 @@
 __author__ = 'Hans Terje Bakke'
 
-# TODO: Use queue/exchange so that multiple monitors can connect and get the same data.
-# TODO:    Right now they consume (empty) the queue and contend for the same data.
-
 from ..Processor import Processor
 from .RabbitmqBase import RabbitmqBase
 from ..esdoc import tojson
+import time
 
 
 class RabbitmqWriter(Processor, RabbitmqBase):
@@ -39,10 +37,11 @@ class RabbitmqWriter(Processor, RabbitmqBase):
                                          queued if there is a listener.
         max_reconnects    = 3          :
         reconnect_timeout = 3          :
+        max_queue_size    = 100000     : If the output queue exceeds this number, this processor is considered congested.
     """
 
     MAX_CONNECTOR_QUEUE_SIZE = 10000
-    MAX_MQ_QUEUE_SIZE        = 100000
+    CHECK_QUEUE_INTERVAL = 5 # 5 seconds; how often to check whether the message queue is "congested"
 
     _is_reader = False  # This is a writer
 
@@ -52,10 +51,18 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         self._connector = self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 
         self.config.set_default(
-            persisting = True
+            persisting     = True,
+            max_queue_size = 100000
         )
 
+        self._last_check_queue_time = 0
+        self._last_known_queue_size = 0
+
+
     def on_open(self):
+        self._last_check_queue_time = 0
+        self._last_known_queue_size = 0
+
         self.count = 0
         self._open_connection()
         self.log.info("Connected to RabbitMQ.")
@@ -95,7 +102,16 @@ class RabbitmqWriter(Processor, RabbitmqBase):
         if self._connector.queue.qsize() > self.MAX_CONNECTOR_QUEUE_SIZE:
             return True
         elif not self.config.exchange or self.config.persisting:
-            if self.get_queue_size() > self.MAX_MQ_QUEUE_SIZE:
-                return True
+            if self.config.max_queue_size:
+                now = time.time()
+                if now - self._last_check_queue_time > self.CHECK_QUEUE_INTERVAL:
+                    try:
+                        self._last_known_queue_size = self.get_queue_size()
+                    except Exception as e:
+                        self.log.warning("Failed to get queue size for queue '%s': %s" % (self._queue_name, e))
+                    self._last_check_queue_time = now
+
+                if self._last_known_queue_size > self.config.max_queue_size:
+                    return True
 
         return False
