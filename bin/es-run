@@ -10,6 +10,14 @@ import yaml, logging, argparse
 import sys, os, imp, inspect, pwd, daemon, signal
 from setproctitle import setproctitle
 
+if sys.platform == 'darwin':
+    # On my Mac under Yosemite and Python 2.7.9, I got a segmentation fault in
+    # /Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/lib-dynload/_scproxy.so
+    # Therefore, I brutally force a bypass of it thus:
+    import urllib
+    def proxy_bypass_macosx_sysconf(host):
+        return True
+    urllib.proxy_bypass_macosx_sysconf = proxy_bypass_macosx_sysconf
 
 class ServiceRunner(object):
     def __init__(self, service, is_daemon):

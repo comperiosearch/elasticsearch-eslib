@@ -13,8 +13,6 @@ if sys.argv[-1] == 'publish':
     os.system('python setup.py sdist upload')
     sys.exit()
 
-# For Python versions earlier than 2.3 the 'csv' package is also required. This is included in 2.3 and later. Is Pip
-# able to conditionally require this package for earlier versions or maybe time to ditch 2.2 and below support?
 requires = [
     'elasticsearch',
     'elasticsearch-curator',
