@@ -59,7 +59,8 @@ class Processor(Configurable):
             self.service = weakref.proxy(service)
 
         self.config.set_default(
-            name    = self.__class__.__name__,
+            name             = self.__class__.__name__,
+            congestion_limit = 10000
         )
 
         self._setup_logging()
@@ -381,6 +382,16 @@ class Processor(Configurable):
     def on_close   (self): pass
 
     def is_congested(self):
+        """
+        Checks if our connectors queues are to large.
+
+        :return:
+        """
+        if self.config.congestion_limit == 0:
+            return False
+        for connector in self.connectors:
+            if connector.queue.qsize() > self.config.congestion_limit:
+                return True
         return False
 
     #endregion Handlers for all processor types
