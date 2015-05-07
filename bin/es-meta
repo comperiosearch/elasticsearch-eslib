@@ -308,7 +308,7 @@ The following commands affect data in the current edit set:
     desc = "Delete sections (addressed in dot notation) of the metadata."
     parser_delete = subparsers.add_parser("delete", description=desc, parents=[parser_common])
     parser_delete._actions[0].help = argparse.SUPPRESS
-    parser_import.add_argument("--collapse", action="store_true")
+    parser_delete.add_argument("--collapse", action="store_true")
     parser_delete.add_argument("paths", type=str, nargs="+")
 
     # Parse
