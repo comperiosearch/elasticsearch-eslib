@@ -377,12 +377,35 @@ class TwitterMonitor(Monitor):
         now = datetime.datetime.utcnow()
 
         #print raw  # DEBUG
-        tweet = None
-        try:
-            tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
-        except Exception as e:
-            self.doclog.debug("WTF is it with stuff missing id_str???:\n%s\n" % str(raw))
 
+        # Check for all known error messages
+        if not raw:
+            # Blank line (keepalive)
+            return (None, None)
+        elif "delete" in raw:
+            # Status deletion notice (delete)
+            return (None, None)
+        elif "scrub_geo" in raw:
+            # Location deletion notice (scrub_geo)
+            return (None, None)
+        elif "limit" in raw:
+            # Limit notice (limit)
+            self.log.warning("Limit notice from Twitter, track=%d" % raw["limit"]["track"])
+            return (None, None)
+        elif "status_withheld" in raw or "user_withheld" in raw:
+            # Withheld content notice (status_withheld, user_witheld)
+            return (None, None)
+        elif "disconnect" in raw:
+            # Discinnect message (disconnect) (code)
+            self.log.warning("Disconnect message from Twitter, code=%d" % raw["disconnect"]["code"])
+            return (None, None)
+        elif not raw.get("id_str"):
+            self.proclog.log("Unrecognized message from Twitter: %s" % str(raw))
+            return (None, None)
+
+        # From now on we assume that this is a tweet message (although we can never really know with the way twitter emits messages...)
+
+        tweet = {"_id": raw["id_str"], "_type": "tweet", "_timestamp": now}
         ts = tweet["_source"] = {"id": raw["id_str"] }  # id repeated intentionally
 
         # This user...

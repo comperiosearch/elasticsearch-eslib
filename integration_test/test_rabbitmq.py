@@ -10,7 +10,7 @@ prog.initlogs()
 
 # NOTE: This requires a rabbit mq server to connect to with appropriate accesses
 
-mq_host = "nets.comperio.no"
+mq_host = "mq.nets.comperio.no"
 mq_username = "nets"
 mq_password = "nets"
 mq_virtual_host = "dev"

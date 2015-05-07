@@ -32,13 +32,15 @@ setup(
     name='eslib',
     version='0.0.1',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
-    long_description=open("README.md").read(),
+    #long_description=open("README.md").read(),
     author='Hans Terje Bakke',
     author_email='hans.terje.bakke@comperio.no',
     url='https://github.com/comperiosearch/elasticsearch-eslib',
-    packages=['eslib', 'eslib.procs'],
+    keywords="document processing docproc",
+    packages=['eslib', 'eslib.procs', 'eslib.service'],
     package_data={'': ['LICENSE', 'README.md', 'PROTOCOLS.md']},
     include_package_data=True,
+    # TODO: examples in package data
     install_requires=requires,
     license='Apache 2.0',
     zip_safe=False,
@@ -50,7 +52,6 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7'
     )
 )

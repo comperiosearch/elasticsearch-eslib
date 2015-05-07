@@ -648,7 +648,8 @@ class Service(Configurable):
         if self._last_stat_tick:
             avg_tot = (tot - self._total_cpu_time  ) / interval
             avg_prc = (prc - self._process_cpu_time) / interval
-            self.stat_cpu_percent = (avg_prc / avg_tot) * 100.0
+            if avg_tot:
+                self.stat_cpu_percent = (avg_prc / avg_tot) * 100.0
             if self.stat_cpu_percent > self.stat_max_cpu_percent:
                 self.stat_max_cpu_percent = self.stat_cpu_percent
         else:
