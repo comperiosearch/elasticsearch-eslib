@@ -99,6 +99,8 @@ class RabbitmqWriter(Processor, RabbitmqBase):
             self.count += 1
 
     def is_congested(self):
+        if super(self, RabbitmqWriter).is_congested():
+            return True
         if self._connector.queue.qsize() > self.MAX_CONNECTOR_QUEUE_SIZE:
             return True
         elif not self.config.exchange or self.config.persisting:
