@@ -134,12 +134,16 @@ class RssMonitor(Monitor):
         if (time.time() - self._last_get_time) > self.config.interval:
             # This one also writes to Elasticsearch and/or item socket
 
+            self.log.debug("***TICK")
+
             es = self._get_es()
             # We have to burn through this as fast as possible. It is a generator that also serves
             # an offline fetch mode (i.e. not part of the run loop), but here we need it to process
             # the items fast and be done and write back the new channel status immediately.
+            self.log.debug("***FETCHING ITEMS BEGIN")
             for item in self._fetch_items(es, self.config.channels, simulate=self.config.simulate):
                 pass
+            self.log.debug("***FETCHING ITEMS END")
 
             self._last_get_time = time.time()
 
@@ -189,6 +193,7 @@ class RssMonitor(Monitor):
 
     def _fetch_items(self, es, channel_names=None, force=False, simulate=False, offline=False):
 
+        self.log.debug("***GET CHANNEL NAMES BEGIN")
         existing_channels = self._get_channels(es, channel_names)
 
         # Check and report if given channel_names are not registered
@@ -196,6 +201,7 @@ class RssMonitor(Monitor):
             for name in channel_names:
                 if not name in existing_channels:
                     self.log.warning("Warning: Channel '%s' is not registered. (skipping)" % name)
+        self.log.debug("***GET CHANNEL NAMES END")
 
         # Fetch RSS feeds and write items and new channel info with new lastFetch time (== now)
         for name, existing_channel in existing_channels.items():
@@ -203,6 +209,7 @@ class RssMonitor(Monitor):
             # Only allow leaving the fetch loop here between full channel fetches, to avoid incomplete data.
             # Except abort, that can happen inside item loop
             if not offline and self.end_tick_reason or self.suspended:
+                self.log.debug("***END TICK REASON -- BREAKING")
                 break
 
             url  = existing_channel["url"]
@@ -211,7 +218,9 @@ class RssMonitor(Monitor):
                 last_fetch_date = iso2date(existing_channel["lastFetch"])
 
             # Get RSS feed
+            self.log.debug("***GET RSS FEED BEGIN")
             rss = self._get_rss(name, url)
+            self.log.debug("***GET RSS FEED END")
             if not rss:
                 self.log.error("Failed to read RSS feed from channel '%s'. (skipping)" % name)
                 continue
@@ -250,9 +259,13 @@ class RssMonitor(Monitor):
                 if self.config.include_linked_page:
                     self._add_linked_page(item)
 
+                self.log.debug("***YIELD ITEM BEGIN")
                 yield item
+                self.log.debug("***YIELD ITEM END")
 
+                self.log.debug("***PUT ITEM BEING")
                 new, replaced = self._put_item(es, name, item, simulate)
+                self.log.debug("***PUT ITEM END")
                 nNewItems += new
                 nReplacedItems += replaced
 
@@ -262,7 +275,11 @@ class RssMonitor(Monitor):
                 self.log.debug("Simulating update to channel '%-10s': %3d new, %3d replaced." % (name, nNewItems, nReplacedItems))
             else:
                 self.log.info("Channel '%-10s': %3d new, %3d replaced." % (name, nNewItems, nReplacedItems))
+                self.log.debug("***PUT CHANNEL INFO BEGIN")
                 self._put_channel(es, channel)
+                self.log.debug("***PUT CHANNEL INFO END")
+
+        self.log.debug("***_FETCH_ITEMS GENERATOR COMPLETED")
 
     @staticmethod
     def _create_query_filter(filter):
