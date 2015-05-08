@@ -389,7 +389,7 @@ class Processor(Configurable):
         """
         if self.config.congestion_limit == 0:
             return False
-        for connector in self.connectors:
+        for connector in self.connectors.itervalues():
             if connector.queue.qsize() > self.config.congestion_limit:
                 return True
         return False
