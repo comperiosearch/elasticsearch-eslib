@@ -400,7 +400,7 @@ class TwitterMonitor(Monitor):
             self.log.warning("Disconnect message from Twitter, code=%d" % raw["disconnect"]["code"])
             return (None, None)
         elif not raw.get("id_str"):
-            self.proclog.log("Unrecognized message from Twitter: %s" % str(raw))
+            self.log.warning("Unrecognized message from Twitter: %s" % str(raw))
             return (None, None)
 
         # From now on we assume that this is a tweet message (although we can never really know with the way twitter emits messages...)
