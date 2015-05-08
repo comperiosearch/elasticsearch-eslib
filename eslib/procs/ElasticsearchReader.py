@@ -142,28 +142,30 @@ class ElasticsearchReader(Generator):
                 return
             if self.suspended:
                 sleep(self.sleep)
-            elif self.congestion():
-                self.log.debug("Congestion in dependencies; sleeping 10 seconds.")
-                self.congestion_sleep(10.0)
             else:
-                self.log.trace("Fetching follow-up scan batch from Elasticsearch.")
-                # TODO: What do do if we get an exception here? (It has happened...)
-                res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)
-                self._scroll_id = res["_scroll_id"]
-                hits = res["hits"]["hits"]
-                remaining -= len(hits)
+                congested = self.congestion()
+                if congested:
+                    self.log.debug("Congestion in dependent processor '%s'; sleeping 10 seconds." % congested.name)
+                    self.congestion_sleep(10.0)
+                else:
+                    self.log.trace("Fetching follow-up scan batch from Elasticsearch.")
+                    # TODO: What do do if we get an exception here? (It has happened...)
+                    res = self._es.scroll(scroll=self.config.scroll_ttl, scroll_id=self._scroll_id)
+                    self._scroll_id = res["_scroll_id"]
+                    hits = res["hits"]["hits"]
+                    remaining -= len(hits)
 
-                for hit in hits:
-                    if self.end_tick_reason:
-                        return
-                    self.output.send(hit)
-                    self.count += 1
-                    if self.config.limit and self.count >= self.config.limit:
-                        if (remaining > 0):
-                            self._release_scroll_context()
-                        self._es = None
-                        self.stop()
-                        return
+                    for hit in hits:
+                        if self.end_tick_reason:
+                            return
+                        self.output.send(hit)
+                        self.count += 1
+                        if self.config.limit and self.count >= self.config.limit:
+                            if (remaining > 0):
+                                self._release_scroll_context()
+                            self._es = None
+                            self.stop()
+                            return
 
         # Since we finished properly, no need to delete this on server
         self._scroll_id = None

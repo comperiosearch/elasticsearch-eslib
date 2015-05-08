@@ -114,8 +114,9 @@ class RabbitmqMonitor(Monitor, RabbitmqBase):
 
         try:
             self._calc_total()
-            if self.congestion():
-                self.log.debug("Congestion in dependencies; sleeping 10 seconds.")
+            congested = self.congestion()
+            if congested:
+                self.log.debug("Congestion in dependent processor '%s'; sleeping 10 seconds." % congested.name)
                 self.congestion_sleep(10.0)
             else:
                 self._channel.connection.process_data_events()

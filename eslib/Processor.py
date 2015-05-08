@@ -687,20 +687,25 @@ class Processor(Configurable):
             self._start()
 
     def congestion(self, seen=None):
-        "Determine whether a dependent processor down the pipeline is congested."
+        """
+        Determine whether a dependent processor down the pipeline is congested.
+        :param bool seen: Whether we have seen this proc before. To avoid infinite loops. Internal use only.
+        :return: First processor found that was congested.
+        """
+
 
         # Making sure we're not entering an eternal recursive check:
         if not seen:
             seen = [self]
         elif self in seen:
-            return False
+            return None #False
 
         # If any of our sockets, or their sockets again, have processors connected that are congested: report the whole shebang as congested.
         for socket in self.sockets.values()[:]:
             for connector in socket.connections:
                 if connector.owner:
                     if connector.owner.is_congested():
-                        return True
+                        return connector.owner #True
                     return connector.owner.congestion(seen)
 
     def congestion_sleep(self, delay=1.0):
