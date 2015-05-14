@@ -18,6 +18,12 @@ class TwitterMonitor(Monitor):
     Also note that there cannot be two instances of this processor running with the same credentials at the same
     time. (Reason: Twitter rate limits.)
 
+    Twitter streaming API default capacity:
+
+        400 track keywords
+        5000 follow userids
+        25 0.1-360 degree location boxes
+
     Protocols:
 
         esdoc.tweet:
@@ -53,7 +59,7 @@ class TwitterMonitor(Monitor):
         keep_languages         = []       : Keep only named language codes, or all if none specified.
                                             ISO 639-1 alpha-2 or ISO 639-3 alpha-3.
         drop_languages         = []       : Drop specified language codes.
-        max_reconnect_attempts = 10    : Maximum number of attempts to try a reconnect to Twitter.
+        max_reconnect_attempts = 10       : Maximum number of attempts to try a reconnect to Twitter.
 
     For more information about what you can listen to and how it is matched, see:
 
@@ -127,14 +133,16 @@ class TwitterMonitor(Monitor):
 
         # TODO: Verify user format for "follow". How??
 
+        print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
+
         # Build twitter request dict
         self._twitter_filter = {}
         if self.config.track:
             self._twitter_filter["track"] = ",".join(self.config.track)
-        if self.config.follow:
-            self._twitter_filter["follow"] = ",".join(self.config.follow)
-        if self.config.locations:
-            self._twitter_filter["locations"] = ",".join(self.config.locations)
+        # if self.config.follow:
+        #     self._twitter_filter["follow"] = ",".join(self.config.follow)
+        # if self.config.locations:
+        #     self._twitter_filter["locations"] = ",".join(self.config.locations)
 
 
         # Initialize Twitter API with credentials
@@ -442,7 +450,7 @@ class TwitterMonitor(Monitor):
             # Find out who has been retweeted:
             ts["retweet_user_id"] = raw_retweet["user"]["id_str"]
             # Make sure we get retweets for users we follow, as we might not get them through term tracking
-            if self.config.drop_retweets and not user["id"] in self._twitter_filter["follow"]:
+            if self.config.drop_retweets and (("follow" not in self._twitter_filter) or (not user["id"] in self._twitter_filter["follow"])):
                 return (None, None)
 
         self._setfield(raw, ts, "text")
