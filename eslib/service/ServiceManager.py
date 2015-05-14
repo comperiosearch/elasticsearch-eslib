@@ -905,7 +905,7 @@ class ServiceManager(HttpService, PipelineService):
     def _get_service_info(self, services, return_missing=False):
         ret = {}
         for service in services:
-            ss, stats = self._get_stats(service)
+            ss, stats = self._get_stats(service, save=False)
             # The service may have been removed in the call to _get_status:
             if not service.id in self._services:
                 if return_missing:
