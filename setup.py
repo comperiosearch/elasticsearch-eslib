@@ -3,6 +3,8 @@
 import os
 import sys
 
+# PREREQUISITES:
+# yum install -y libxml2-devel libxslt-devel
 
 try:
     from setuptools import setup
@@ -15,16 +17,18 @@ if sys.argv[-1] == 'publish':
 
 requires = [
     'elasticsearch',
-    'elasticsearch-curator',
     'argparse',
+    'psutil', 'setproctitle',
     'pika', 'pyrabbit',   # for Rabbitmq
     'HTMLParser',
-    'requests',
+    'requests>=2',        # version >=2 needed by TwitterAPI
     'TwitterAPI',
     'PyYAML',             # for prog logging init stuff
     'feedparser',         # for rss
     'python-dateutil',
-    'mock'                # for testing
+#    'mock'                # for testing
+    'beautifulsoup4',
+    'textblob', 'justext' # for web.py
 ]
 
 
