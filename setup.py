@@ -2,6 +2,7 @@
 
 import os
 import sys
+from glob import glob
 
 # PREREQUISITES:
 # yum install -y libxml2-devel libxslt-devel
@@ -42,7 +43,8 @@ setup(
     url='https://github.com/comperiosearch/elasticsearch-eslib',
     keywords="document processing docproc",
     packages=['eslib', 'eslib.procs', 'eslib.service'],
-    package_data={'': ['LICENSE', 'README.md', 'PROTOCOLS.md']},
+#    package_data={'': ['LICENSE', 'README.md', 'PROTOCOLS.md']},
+    scripts=glob('bin/*'),
     include_package_data=True,
     # TODO: examples in package data
     install_requires=requires,
