@@ -122,3 +122,36 @@ logging.Logger.trace   = _log_trace
 logging.Logger.debugn  = _log_debug_n
 
 #endregion Logging stuff
+
+#region Config stuff
+
+import os, yaml
+from . import esdoc
+
+def get_credentials(path=None, service_dir=None, credentials_file=None):
+    service_dir = service_dir or os.environ.get("ESLIB_SERVICE_DIR")
+    if not service_dir:
+        raise ValueError("Neither service_dir given nor ESLIB_SERVICE_DIR set.")
+    dir = os.path.join(service_dir, "config")
+
+    file_path = None
+    if not credentials_file:
+        credentials_file = "credentials.yaml"
+
+    if os.path.basename(credentials_file) == credentials_file:
+        # Pick from dir
+        file_path = os.path.join(dir, credentials_file)
+    else:
+        # Use absolute path
+        file_path = os.path.expanduser(credentials_file)
+
+    # Load credentials file
+    with open(file_path, "r") as f:
+        credentials = yaml.load(f)
+
+    if not path:
+        return credentials
+    else:
+        return esdoc.getfield(credentials, path)
+
+#endregion

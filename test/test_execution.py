@@ -97,12 +97,11 @@ class TestExecution(unittest.TestCase, Connections):
         gen = MyGenerator(name="mygen")
         gen.add_callback(self.callback)
         gen.start()
-        for i in range(10):
+        for i in range(9): # Wanted 10, but a little bit of internal sleep makes 9 a better choice so we dont slip into callback #6.
             #print "wait loop tick %d" % i
             time.sleep(0.1)
         gen.stop()
 
-        # It lasted 10 seconds, so one gen per second should be 10 docs
         self.assertEqual(self.callback_count, 5, "Expected 5 callbacks, was %d" % self.callback_count)
 
 
@@ -410,12 +409,12 @@ class TestExecution(unittest.TestCase, Connections):
         p1.subscribe(gen)
         p2.subscribe(p1)
         p3.subscribe(p2)
-        p1.event_started.append(lambda: started.append("p1"))
-        p3.event_started.append(lambda: started.append("p3"))
-        p1.event_stopped.append(lambda: stopped.append("p1"))
-        p3.event_stopped.append(lambda: stopped.append("p3"))
-        p1.event_aborted.append(lambda: aborted.append("p1"))
-        p3.event_aborted.append(lambda: aborted.append("p3"))
+        p1.event_started.append(lambda proc: started.append(proc.name))
+        p3.event_started.append(lambda proc: started.append(proc.name))
+        p1.event_stopped.append(lambda proc: stopped.append(proc.name))
+        p3.event_stopped.append(lambda proc: stopped.append(proc.name))
+        p1.event_aborted.append(lambda proc: aborted.append(proc.name))
+        p3.event_aborted.append(lambda proc: aborted.append(proc.name))
 
         gen.start()
         gen.wait()

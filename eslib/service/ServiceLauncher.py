@@ -28,6 +28,7 @@ class ServiceLauncher(HttpService, PipelineService):
 
     def on_configure(self, credentials, config, global_config):
         self.config.set(
+            manager_endpoint        = config.get("manager_endpoint"),
             management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
             service_runner          = config.get("service_runner"),
             service_dir             = config.get("service_dir"),
