@@ -38,6 +38,24 @@ and socket.
 A processor B is said to 'subscribe' to output from processor A if it has a connector connected a
 socket on A. In this case, A has the role of 'producer' (to B) and B has the role of 'subscriber' (to A).
 
+## Installation
+
+### Prerequisites
+
+This library requires python 2.7.
+
+BeautifulSoup, used in some of the document processing stages, requires libxml2 and libxslt.
+On Fedora (Amazon Linux), this can be installed using:
+
+```
+yum install libxml2-devel libxslt-devel
+```
+
+### Install eslib with pip
+```
+pip install elasticsearch-eslib
+```
+
 ## Usage
 
 From a Python script, we can create a processing graph as in this example:
@@ -562,7 +580,7 @@ Example payload in 'hello':
 ```
 
 A service that is dependent on metadata cannot start until it receives the data. If it is missing for
-some reason, then the server should be in the 'pending' state.
+some reason, then the service should be in the 'pending' state.
 
 ## TODO: Manager REST API
 
