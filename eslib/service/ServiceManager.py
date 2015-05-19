@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from eslib.service import HttpService, status, PipelineService
+from eslib.service import status
+from eslib.service.ServiceLauncher import ServiceLauncherBase
 from eslib.procs import Timer
 from eslib.time import utcdate
 from eslib import esdoc
-import datetime, Queue, os, signal, subprocess, sys
+import datetime, Queue, os, signal
 from threading import Lock
 from copy import deepcopy
 
@@ -68,16 +69,12 @@ class Metadata(object):
         return item
 
 
-class ServiceManager(HttpService, PipelineService):
+class ServiceManager(ServiceLauncherBase):
 
     def __init__(self, **kwargs):
         super(ServiceManager, self).__init__(**kwargs)
 
         self.config.set_default(
-            management_endpoint     = "localhost:5000", # for this service...
-            service_runner          = None,
-            service_dir             = None,
-
             elasticsearch_hosts     = ["localhost:9200"],
             elasticsearch_index     = "management",
 
@@ -149,11 +146,8 @@ class ServiceManager(HttpService, PipelineService):
         return datetime.datetime.utcnow()
 
     def on_configure(self, credentials, config, global_config):
+        super(ServiceManager, self).on_configure(credentials, config, global_config)
         self.config.set(
-            management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
-            service_runner          = config.get("service_runner"),
-            service_dir             = config.get("service_dir"),
-
             elasticsearch_hosts     = config["elasticsearch_hosts"],
             elasticsearch_index     = config["elasticsearch_index"],
 
@@ -1185,8 +1179,11 @@ class ServiceManager(HttpService, PipelineService):
             self.log.error("Launching service '%s' requires a launcher on host '%s'. None found." % (service.id, service.host))
             return False
 
+        config_dict = self.load_config()
+
         data = {
             "id"              : service.id,
+            "config"          : config_dict,
             "config_key"      : service.config_key,
             "endpoint"        : service.addr,
             "manager_endpoint": self.config.management_endpoint,  # This manager address
@@ -1213,22 +1210,6 @@ class ServiceManager(HttpService, PipelineService):
         return True
 
     def _launch_local_service(self, service, start):
-        #runner = "/Users/htb/git/elasticsearch-eslib/bin/es-run"
-        #run_dir = "/Users/htb/git/customer-nets/services"
-
-        # This is the normal case, that it was started from es-run:
-        runner = sys.argv[0]
-        run_dir = os.path.normpath(os.path.join(os.getcwd(), "../.."))
-        # But there may be reasons to override this, especially if NOT run by es-run:
-        if self.config.service_runner:
-            runner = self.config.service_runner
-        if self.config.service_dir:
-            run_dir = self.config.service_dir
-
-        # print "***RUNNER=", runner
-        # print "***RUN_DIR=", run_dir
-        # print "***CONFIG_FILE=", self.config_file
-        # print "***CONFIG_KEY=", service.config_key
 
         if service.guest:
             self.log.warning("Tried to launch guest service '%s'. Guests cannot be managed." % service.id)
@@ -1244,30 +1225,16 @@ class ServiceManager(HttpService, PipelineService):
 
         self.log.debug("Launching service '%s' at '%s'." % (service.id, service.addr))
 
-        args = [
-            sys.executable,  # Same python that is running this
-            runner,
-            "-d", run_dir,
-            service.id,
-            "-m", self.config.management_endpoint,  # This manager address
-            "-e", service.addr,  # Own address
-            "--daemon"  # Needed for logging to directories anyway..
-        ]
-        if start:
-            args.append("--start")
-        if self.config_file:
-            args.extend(["-f", self.config_file])
-        if service.config_key:
-            args.extend(["-c", service.config_key])
+        config_dict = self.load_config()
 
         p = None
         try:
-            p = subprocess.Popen(
-                args,
-                stdout = subprocess.PIPE,
-                stderr = subprocess.PIPE
-            )
-            # TODO: Grab stdout/stderr
+            p = self.spawn(
+                service.id,
+                config_dict, service.config_key,
+                service.addr,  # Own address
+                self.config.management_endpoint,  # This manager address
+                start)
         except Exception as e:
             self.log.exception("Failed to launch service '%s' at '%s'." % (service.id, service.addr))
             service.error = str(e)
