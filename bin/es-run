@@ -6,7 +6,7 @@
 import eslib  # For logging
 import eslib.service
 from eslib.service import HttpService, status
-import yaml, logging, argparse
+import yaml, logging, argparse, json
 import sys, os, imp, inspect, pwd, daemon, signal
 from setproctitle import setproctitle
 
@@ -168,6 +168,7 @@ def _find_type(mod, service_type_name, seen=None):
 def run_service(
         run_dir=False, service_package_path=None, service_file_path=None,
         service_name=None, service_type_name=None,
+        stdin_dict=None,
         config_file_path=None, config_section=None,
         console_log_level=None,
         daemon_mode=None, run_as_user=None,
@@ -241,10 +242,15 @@ def run_service(
         # Only exceptions and 'reload' set to false will get us out of here
 
         # Load config files
-        with open(credentials_path, "r") as f:
-            credentials = yaml.load(f)
-        with open(config_path, "r") as f:
-            global_config = yaml.load(f)
+        if stdin_dict:
+            credentials = stdin_dict.get("credentials") or {}
+            global_config = stdin_dict.get("config") or {}
+        else:
+            with open(credentials_path, "r") as f:
+                credentials = yaml.load(f)
+            with open(config_path, "r") as f:
+                global_config = yaml.load(f)
+        # Using local log config files as of yet..
         with open(log_console_path if console_mode else log_config_path) as f:
             log_config = yaml.load(f)
 
@@ -367,11 +373,20 @@ Default run_dir can be set with environment variable ESLIB_SERVICE_DIR.
         parser.add_argument("--start"  , action="store_true")
         parser.add_argument("--service-package", dest="service_package", type=str, required=False)
         parser.add_argument("--service-file"   , dest="service_file"   , type=str, required=False)
+        parser.add_argument("--stdincfg", action="store_true")
+
 
         args = parser.parse_args()
+
+        # Get config from stdin if 'stdincfg' was specified.
+        stdin_dict = None
+        if args.stdincfg:
+            stdin_dict = json.load(sys.stdin)
+
         run_service(
             args.run_dir, args.service_package, args.service_file,
             args.name[0], args.type,
+            stdin_dict,
             args.config_file, args.config_section,
             args.loglevel,
             args.daemon, args.user,

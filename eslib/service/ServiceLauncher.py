@@ -6,33 +6,98 @@
 
 from eslib.service import HttpService, PipelineService
 from eslib.procs import Timer
-import os, signal, subprocess, sys
+from eslib.esdoc import tojson
+import os, signal, subprocess, sys, yaml
 
-
-class ServiceLauncher(HttpService, PipelineService):
+class ServiceLauncherBase(HttpService, PipelineService):
 
     def __init__(self, **kwargs):
-        super(ServiceLauncher, self).__init__(**kwargs)
+        super(ServiceLauncherBase, self).__init__(**kwargs)
 
         self.config.set_default(
             management_endpoint     = "localhost:5000", # for this service...
             service_runner          = None,
             service_dir             = None,
+        )
 
+    def on_configure(self, credentials, config, global_config):
+        self.config.set(
+            management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
+            service_runner          = config.get("service_runner"),
+            service_dir             = config.get("service_dir"),
+        )
+
+
+    def get_run_dir(self):
+        return self.config.service_dir or os.path.normpath(os.path.join(os.getcwd(), "../.."))
+
+    def load_config(self):
+        # Load config
+        run_dir = self.get_run_dir()
+        config_path = self.config_file
+        if not config_path:
+            config_path  = "/".join([run_dir, "config", "services.yaml"])
+        credentials_path = "/".join([run_dir, "config", "credentials.yaml"])
+        with open(credentials_path, "r") as f:
+            credentials = yaml.load(f)
+        with open(config_path, "r") as f:
+            global_config = yaml.load(f)
+        config_dict = {"credentials": credentials, "config": global_config}
+        return config_dict
+
+    def spawn(self, id_, config_dict, config_key, addr, manager_endpoint, start):
+        runner = self.config.service_runner or sys.argv[0]
+        run_dir = self.get_run_dir()
+
+        # Prepare arguments
+        args = [
+            sys.executable,  # Same python that is running this
+            runner,
+            "-d", run_dir,
+            id_,
+            "-m", manager_endpoint,
+            "-e", addr,
+            "--stdincfg",  # Always send credentials and config via stdin here
+            "--daemon"     # Needed for logging to directories anyway..
+        ]
+        if start:
+            args.append("--start")
+        if self.config_file:
+            args.extend(["-f", self.config_file]) # Config file is just for the record here.. only launchers use that.
+        if config_key:
+            args.extend(["-c", config_key])
+
+        # Start process
+        p = None
+        p = subprocess.Popen(
+            args,
+            stdout = subprocess.PIPE,
+            stderr = subprocess.PIPE,
+            stdin = subprocess.PIPE
+        )
+        # TODO: Grab stdout/stderr
+        if config_dict is not None:
+            p.stdin.write(tojson(config_dict))
+        p.stdin.close()
+        return p
+
+
+class ServiceLauncher(ServiceLauncherBase):
+
+    def __init__(self, **kwargs):
+        super(ServiceLauncher, self).__init__(**kwargs)
+
+        self.config.set_default(
             keepalive_frequency     = 60.0  # 10 seconds
         )
 
         self.add_route(self._mgmt_service_launch    , "POST|PUT", "/launch"     , None)
         self.add_route(self._mgmt_service_kill      , "DELETE"  , "/kill"       , None)
 
-
     def on_configure(self, credentials, config, global_config):
+        super(ServiceLauncher, self).on_configure(credentials, config, global_config)
         self.config.set(
             manager_endpoint        = config.get("manager_endpoint") or self.config.manager_endpoint,
-            management_endpoint     = config.get("management_endpoint") or self.config.management_endpoint,
-            service_runner          = config.get("service_runner"),
-            service_dir             = config.get("service_dir"),
-
             keepalive_frequency     = config.get("keepalive_frequency") or self.config.keepalive_frequency
         )
 
@@ -83,6 +148,7 @@ class ServiceLauncher(HttpService, PipelineService):
         self.log.debug("called: launch service '%s'" % id)
         return self._launch_service(
             id,
+            payload.get("config"),
             payload.get("config_key"),
             payload["endpoint"],
             payload["manager_endpoint"],
@@ -103,50 +169,13 @@ class ServiceLauncher(HttpService, PipelineService):
 
     #region Service interface helpers
 
-    def _launch_service(self, id, config_key, addr, manager_endpoint, start):
-        #runner = "/Users/htb/git/elasticsearch-eslib/bin/es-run"
-        #run_dir = "/Users/htb/git/customer-nets/services"
-
-        # This is the normal case, that it was started from es-run:
-        runner = sys.argv[0]
-        run_dir = os.path.normpath(os.path.join(os.getcwd(), "../.."))
-        # But there may be reasons to override this, especially if NOT run by es-run:
-        if self.config.service_runner:
-            runner = self.config.service_runner
-        if self.config.service_dir:
-            run_dir = self.config.service_dir
-
-        # print "***RUNNER=", runner
-        # print "***RUN_DIR=", run_dir
-        # print "***CONFIG_FILE=", self.config_file
-        # print "***CONFIG_KEY=", service.config_key
+    def _launch_service(self, id, config_dict, config_key, addr, manager_endpoint, start):
 
         self.log.debug("Launching service '%s' at '%s'." % (id, addr))
 
-        args = [
-            sys.executable,  # Same python that is running this
-            runner,
-            "-d", run_dir,
-            id,
-            "-m", manager_endpoint,
-            "-e", addr,
-            "--daemon"  # Needed for logging to directories anyway..
-        ]
-        if start:
-            args.append("--start")
-        if self.config_file:
-            args.extend(["-f", self.config_file])
-        if config_key:
-            args.extend(["-c", config_key])
-
         p = None
         try:
-            p = subprocess.Popen(
-                args,
-                stdout = subprocess.PIPE,
-                stderr = subprocess.PIPE
-            )
-            # TODO: Grab stdout/stderr
+            p = self.spawn(id, config_dict, config_key, addr, manager_endpoint, start)
         except Exception as e:
             self.log.exception("Failed to launch service '%s' at '%s'." % (id, addr))
             return {
