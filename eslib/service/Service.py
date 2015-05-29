@@ -73,7 +73,6 @@ class Service(Configurable):
         self._last_stat_tick         = 0
         self._time_at_resume         = 0
         self._count_at_resume        = 0
-        self._total_cpu_time         = 0
         self._process_cpu_time       = 0
         self._last_count             = 0
 
@@ -642,20 +641,15 @@ class Service(Configurable):
         interval = (now - self._last_stat_tick)
 
         # cpu
-        psproc = psutil.Process()
-        tot = psutil.cpu_times().user + psutil.cpu_times().system
-        prc = psproc.cpu_times().user + psproc.cpu_times().system
-        if self._last_stat_tick:
-            avg_tot = (tot - self._total_cpu_time  ) / interval
+        prc = sum(os.times()[:2])
+        if self._last_stat_tick and interval:
             avg_prc = (prc - self._process_cpu_time) / interval
-            if avg_tot:
-                self.stat_cpu_percent = (avg_prc / avg_tot) * 100.0
+            self.stat_cpu_percent = avg_prc * 100.0
             if self.stat_cpu_percent > self.stat_max_cpu_percent:
                 self.stat_max_cpu_percent = self.stat_cpu_percent
         else:
             self.stat_cpu_percent = 0
             self.stat_max_cpu_percent = 0
-        self._total_cpu_time = tot
         self._process_cpu_time = prc
 
         # Counts
