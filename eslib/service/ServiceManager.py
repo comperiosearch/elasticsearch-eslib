@@ -1348,7 +1348,9 @@ class ServiceManager(ServiceLauncherBase):
         succeeded = []
         failed = []
         if all:
-            ids = self._services.keys()[:]
+            # ServiceLauncher type should not be affected
+            launcher_type_name = ServiceLauncher.__name__
+            ids = [key for key,service in self._services.iteritems() if service.type == launcher_type_name]
         for id in ids:
             if not id in self._services:
                 self.log.debug("Tried to %s a non-existing service '%s'." % (infinitive_str, id))
