@@ -755,8 +755,9 @@ class ServiceManager(ServiceLauncherBase):
         # TODO: name patterns from payload or kwargs
         #ids = payload.get("names") or []
 
-        services = list(self._services.values())
         self.log.trace("called: list services")
+        services = list(self._services.values())
+        services.append(self)  # Add this object (NB: it is a different class than the other services)
         return self._get_service_info(services)
 
     def _mgmt_service_stats(self, request_handler, payload, **kwargs):
@@ -768,6 +769,8 @@ class ServiceManager(ServiceLauncherBase):
         self.log.debug("called: get stats for service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         missing = [id for id in ids if id not in self._services]
         fetch = [service for service in self._services.values() if service.id in ids]
+        if self.name in ids:
+            fetch.append(self)  # Add this object to be fetched (NB: it is a different class from the other service info objects)
         ret = self._get_service_info(fetch, return_missing=True)
         for id in missing:
             if not id in ret:
@@ -899,6 +902,9 @@ class ServiceManager(ServiceLauncherBase):
     def _get_service_info(self, services, return_missing=False):
         ret = {}
         for service in services:
+            if service == self:
+                ret[self.name] = self._get_own_service_info()
+                continue
             ss, stats = self._get_stats(service, save=False)
             # The service may have been removed in the call to _get_status:
             if not service.id in self._services:
