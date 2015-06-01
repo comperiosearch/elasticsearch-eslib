@@ -106,6 +106,7 @@ class ServiceManager(ServiceLauncherBase):
         # Use those in HttpService:
         self.add_route(self._mgmt_hello             , "GET"     , "/hello"      , None)
         self.add_route(self._mgmt_help              , "GET"     , "/help"       , None)
+        self.add_route(self._mgmt_debug_free        , "DELETE"  , "/debug/free" , None)
 
         self.add_route(self._mgmt_service_register  , "POST|PUT" , "/hello"     , None)
         self.add_route(self._mgmt_service_unregister, "DELETE"   , "/goodbye"   , None)

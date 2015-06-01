@@ -645,6 +645,5 @@ Boot states are one of %(boot_states)s.
     elif args.command == "boot"      : cmd_boot    (host, format, args.names, args.all)
     elif args.command == "reboot"    : cmd_reload  (host, format, args.names, args.all)
 
-
 if __name__ == '__main__':
     main()

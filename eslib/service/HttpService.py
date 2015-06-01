@@ -112,6 +112,8 @@ class HttpService(Service):
         self.add_route(self._mgmt_metadata_get   , "GET"     , "/metadata"  , None)
         self.add_route(self._mgmt_metadata_update, "PUT|POST", "/metadata"  , None)
 
+        self.add_route(self._mgmt_debug_free, "DELETE", "/debug/free"     , None)
+
         self._receiver = HttpMonitor(service=self, name="receiver", hook=self._hook)
         self.register_procs(self._receiver)
 
@@ -387,5 +389,19 @@ class HttpService(Service):
             return {"warning": "Version '%s' is already in use; update ignored." % new_changeset}
         self.update_metadata(new_changeset, metadata, wait=False)
         return {"message": "Metadata updated to version '%s'. Reconfiguring now." % new_changeset}
+
+
+    def _mgmt_debug_free(self, request_handler, payload, **kwargs):
+        self.log.trace("called: debug/free")
+
+        import gc, psutil
+        proc = psutil.Process()
+        mem_before = proc.get_memory_info().rss / 1024 / 1024
+        gc.collect()
+        mem_after = proc.get_memory_info().rss / 1024 / 1024
+        msg = ("Memory released by forced garbage collection: %d MB (%d => %d)" % (mem_before - mem_after, mem_before, mem_after))
+        self.log.info(msg)
+
+        return {"message": msg}
 
     #endregion Command handlers
