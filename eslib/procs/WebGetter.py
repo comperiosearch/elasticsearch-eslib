@@ -385,7 +385,7 @@ class WebGetter(Generator):
         # TODO: Handle encoding here or leave that to the consumers?
         if self.doclog.isEnabledFor(logging.DEBUG):
             self.doclog.debug("Created doc with content size=%-8s for URL=%s" % \
-                (debug.byte_size_string(len(body.get("content") or 0), 1), info.url))
+                (debug.byte_size_string(len(body.get("content") or ""), 1), info.url))
 
         self.output.send(esdoc)
 

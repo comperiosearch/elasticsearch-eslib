@@ -12,11 +12,12 @@ __all__ = ("WebGetter", "detect_language", "remove_boilerplate")
 
 
 import requests
-import eslib, eslib.time
+import eslib
 from collections import Counter
 from textblob import TextBlob
 import justext
-
+from datetime import datetime, timedelta
+from email.utils import parsedate_tz, mktime_tz
 
 class WebGetter(object):
     def __init__(self, max_size=-1, content_types=None):
@@ -49,6 +50,14 @@ class WebGetter(object):
                 msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
                 raise ValueError(msg)
 
+        # Find timestamp
+        date_str = res.headers.get("date")
+        if not date_str:
+            timestamp = datetime.utcnow()
+        else:
+            t = mktime_tz(parsedate_tz(date_str))
+            timestamp = datetime(1970, 1, 1) + timedelta(seconds=t)
+
         # Extract vitals from web result
         id = url # res.url
         encoding = res.encoding
@@ -61,7 +70,7 @@ class WebGetter(object):
                 msg = "Skipping too large web page (%s), URL: %s" % (eslib.debug.byteSizeString(size, 2), url)
                 raise ValueError(msg)
 
-        body = {"content": content, "content_type": content_type, "encoding": encoding}
+        body = {"content": content, "content_type": content_type, "encoding": encoding, "date": timestamp}
         return body
 
 #region Language detection

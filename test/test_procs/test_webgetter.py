@@ -270,7 +270,7 @@ class TestWebGetter(unittest.TestCase):
         print "Adding", url
         self.m.put({"url":url, "what":what, "who":who})
 
-    def MANUAL(self):
+    def test_MANUAL(self):
 
         domains = [
             {
