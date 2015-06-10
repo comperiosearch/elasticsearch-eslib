@@ -115,7 +115,7 @@ class ServiceLauncher(ServiceLauncherBase):
 
         return True
 
-    def _say_hello(self, doc):
+    def _say_hello(self, proc, doc):
         # The manager may have booted since this service registered, and in case we only registered as guest, we
         # should attempt to re-register just to make sure the manager knows about us. If we are permanently registered,
         # (i.e. not "guest", then this is unnecessary.

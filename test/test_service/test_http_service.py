@@ -26,7 +26,7 @@ class TestService(Service):
 
         return True
 
-    def _func(self, doc):
+    def _func(self, proc, doc):
         print doc
         if self.ending:
            print "FUNC STOP"

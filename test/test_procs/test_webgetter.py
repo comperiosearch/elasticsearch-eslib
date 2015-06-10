@@ -187,7 +187,7 @@ class TestWebGetter(unittest.TestCase):
         self.assertTrue(len(received) == len(self.words)/4, "Expected %d words received; got %d" % (len(self.words)/4, len(received)))
 
 
-    def hook(self, doc):
+    def hook(self, proc, doc):
         content_size = len(doc["_source"].get("content") or "")
         if doc["_id"] == u"http://www.comperio.no":
             self.last_comperio_had_content = ("content" in doc["_source"])
@@ -270,7 +270,7 @@ class TestWebGetter(unittest.TestCase):
         print "Adding", url
         self.m.put({"url":url, "what":what, "who":who})
 
-    def test_MANUAL(self):
+    def MANUAL(self):
 
         domains = [
             {

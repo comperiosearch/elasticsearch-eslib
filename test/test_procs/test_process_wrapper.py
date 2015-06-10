@@ -17,7 +17,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -46,7 +46,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -74,7 +74,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -98,7 +98,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -129,7 +129,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -159,7 +159,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -184,7 +184,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -214,7 +214,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 
@@ -235,7 +235,7 @@ class TestProtocolWrapper(unittest.TestCase):
         w = FileWriter()
         w.subscribe(p)
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "outer/starting"
 

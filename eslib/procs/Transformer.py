@@ -13,7 +13,9 @@ class Transformer(Processor):
         input_protocol  = None
         output_protocol = None
         func            = None     # Mandatory! Must be a function returning a list (or generator) of zero or more
-                                     documents complying with the output protocol.
+                                     documents complying with the output protocol. Function signature must be
+                                     func(proc, doc), where proc is this transformer processor, so you can address it
+                                     in your function.
     """
     def __init__(self, func=None, input_protocol=None, output_protocol=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)
@@ -25,7 +27,7 @@ class Transformer(Processor):
     def _incoming(self, incoming):
 
         try:
-            ll = self._func(incoming)
+            ll = self._func(self, incoming)
             if ll:
                 for outgoing in ll:
                     if outgoing:

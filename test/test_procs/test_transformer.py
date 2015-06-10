@@ -7,12 +7,12 @@ class TestProtocolConverter(unittest.TestCase):
 
     def test_func_one_lambda(self):
 
-        csv2list = lambda doc: [",".join(doc)]
+        csv2list = lambda proc, doc: [",".join(doc)]
 
         p = Transformer(func=csv2list, input_protocol="list", output_protocol="csv")
 
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         p.start()
         p.put(["a","b","c","d"])
@@ -24,7 +24,7 @@ class TestProtocolConverter(unittest.TestCase):
         self.assertEqual(output[0], "a,b,c,d")
 
 
-    def yieldfunc(self, doc):
+    def yieldfunc(self, proc, doc):
         yield doc.lower()
         yield doc.upper()
 
@@ -33,7 +33,7 @@ class TestProtocolConverter(unittest.TestCase):
         p = Transformer(func=self.yieldfunc, input_protocol="str", output_protocol="str")
 
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         p.start()
         p.put("a")
@@ -48,7 +48,7 @@ class TestProtocolConverter(unittest.TestCase):
         self.assertEqual(joined, "a,A,b,B,c,C")
 
 
-    def edge2ids(self, doc):
+    def edge2ids(self, proc, doc):
         if doc["type"] == "author":
             yield doc["from"]
         else:
@@ -59,7 +59,7 @@ class TestProtocolConverter(unittest.TestCase):
         p = Transformer(func=self.edge2ids, input_protocol="str", output_protocol="str")
 
         output = []
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         p.start()
         p.put({"type": "author" , "from": "1", "to": "1"})
