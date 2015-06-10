@@ -22,7 +22,7 @@ class Socket(Terminal):
                 subscriber.receive(document)
         # Finally, notify all subscribing callbacks
         for callback in self.callbacks:
-            callback(document)
+            callback(self.owner, document)
 
     @property
     def has_output(self):

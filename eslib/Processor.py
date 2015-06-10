@@ -726,6 +726,14 @@ class Processor(Configurable):
         connector.receive(document)
 
     def add_callback(self, method, socket_name=None):
+        """
+        Add a callback method to socket. Method signature must be func(proc, doc),
+        where proc is the calling processor (this), and doc is the document sent to the socket.
+
+        :param method:
+        :param socket_name:
+        :return:
+        """
         socket = self._get_socket(self, socket_name)
         if not socket:
             raise Exception("Socket not found.")

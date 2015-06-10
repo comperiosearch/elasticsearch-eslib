@@ -121,7 +121,7 @@ class TestEntityExtractor(unittest.TestCase):
         ex.config.fields = ["field1", "field2", "field3", "subsection.subfield"]
 
         output = []
-        ex.add_callback(lambda doc: output.append(doc))
+        ex.add_callback(lambda proc, doc: output.append(doc))
         ex.start()
         ex.put(doc)
         ex.stop()

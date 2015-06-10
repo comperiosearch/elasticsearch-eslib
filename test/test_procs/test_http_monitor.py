@@ -14,7 +14,7 @@ class TestHttpMonitor(unittest.TestCase):
         output = []
 
         p = HttpMonitor(hook=self._hook)  # localhost:4000 by default
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "Starting server."
         p.start()
@@ -37,7 +37,7 @@ class TestHttpMonitor(unittest.TestCase):
         output = []
 
         p = HttpMonitor(hook=self._hook)  # localhost:4000 by default
-        p.add_callback(lambda doc: output.append(doc))
+        p.add_callback(lambda proc, doc: output.append(doc))
 
         print "Starting server."
         p.start()

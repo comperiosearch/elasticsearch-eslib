@@ -54,11 +54,11 @@ SCREEN_NAMES = {"einar", "per"}
 USER_IDS = {"42112", "323123"}
 
 user_results = []
-def get_users(x):
+def get_users(proc, x):
     user_results.append(x)
 
 follower_results = []
-def get_followers(x):
+def get_followers(proc, x):
     follower_results.append(x)
 
 

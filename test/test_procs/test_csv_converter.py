@@ -23,7 +23,7 @@ class TestCsvConverter(unittest.TestCase):
         r.attach(c.attach(w))
 
         output = []
-        c.add_callback(lambda doc: output.append(doc))
+        c.add_callback(lambda proc, doc: output.append(doc))
 
         return (r, c, w, output)
 

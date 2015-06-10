@@ -199,7 +199,7 @@ class ServiceManager(ServiceLauncherBase):
             esdoc.putfield(meta.data, path, value)
         return meta
 
-    def _ping(self, doc):
+    def _ping(self, proc, doc):
         # Reboot handling
         if self._reboot_ready:
             # Only do one each tick...

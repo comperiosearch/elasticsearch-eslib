@@ -69,7 +69,7 @@ class MyRestartable(Generator):
 
 class TestExecution(unittest.TestCase, Connections):
 
-    def callback(self, document):
+    def callback(self, proc, document):
         print "CALLBACK RECEIVED: %s" % document
         self.callback_count += 1
 
@@ -322,9 +322,9 @@ class TestExecution(unittest.TestCase, Connections):
         docs1 = []
         docs2 = []
         docs3 = []
-        p1.add_callback(lambda doc: docs1.append(doc))
-        p2.add_callback(lambda doc: docs2.append(doc))
-        p3.add_callback(lambda doc: docs3.append(doc))
+        p1.add_callback(lambda proc, doc: docs1.append(doc))
+        p2.add_callback(lambda proc, doc: docs2.append(doc))
+        p3.add_callback(lambda proc, doc: docs3.append(doc))
 
         print "** starting pipeline"
         p1.start()
