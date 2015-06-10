@@ -848,7 +848,7 @@ class ServiceManager(ServiceLauncherBase):
 
     def _mgmt_service_reboot(self, request_handler, payload, **kwargs):
         ids = payload.get("ids") or []
-        self.log.debug("called: shutdown service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
+        self.log.debug("called: reboot service(s) [%s]" % ("(all)" if payload.get("all") else ", ".join(ids)))
         return self._reboot_services(
             ids,
             payload.get("all") or False,
@@ -1357,7 +1357,7 @@ class ServiceManager(ServiceLauncherBase):
         if all:
             # ServiceLauncher type should not be affected
             launcher_type_name = ServiceLauncher.__name__
-            ids = [key for key,service in self._services.iteritems() if service.type == launcher_type_name]
+            ids = [key for key,service in self._services.iteritems() if service.type != launcher_type_name]
         for id in ids:
             if not id in self._services:
                 self.log.debug("Tried to %s a non-existing service '%s'." % (infinitive_str, id))
