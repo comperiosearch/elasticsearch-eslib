@@ -113,17 +113,17 @@ program. You can do this by adding a 'callback' for the socket. For example like
 
 ```python
 output = []
-processor.add_callback(lambda doc: output.append(doc), socket_name)
+processor.add_callback(lambda processor, doc: output.append(doc), socket_name)
 ...
 processor.start()
 processor.wait()
 print output
 ```
 
-or instead of the lambda function, use a method that takes a document as an argument, e.g.:
+or instead of the lambda function, use a method that takes a processor and document as an argument, e.g.:
 
 ```python
-def do_stuff(document):
+def do_stuff(processor, document):
     print "I spy with my little eye, a document containing:", document
 
 ...
