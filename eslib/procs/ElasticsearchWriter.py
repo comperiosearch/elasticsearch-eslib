@@ -20,6 +20,8 @@ class ElasticsearchWriter(Generator):
     Index and document types can be overridden by the config.
 
     NOTE: If the index/type does not already exist, Elasticsearch will generate a mapping based on the incoming data.
+    NOTE: When using a parent/child relationship, parent id must be listed in the document._parent field.
+          (This is an eslib syntax, not Elasticsearch (which is a bit weird here).
 
     Connectors:
         input      (esdoc)   : Incoming documents for writing to configured index.
@@ -81,17 +83,21 @@ class ElasticsearchWriter(Generator):
 
             fields = document.get("_source")
 
+            meta = {"_index": index, "_type": doctype}
+            parent = document.get("_parent")
+            if parent:
+                meta["parent"] = parent  # Yes, it is actually without underscore. The doc._parent is an eslib construct.
+
             if self.config.update_fields:
                 # Use the partial 'update' API
                 update_fields = {}
                 for key, value in fields.iteritems():
                     if key in self.config.update_fields:
                         update_fields.update({key: value})
-                meta = {"_index": index, "_type": doctype, "_id" : id}
+                meta["_id"] = id
                 self._add(document, {"update": meta}, {"doc": update_fields})
             else:
                 # Use the normal partial API
-                meta = {"_index": index, "_type": doctype}
                 if id: meta.update({"_id": id})
                 self._add(document, {"index": meta}, fields)
 
