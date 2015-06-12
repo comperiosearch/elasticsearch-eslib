@@ -86,7 +86,7 @@ class ElasticsearchWriter(Generator):
             meta = {"_index": index, "_type": doctype}
             parent = document.get("_parent")
             if parent:
-                meta["parent"] = parent  # Yes, it is actually without underscore. The doc._parent is an eslib construct.
+                meta["_parent"] = parent
 
             if self.config.update_fields:
                 # Use the partial 'update' API
