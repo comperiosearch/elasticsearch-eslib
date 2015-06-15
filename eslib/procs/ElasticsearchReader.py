@@ -3,6 +3,7 @@ __author__ = 'Hans Terje Bakke'
 import elasticsearch
 from ..Generator import Generator
 from ..time import date2iso
+from ..esdoc import getfield
 from time import sleep
 
 class ElasticsearchReader(Generator):
@@ -78,6 +79,7 @@ class ElasticsearchReader(Generator):
             body.update(qf)
         else:
             body.update({"query": {"match_all": {}}})
+        body["fields"] = ["_source", "_parent"]
 
         return body
 
@@ -158,6 +160,15 @@ class ElasticsearchReader(Generator):
                     for hit in hits:
                         if self.end_tick_reason:
                             return
+
+                        # Transform the parent weirdness into our format:
+                        parent = getfield(hit, "fields._parent")
+                        if parent is not None:
+                            hit["_parent"] = parent
+                        # Get rid of this whole section; we only wanted it for the _parent, and it is weird, anyway:
+                        if "fields" in hit:
+                            del hit["fields"]
+
                         self.output.send(hit)
                         self.count += 1
                         if self.config.limit and self.count >= self.config.limit:
