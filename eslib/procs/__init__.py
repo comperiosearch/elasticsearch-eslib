@@ -37,6 +37,7 @@ from .RssMonitor            import RssMonitor
 from .Timer                 import Timer
 from .DateExpander          import DateExpander
 from .SmtpMailer            import SmtpMailer
+from .FourChanMonitor       import FourChanMonitor
 
 __all__ = (
     "ElasticsearchReader",
@@ -67,5 +68,6 @@ __all__ = (
     "RssMonitor",
     "Timer",
     "DateExpander",
-    "SmtpMailer"
+    "SmtpMailer",
+    "FourChanMonitor"
 )
