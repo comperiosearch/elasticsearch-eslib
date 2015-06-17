@@ -39,14 +39,37 @@ Used by
     
 Format
 
-    _id                str   # Using the URL as ID
-    _timestamp         str   # When the content was fetched
+    _id                str          # Using the URL as ID
+    _type              str          # "webpage"
+    _timestamp         datetime     # When the content was fetched
     _source            dict of ...
         domain         str
-        requested_by   list  # Of of dicts of format [ what : [ who, ...] }, ... ]
+        requested_by   list         # Of of dicts of format [ what : [ who, ...] }, ... ]
         content        str
         content_type   str
         encoding       str
+        date           datetime     # Web page publishing date as reported by HTTP header
+
+### esdoc.4chan
+
+Used by
+
+    FourChanMonitor.esdoc
+
+Format
+
+    _id                int   # Post number at 4chan
+    _type              str   # "4chan"
+    _source
+        id             int   # Post number at 4chan
+        board          str   # Board id
+        thread         int   # Thread id
+        timestamp      int   # Time of posting
+        author         str   # Name of author, most commonly "Anonymous"
+        comment        str   # Text comment
+        filename       str   # Filename, with extension
+        response_to    int   # Post number this post is a response to. 0 if original posting (i.e. not a response)
+
 
 ## urlrequest
 

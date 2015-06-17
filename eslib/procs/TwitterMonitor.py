@@ -133,7 +133,7 @@ class TwitterMonitor(Monitor):
 
         # TODO: Verify user format for "follow". How??
 
-        print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
+        #print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
 
         # Build twitter request dict
         self._twitter_filter = {}
