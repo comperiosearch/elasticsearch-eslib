@@ -176,14 +176,16 @@ class WebGetter(Generator):
 
         The protocol "esdoc.webpage" is a dictionary with the following fields:
 
-            _id                str   # Using the URL as ID.
-            _timestamp         str   # When the content was fetched.
+            _id                str          # Using the URL as ID.
+            _type              str          # "webpage"
+            _timestamp         datetim      # When the content was fetched.
             _source            dict of ...
                 domain         str
-                requested_by   list  # Of of dicts of format [ what : [ who, ...] }, ... ]
+                requested_by   list         # Of of dicts of format [ what : [ who, ...] }, ... ]
                 content        str
                 content_type   str
                 encoding       str
+                date           datetime     # Web page publishing date as reported by HTTP header
 
     The requested_by is the total unique list of requesters that we know about so far (since this processor
     was started).

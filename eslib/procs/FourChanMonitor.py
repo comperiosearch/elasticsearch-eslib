@@ -7,6 +7,7 @@ import email.utils
 import logging
 
 class FourChanClient(object):
+
     url = "http://a.4cdn.org"
 
     def __init__(self, logger=None):
@@ -73,11 +74,42 @@ from ..Monitor import Monitor
 import time
 
 class FourChanMonitor(Monitor):
+    """
+    Monitor 4chan image boards.
+
+    NOTE: Although 4chan is an image board, we do not (yet) download the images themselves (i.e. the binary data).
+
+    Protocols:
+
+        esdoc.4chan:
+
+            _id                int   # Post number at 4chan
+            _type              str   # "4chan"
+            _source
+                id             int   # Post number at 4chan
+                board          str   # Board id
+                thread         int   # Thread id
+                timestamp      int   # Time of posting
+                author         str   # Name of author, most commonly "Anonymous"
+                comment        str   # Text comment
+                filename       str   # Filename, with extension
+                response_to    int   # Post number this post is a response to. 0 if original posting (i.e. not a response)
+
+    Sockets:
+        esdoc  (esdoc.4chan) (default)    : Simplified 4chan document, with board and thread info.
+        raw    (*)                        : The 4chan document in raw format, exactly as returned by the 4chan API.
+
+    Config:
+        boards             = [],    : Which boards to monitor; empty list means 'all'
+        request_delay      = 1.0,   : Seconds between API calls
+        poll_frequency     = 20.0,  : Seconds between checks for new posts
+        start_from         = None   : Start timestamp (time.time()). If None, it will start from whenever the proc is FIRST started. 0 is from epoc.
+    """
 
     def __init__(self, **kwargs):
         super(FourChanMonitor, self).__init__(**kwargs)
 
-        self._output = self.create_socket("esdoc", "esdoc", "Simplified 4chan documents.", is_default=True)
+        self._output = self.create_socket("esdoc", "esdoc.4chan", "Simplified 4chan documents.", is_default=True)
         self._output_raw = self.create_socket("raw", "esdoc", "Simplified 4chan documents.")
 
         self.config.set_default(
@@ -173,15 +205,16 @@ class FourChanMonitor(Monitor):
                 if self._output.has_output:  # No point in creating simplified doc unless there is a listener
                     # Create new post object
                     doc = {
-                        "_id": post["no"],
+                        "_id"  : post["no"],
+                        "_type": "4chan",
                         "_source": {
-                            "board": board_id,
-                            "thread": thread_id,
-                            "no": post["no"],
-                            "time": post["time"],
-                            "name": post["name"],
-                            "com": post.get("com"),
-                            "filename": None if not "filename" in post else ("%s%s" % (post["filename"], post["ext"])),
+                            "id"         : post["no"],
+                            "board"      : board_id,
+                            "thread"     : thread_id,
+                            "timestamp"  : post["time"],
+                            "author"     : post["name"],
+                            "comment"    : post.get("com"),
+                            "filename"   : None if not "filename" in post else ("%s%s" % (post["filename"], post["ext"])),
                             "response_to": post.get("resto")
                             # Skipping spoilers, image dimensions, and more..
                         }
