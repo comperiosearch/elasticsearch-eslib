@@ -139,8 +139,8 @@ class TwitterMonitor(Monitor):
         self._twitter_filter = {}
         if self.config.track:
             self._twitter_filter["track"] = ",".join(self.config.track)
-        # if self.config.follow:
-        #     self._twitter_filter["follow"] = ",".join(self.config.follow)
+        if self.config.follow:
+            self._twitter_filter["follow"] = ",".join(self.config.follow)
         # if self.config.locations:
         #     self._twitter_filter["locations"] = ",".join(self.config.locations)
 
