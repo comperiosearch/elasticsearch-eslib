@@ -132,8 +132,12 @@ class TwitterMonitor(Monitor):
                 raise ValueError("Locations must have TWO longitude and latitude pairs separated by comma, and the pairs separated by comma. (Bounding box: 'x1,y1,x2,y2'.)")
 
         # TODO: Verify user format for "follow". How??
+        #check that follow is a list of string representations of ints
+        for follow in self.config.follow:
+            if not follow or not follow.isdigit():
+                raise ValueError("Follow must be a list of string representations of int userids ")
 
-        #print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
+        print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
 
         # Build twitter request dict
         self._twitter_filter = {}

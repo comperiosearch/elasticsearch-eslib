@@ -118,6 +118,43 @@ class Twitter(Configurable):
             for item in resp.get_iterator():
                 yield item
 
+    def get_list_members(self, list_owner='', list_name=''):
+        """
+        Get the members of list
+        :param list_owner screen_name of list owner
+        :param list_name the name of the list 
+        :yield the user object of the member
+
+        """
+        protocol = "list/members"
+        params = {"owner_screen_name": list_owner, "slug": list_name}
+        method = 'get_list_members'
+        cursor = -1
+        while cursor != 0:
+            self.sleep_for_necessary_time(method)
+            params["cursor"] = cursor
+            resp = None
+            try:
+                resp = self.api.request(protocol, params)
+                resp.response.raise_for_status()
+            except requests.exceptions.ConnectionError as ce:
+                resp = self._handle_error(protocol, params, exception=ce)
+            except requests.exceptions.HTTPError:
+                resp = self._handle_error(protocol, params, resp=resp)
+            res = resp.response.json()
+            try:
+                cursor = res["next_cursor"]
+            except KeyError:
+                cursor = 0
+            if "users" not in res:
+                # Should log that something went wrong
+                return
+            for user_ in res["users"]:
+                yield user_
+
+
+
+
     def get_user(self, uid=None, name=None):
         """Get a single user from Twitter and return its json formatted text"""
         self.sleep_for_necessary_time("users")
