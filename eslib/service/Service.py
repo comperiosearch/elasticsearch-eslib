@@ -598,7 +598,7 @@ class Service(Configurable):
         stats["elapsed"] = elapsed
 
         # memory used (supposedly in KB, but seems more like bytes..)
-        mem = long(proc.get_memory_info()[0])
+        mem = long(proc.memory_info()[0])
         if mem > self.stat_max_memory:
             self.stat_max_memory = mem
         stats["memory"] = mem

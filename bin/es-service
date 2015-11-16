@@ -46,14 +46,14 @@ def cmd_list(host, format, name_patterns, rich):
         print >>sys.stderr, "Error listing services: %s" % (error)
         sys.exit(1)
 
-    hfmt = "%-20s %-10s %6s %-20s %9s %9s"
-    ifmt = "%-20s %-10s %6s %-20s %9s %9s"
+    hfmt = "%-20s %-10s %6s %-18s %11s %9s"
+    ifmt = "%-20s %-10s %6s %-18s %11s %9s"
     hfmt_rich = " %6s %8s %7s %3s"
     ifmt_rich = " %6s %8s %7s %3s"
 
     header1 = hfmt % ("NAME", "STATUS", "PID", "HOST", "ELAPSED", "ETA")
     d = "-"
-    header2 = hfmt % (d*20, d*10, d*6, d*20, d*9, d*9)
+    header2 = hfmt % (d*20, d*10, d*6, d*18, d*11, d*9)
 
     if rich:
         header1 += hfmt_rich % ("DOCS/s", "MEMORY", "CPU", "#TH")
@@ -458,7 +458,7 @@ Usage:
   %(prog)s remove   [options] [--stop] <names...>
 
   %(prog)s run      [options] [--all] [--start] <names...>
-  %(prog)s shutdown [options] [--all] [--wait]v <names...>
+  %(prog)s shutdown [options] [--all] [--wait]  <names...>
   %(prog)s kill     [options] [--all] [--force] <names...>
 
   %(prog)s start    [options] [--all] <names...>

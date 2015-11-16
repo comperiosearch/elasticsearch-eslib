@@ -105,7 +105,7 @@ def cmd_rollback(host, format, version):
 
 # drop [options] <version>
 def cmd_drop(host, format, version):
-    res = remote(host, "delete", "meta/%s" % version)
+    res = remote(host, "delete", "meta/drop/%s" % version)
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
@@ -115,11 +115,11 @@ def cmd_drop(host, format, version):
     if message:
         print message
 
-# import [options] [--commit] DATA
-def cmd_import(host, format, data, commit):
+# import [options] [--commit [-m <message>]] DATA
+def cmd_import(host, format, data, commit, message):
     payload = _get_data(format, data)
 
-    res = remote(host, "post", "meta", payload, {"commit": commit})
+    res = remote(host, "post", "meta/import", payload, {"commit": commit, "message": message})
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
@@ -129,16 +129,15 @@ def cmd_import(host, format, data, commit):
     if message:
         print message
 
-
 # get [options] [<version> | active | edit]   (defaults to 'edit')
-def cmd_get(host, format, version):
+def cmd_get(host, format, version, path):
     # NOTE:
     # The returned message does not only include the metadata, but also metadata about the metadata, such as 'status' and 'updated' time.
     # But we only print the pure metadata.
 
     if not version:
         version = Metadata.EDIT
-    res = remote(host, "get", "meta/" + version)
+    res = remote(host, "get", "meta/" + version, None, {"path": path})
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
@@ -146,47 +145,43 @@ def cmd_get(host, format, version):
         sys.exit(1)
     content = res.get("data")
     if content is None:
-        print >>sys.stderr, "Content missing."
+        print ""
+        #print >>sys.stderr, "Content missing."
     else:
         print tojson(content)
 
-# TODO: NOT TESTED
-# put [options] [--merge] <path> [DATA]
+# put [options] [-p <path>] [--merge] [DATA]
 def cmd_put(host, format, path, data, merge):
-    data = {
-        "path"   : path,
-        "data"   : data,
-        "merge"  : merge
-    }
-    res = remote(host, "post", "put", data)
+    payload = _get_data(format, data)
+    res = remote(host, "post", "meta/put", payload, {"path": path, "merge": merge})
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error during put/append metadata: %s" % error
         sys.exit(1)
 
-# TODO: NOT TESTED
 # remove [options] <path> [DATA]
-def cmd_remove(host, format, path, list_data):
-    data = {
+def cmd_remove(host, format, path, data):
+    "Path must be (constrained) path to one object, and data must be a JSON array."
+    list_data = _get_data(format, data)
+    payload = {
         "path"   : path,
         "list"   : list_data
     }
-    res = remote(host, "delete", "remove", data)
+    res = remote(host, "delete", "meta/remove", payload)
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
         print >>sys.stderr, "Error during remove list items: %s" % error
         sys.exit(1)
 
-# TODO: NOT TESTED
 # delete [options] [--collapse] <sections...>
 def cmd_delete(host, format, paths, collapse):
     data = {
         "paths"   : paths,
         "collapse": collapse
     }
-    res = remote(host, "delete", "delete", data)
+    res = remote(host, "delete", "meta/delete", data)
     if format: return dump_formatted(format, res)
     error = res.get("error")
     if error:
@@ -206,12 +201,12 @@ Usage:
   %(prog)s commit   [options] [<message>]
   %(prog)s rollback [options] <version>
   %(prog)s drop     [options] <version>
-  %(prog)s import   [options] [--commit] [DATA]
+  %(prog)s import   [options] [--commit [-m <message>]] DATA
 
-  %(prog)s get      [options] [<version> | active | edit]   (defaults to 'edit')
-  %(prog)s put      [options] <section_path> [DATA]
-  %(prog)s remove   [options] <section_path> [DATA]
-  %(prog)s delete   [options] <section_paths...>
+  %(prog)s get      [options] [-p <path>] [edit | active | <version>]   (version defaults to 'edit')
+  %(prog)s put      [options] [-p <path>] [--merge] <DATA>
+  %(prog)s remove   [options] <path> DATA
+  %(prog)s delete   [options] [--collapse] <paths...>
 
 Common options:
   --host=<host>
@@ -223,7 +218,7 @@ as a direct data string from the command line, or from a file addressed
 with a '@' prefix to the DATA to the argument. Missing argument expects
 input from stdin.
 
-Addressing in the a 'section_path' follows a dot notation format, with optional
+Addressing in the a 'path' follows a dot notation format, with optional
 constraints for objects to find the unique object:
 
   dot.notation.path|field:value|field:value|...
@@ -280,23 +275,25 @@ The following commands affect data in the current edit set:
     parser_drop._actions[0].help = argparse.SUPPRESS
     parser_drop.add_argument("version", type=str, nargs="+")
 
-    # import [options] [--commit] DATA
+    # import [options] [--commit [-m <message>]] DATA
     desc = "Upload data from string, file or stdin."
     parser_import = subparsers.add_parser("import", description=desc, parents=[parser_common])
     parser_import._actions[0].help = argparse.SUPPRESS
-    parser_import.add_argument("--commit", action="store_true")
+    parser_import.add_argument("-c", "--commit", action="store_true")
+    parser_import.add_argument("-m", "--message", type=str, required=False)
     parser_import.add_argument("data", type=str, nargs="?")
-    # get [options] [<version> | active | edit]   (defaults to 'edit')
+    # get [options] [-p <path>] [edit | active | <version>]   (version defaults to 'edit')
     desc = "Get (download) specified metadata set. Output on stdout. Version arguments are version number, 'active', or 'edit'. Defaults to 'edit'."
     parser_get = subparsers.add_parser("get", description=desc, parents=[parser_common])
     parser_get._actions[0].help = argparse.SUPPRESS
+    parser_get.add_argument("-p", "--path", type=str, required=False)
     parser_get.add_argument("version", type=str, nargs="?")
-    # put [options] [--merge] <path> [DATA]
+    # put [options] [-p <path>] [--merge] [DATA]
     desc = "Add or replace specified sections of the metadata, entirely. Or optionally merge in list elements."
     parser_put = subparsers.add_parser("put", description=desc, parents=[parser_common])
     parser_put._actions[0].help = argparse.SUPPRESS
     parser_put.add_argument("--merge", action="store_true")
-    parser_put.add_argument("path", type=str, nargs=1)
+    parser_put.add_argument("-p", "--path", type=str, required=False)
     parser_put.add_argument("data", type=str, nargs="?")
     # remove [options] <path> [DATA]
     desc = "Remove specified list items data from the metadata at given path."
@@ -335,9 +332,9 @@ The following commands affect data in the current edit set:
     elif args.command == "commit"    : cmd_commit  (host, format, args.message)
     elif args.command == "rollback"  : cmd_rollback(host, format, args.version[0])
     elif args.command == "drop"      : cmd_drop    (host, format, args.version[0])
-    elif args.command == "import"    : cmd_import  (host, format, args.data, args.commit)
-    elif args.command == "get"       : cmd_get     (host, format, args.version)
-    elif args.command == "put"       : cmd_put     (host, format, args.path[0], args.data, args.merge)
+    elif args.command == "import"    : cmd_import  (host, format, args.data, args.commit, args.message)
+    elif args.command == "get"       : cmd_get     (host, format, args.version, args.path)
+    elif args.command == "put"       : cmd_put     (host, format, args.path, args.data, args.merge)
     elif args.command == "remove"    : cmd_remove  (host, format, args.path[0], args.data)
     elif args.command == "delete"    : cmd_delete  (host, format, args.paths, args.collapse)
 

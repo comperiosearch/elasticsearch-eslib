@@ -1,0 +1,17 @@
+See this guide for preparations, setting up accounts and a ~/.pypirc file:
+
+    http://peterdowns.com/posts/first-time-with-pypi.html
+
+To install the package from the source tree:
+
+    pip install -e .
+
+To install from PyPI:
+
+    pip install elasticsearch-eslib
+
+To upload package to PyPI test (pypitest) or live (pypi):
+
+    python setup.py register -r pypitest
+    python setup.py sdist upload -r pypitest
+

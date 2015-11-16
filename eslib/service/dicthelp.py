@@ -8,13 +8,29 @@ Module containing helpers for working with metadata (really just a dict).
 """
 
 
-__all__ = ("put", "remove_list_items", "delete")
+__all__ = ("get", "put", "remove_list_items", "delete")
 
 
 from .. import unique
 
 
-def _get_constrained_list_item(data_list, constraints):
+def _get_constrained_list_items(data_list, constraints, pass_non_dict=False):
+    # Note: Comparing constraints to object values using unicode.
+    ret = []
+    for obj in data_list:
+        if isinstance(obj, dict):
+            ok = True
+            for k,v in constraints.iteritems():
+                if not (k in obj and unicode(obj[k]) == v):
+                    ok = False
+                    break  # Constraint test failed for object
+            if ok:
+                ret.append(obj)
+        elif pass_non_dict:
+            ret.append(obj)
+    return ret
+
+def _get_first_constrained_list_item(data_list, constraints, pass_non_dict=False):
     "Return first matching constrained item in the list, or None."
     # Note: Comparing constraints to object values using unicode.
     for obj in data_list:
@@ -26,10 +42,16 @@ def _get_constrained_list_item(data_list, constraints):
                     break  # Constraint test failed for object
             if ok:
                 return obj
+        elif pass_non_dict:
+            return obj
     return None
 
 def _get_path_and_constraints(path):
     # Note: Converting constraints values to unicode.
+
+    # Strip away the alias
+    path = path.split("=>")[0].strip()
+
     cc = path.split("|")
     pp = cc[0].split(".")
     constraints = {}
@@ -39,29 +61,81 @@ def _get_path_and_constraints(path):
             constraints[ss[0]] = unicode(ss[1])
     return pp, constraints
 
+def _find_node(orig, pp, extend=False):
 
-def put(orig, path, data, merge_lists=False):
-    "Path format with opt constraints: dot.notation.path|key:value|key:value|..."
-
-    "Overwrites existing section at path."
-    pp, constraints = _get_path_and_constraints(path)
-
-    # Find the way... create new nodes if missing.
+    # Find the way... extend: create new nodes if missing.
     node = orig
     for i, key in enumerate(pp[:-1]):
         if key in node:
             node = node[key]
             if not isinstance(node, dict):
                 raise AttributeError("Node at path '%s' is not a dict." % ".".join(pp[:i+1]))
-        else:
+        elif extend:
             dd = {}
             node[key] = dd
             node = dd
+        else:
+            return None  # There is no such node
+    return node
+
+def get(orig, path):
+    """
+    Path format with opt constraints: dot.notation.path|key:value|key:value|...
+    Non-intrusive.
+    """
+    pp, constraints = _get_path_and_constraints(path)
+    node = _find_node(orig, pp)
+    if node is None:
+        return None  # Node not found
+
+    key = pp[-1]
+    target = None
+    if not key:
+        target = node
+    elif not key in node:
+        return None  # Key not found
+    else:
+        target = node[key]
+
+    if isinstance(target, list):
+        return _get_constrained_list_items(target, constraints, pass_non_dict=True)
+    elif constraints:
+        # Note: constraints only apply to lists
+        return None
+    else:
+        return target
+
+def pick_values(orig, path, subpath, flatten=False):
+    items = []
+    section = get(orig, path)
+    if section:
+        for part in section:
+            subpart = get(part, subpath)
+            if subpart:
+                if flatten:  # Expect an array to be joined
+                    items.extend(subpart)
+                else:
+                    items.append(subpart)
+    return items
+
+def put(orig, path, data, merge_lists=False):
+    """
+    Path format with opt constraints: dot.notation.path|key:value|key:value|...
+    Overwrites existing section at path.
+    """
+    pp, constraints = _get_path_and_constraints(path)
+    # Find the way... create new nodes if missing.
+    node = _find_node(orig, pp, extend=True)
 
     # Now finally at the end. If it is a list already, we insert our (possibly constrained)
     # data into the list. If not, we simply overwrite.
     changed = True
     key = pp[-1]
+
+    # Constrains mean we want to work with an array, and if there is no node, insert an array already
+    if not key in node and constraints:
+        node[key] = []
+
     if key in node and isinstance(node[key], list):
         existing_list = node[key]
 
@@ -76,13 +150,19 @@ def put(orig, path, data, merge_lists=False):
                 node[key] = data
                 changed = True
         else:
-            element = _get_constrained_list_item(existing_list, constraints)
+            element = _get_first_constrained_list_item(existing_list, constraints)
             if element is None:
                 if not data in existing_list:
                     existing_list.append(data)
                     changed = True
             else:
-                existing_list[existing_list.index(element)] = data
+                if merge_lists:
+                    if isinstance(data, list):
+                        existing_list.extend(data)
+                    else:
+                        existing_list.append(data)
+                else:
+                    existing_list[existing_list.index(element)] = data
                 changed = True
     else:
         node[key] = data
@@ -97,18 +177,8 @@ def remove_list_items(orig, path, data_list):
         raise ValueError("Data must be a list.")
 
     pp = path.split(".")
-
     # Find the way... create new nodes if missing.
-    node = orig
-    for i, key in enumerate(pp[:-1]):
-        if key in node:
-            node = node[key]
-            if not isinstance(node, dict):
-                raise AttributeError("Node at path '%s' is not a dict." % ".".join(pp[:i+1]))
-        else:
-            dd = {}
-            node[key] = dd
-            node = dd
+    node = _find_node(orig, pp, extend=True)
 
     # Now work on the target
     key = pp[-1]
@@ -135,7 +205,7 @@ def _delete_at(constraints, collapse, node, pp, i):
         if constraints:
             if isinstance(node[key], list):
                 # Remove only list element matching constraint
-                element = _get_constrained_list_item(node[key], constraints)
+                element = _get_first_constrained_list_item(node[key], constraints)
                 if element:
                     node[key].remove(element)
                     return (True, node[key] == [])  # This means the entire child value (the list) is gone -- for collapsing.

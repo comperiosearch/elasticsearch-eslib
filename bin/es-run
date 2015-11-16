@@ -241,18 +241,27 @@ def run_service(
         # We do all of the below per reload iteration, since either source code or configs can have changed meanwhile.
         # Only exceptions and 'reload' set to false will get us out of here
 
+        credentials = {}
+        global_config = {}
+        log_config = {}
+
         # Load config files
         if stdin_dict:
             credentials = stdin_dict.get("credentials") or {}
             global_config = stdin_dict.get("config") or {}
         else:
-            with open(credentials_path, "r") as f:
-                credentials = yaml.load(f)
-            with open(config_path, "r") as f:
-                global_config = yaml.load(f)
+            if os.path.isfile(credentials_path):
+                with open(credentials_path, "r") as f:
+                    credentials = yaml.load(f) or {}
+            if os.path.isfile(config_path):
+                with open(config_path, "r") as f:
+                    global_config = yaml.load(f) or {}
         # Using local log config files as of yet..
-        with open(log_console_path if console_mode else log_config_path) as f:
-            log_config = yaml.load(f)
+        try:
+            with open(log_console_path if console_mode else log_config_path) as f:
+                log_config = yaml.load(f) or {}
+        except:
+            pass
 
         # Unless explicitly overridden, look for the service_type_name in the config
         if not service_type_name:
@@ -274,7 +283,10 @@ def run_service(
             exit(1)
 
         # Initialize logging
-        logging.config.dictConfig(config=log_config)
+        if log_config:
+            logging.config.dictConfig(config=log_config)
+        else:
+            logging.basicConfig()
 
         if console_mode and console_log_level:
             for n in ["servicelog", "proclog", "doclog"]:

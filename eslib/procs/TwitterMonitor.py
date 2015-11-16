@@ -133,16 +133,16 @@ class TwitterMonitor(Monitor):
 
         # TODO: Verify user format for "follow". How??
 
-        #print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
+        # print "*** PREPARING TRACK=%d, FOLLOW=%d, LOCATIONS=%d" % (len(self.config.track), len(self.config.follow), len(self.config.locations))
 
         # Build twitter request dict
         self._twitter_filter = {}
         if self.config.track:
             self._twitter_filter["track"] = ",".join(self.config.track)
-        # if self.config.follow:
-        #     self._twitter_filter["follow"] = ",".join(self.config.follow)
-        # if self.config.locations:
-        #     self._twitter_filter["locations"] = ",".join(self.config.locations)
+        if self.config.follow:
+            self._twitter_filter["follow"] = ",".join(self.config.follow)
+        if self.config.locations:
+            self._twitter_filter["locations"] = ",".join(self.config.locations)
 
 
         # Initialize Twitter API with credentials

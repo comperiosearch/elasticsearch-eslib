@@ -1,6 +1,6 @@
 # elasticsearch-eslib
 
-2015.01.14 -- Hans Terje Bakke
+2015.11.14 -- Hans Terje Bakke
 
 Python library for document processing for Elasticsearch.
 
@@ -521,18 +521,40 @@ p1.start()
 p2.wait()
 ```
 
-# TODO: SERVICE DOCUMENTATION
+# SERVICE DOCUMENTATION
 
-## TODO: The idea
+## The idea
+
+The idea behind "services" is to easily administer a number of document processing process ("services").
+These services can exchange data between them through messaging queues or other means.
+
+The eslib service framework offers service configuration through a config file, logging and log
+configuration, metadata handling and command line commands for managing the services.
 
 ## TODO: Usage
 
 ### TODO: Configuration and directory structure
 
+```
+service
+├── bin/
+│   ├── init.sh
+│   ├── launcher
+│   └── manager
+├── config/
+│   ├── credentials.yaml
+│   ├── logging-console.yaml
+│   ├── logging.yaml
+│   └── services.yaml
+└── log/
+└── source/
+```
+
 ### TODO: Running services
 
 * es-service
 * es-run
+* es-meta
 
 ## TODO: The manager
 
@@ -582,21 +604,302 @@ Example payload in 'hello':
 A service that is dependent on metadata cannot start until it receives the data. If it is missing for
 some reason, then the service should be in the 'pending' state.
 
+### Metadata addressing
+
+Metadata is addressed using dot notation to find the node. When the node contains lists of data we
+can select a subset of it by listing constraints after the path. The constraint separator is the
+pipe (|) character. E.g.
+
+```
+mytuff.users|domain:twitter
+```
+
+
 ## TODO: Manager REST API
 
 
 ### TODO: Service operations
 
-### TODO: Metadata exchange
-
-        # TODO: GET SHOULD ALSO RETURN CHANGESET ID; UPDATE SHOULD ALSO RECEIVE CHANGESET ID
-        self.add_route(self._mgmt_metadata_get   , "GET"     , "/metadata"  , None)
-        self.add_route(self._mgmt_metadata_update, "PUT|POST", "/metadata"  , None)
 
 ## TODO: Service/manager communication (REST interface)
 
 ### Metadata exchange
 
+You should not normally have to bother with any of this yourself, but for the record...
+
+When a (HTTP) service is started, it sends a `/hello` message to the manager, containing (among other things)
+the list of `meta_keys` to subscribe to. The server responds with a section (among other things)
+called `metadata`, where the requested metadata lie.
+
+When the manager has an update that the service subscribes to, it will send that via an HTTP POST
+message to the service's `/metadata` endpoint.
+
+You can check what metadata a service holds by querying the same endpoint with a GET request, e.g.
+
+```
+curl -XGET http://10.0.0.4:4027/metadata | jq .
+```
+
+
 ## TODO: Writing services
 
 * big section...
+
+### Metadata integration
+
+When you inherit from `Service`, there is a class level attribute `metadata_keys`. This is a
+list where you can specify the keys (paths with constraints) that you want your service to
+subscribe to updates on. E.g.
+
+```
+meadata_keys = ["twitter.keywords", "users|domain:twitter"]
+```
+
+Then when you override the method
+
+```
+on_metadata(self, metadata)
+```
+
+you will receive a message from the server when there is changes to your data.
+You can then easily pick te parts you want with `dicthelp.get`, like this:
+
+```
+from eslib.service import dicthelp
+
+def on_metadata(self, metadata):
+  kwds = dicthelp.get(metadata, "twitter.keywords")
+  ...
+```
+
+## Integrating with the service manager (from external applications)
+
+### Metadata management
+
+The following HTTP commands are available
+
+```
+HTTP verb  Path                           URL query params
+---------- ------------------------------ ----------------
+GET        /meta/list
+PUT|POST   /meta/commit
+PUT|POST   /meta/rollback/{version:int}
+DELETE     /meta/drop{version:int}
+PUT|POST   /meta/import                   ?commit:bool, ?message:str
+GET        /meta/{?version}               ?path:str
+PUT|POST   /meta/put                      ?path:str, ?merge:bool
+DELETE     /meta/remove
+DELETE     /meta/delete
+```
+
+In the list above, a question mark means 'optional' and a type is specified with ':type'.
+
+### HTTP command body format
+
+#### commit
+
+``json
+{
+  "description": message
+}
+```
+
+#### commit
+
+```json
+{
+  "description": message
+}
+```
+
+#### remove
+
+```json
+{
+  "path"    : message
+  "list"    : list_of_terms
+}
+```
+
+#### delete
+
+```json
+{
+  "paths"  : list_of_paths
+  "collapse": true|false
+}
+```
+
+### Examples
+
+#### Import
+
+Import overwrites the entire edit set. It must be committed afterwards
+to become active, unless the commit flag is set in the query options.
+
+If you want to add or update parts of the edit set, use the 'put' command instead.
+
+```sh
+url -XGET http://localhost:4000/meta/import?commit=false&message=
+```
+
+```json
+{
+    "hello":
+    {
+        "target": "world"
+    },
+    "groups":
+    [
+        {
+            "id": "group_a",
+            "terms": [1, 2, 3]
+        },
+        {
+            "id": "group_b",
+            "terms": [4, 5]
+        }
+    ],
+    "users":
+    [
+        {
+            "domain": "twitter",
+            "username": "user_a",
+            "user_id": "a",
+        },
+        {
+            "domain": "twitter",
+            "username": "user_b",
+            "user_id": "b",
+        },
+        {
+            "domain": "facebook",
+            "username": "user_c",
+            "user_id": "c",
+        }
+    ]
+}
+```
+
+### Commit
+
+```bs
+curl -XPOST http://localhost:4000/meta/commit
+```
+
+Optional body:
+
+```json
+{
+    "description": "Commiting edit to active set once again."
+}
+```
+
+#### Add or replace entire section
+
+```bs
+curl -XPOST http://localhost:4000/meta/put
+```
+
+Body:
+
+```json
+{
+    "groups":
+    [
+        {
+            "id": "group_a"
+            "terms": ["a", "b"]
+        },
+        {
+            "id": "group_b"
+             "terms": ["c", "d", "e"]
+        }
+    ]
+}
+```
+
+#### Add or replace specific objects
+
+```bs
+curl -XPOST http://localhost:4000/meta/put
+```
+
+Body:
+
+```json
+{
+    "groups|id:group_a":
+    {
+        "id": "group_a"
+         "terms": ["a", "b"]
+    },
+    "groups|id:group_b":
+    {
+        "id": "group_b"
+         "terms": ["c", "d", "e"]
+    }
+}
+```
+
+#### Add or replace (unique) elements in array
+
+```bs
+curl -XPOST http://localhost:4000/meta/put?merge=true
+```
+
+Body:
+
+```json
+{
+  "groups|id:group_a":
+     "terms": ["e", "f"]
+}
+```
+
+#### Delete sections
+
+```bs
+curl -XDELETE http://localhost:4000/meta/delete
+```
+
+Body:
+
+```json
+{
+    "paths"  : ["groups", "users"]
+}
+```
+
+#### Delete objects by filter
+
+```bs
+curl -XDELETE http://localhost:4000/meta/delete
+```
+
+Body:
+
+```json
+{
+    "paths"  : ["groups|id:group_a", "users|domain:twitter"]
+}
+```
+
+#### Remove terms from array
+
+This command is less useful than the others, in that it cannot address a field
+within filtered objects, e.g. you cannot first address "groups|id:group_a" and
+then remove items from that object's "terms" array.
+
+```bs
+curl -XDELETE http://localhost:4000/meta/remove
+```
+
+Body:
+
+```json
+{
+    "path": "myarray":
+    "list": ["b", "c"]
+}
+```

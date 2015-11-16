@@ -3,6 +3,7 @@
 
 from eslib.service import status
 from eslib.service.ServiceLauncher import ServiceLauncherBase
+from eslib.service import dicthelp
 from eslib.procs import Timer
 from eslib.time import utcdate
 from eslib import esdoc
@@ -134,11 +135,11 @@ class ServiceManager(ServiceLauncherBase):
         self.add_route(self._mgmt_metadata_list     , "GET"     , "/meta/list"         , None)
         self.add_route(self._mgmt_metadata_commit   , "PUT|POST", "/meta/commit"       , None)
         self.add_route(self._mgmt_metadata_rollback , "PUT|POST", "/meta/rollback/{version:int}", None)
-        self.add_route(self._mgmt_metadata_drop     , "DELETE"  , "/meta/{version:int}", None)
-        self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta"              , ["?commit:bool"])
-        self.add_route(self._mgmt_metadata_get      , "GET"     , "/meta/{?version}"   , None)
+        self.add_route(self._mgmt_metadata_drop     , "DELETE"  , "/meta/drop/{version:int}", None)
+        self.add_route(self._mgmt_metadata_import   , "PUT|POST", "/meta/import"       , ["?commit:bool", "?message:str"])
+        self.add_route(self._mgmt_metadata_get      , "GET"     , "/meta/{?version}"   , ["?path:str"])
 
-        self.add_route(self._mgmt_metadata_put      , "PUT|POST", "/meta/put"          , None)
+        self.add_route(self._mgmt_metadata_put      , "PUT|POST", "/meta/put"          , ["?path:str", "?merge:bool"])
         self.add_route(self._mgmt_metadata_remove   , "DELETE"  , "/meta/remove"       , None)
         self.add_route(self._mgmt_metadata_delete   , "DELETE"  , "/meta/delete"       , None)
 
@@ -194,9 +195,12 @@ class ServiceManager(ServiceLauncherBase):
         meta.version = metaitem.version
         meta.updated = metaitem.updated
         # irrelevant: meta.status, meta.description
-        for path in service.metadata_keys:
-            value = esdoc.getfield(metaitem.data, path)
-            esdoc.putfield(meta.data, path, value)
+        for complex_path in service.metadata_keys:
+            aa = complex_path.split("=>")
+            path = aa[0].strip()
+            alias = aa[1].strip() if len(aa) > 1 else path
+            value = dicthelp.get(metaitem.data, path)
+            esdoc.putfield(meta.data, alias, value)
         return meta
 
     def _ping(self, proc, doc):
@@ -624,10 +628,11 @@ class ServiceManager(ServiceLauncherBase):
 
             self.log.status("Metadata edit set committed to active; version=%d." % self._metadata_use.version)
 
+    # Currently obsolete and replaced with _rollback_edit_metadata, but kept here for now; just in case...
     def _rollback_active_metadata(self, version):
         # version must be int
 
-        self.log.debug("Attempting to roll back metadata to version %d." % version)
+        self.log.debug("Attempting to roll back metadata active set to version %d." % version)
 
         with self._metadata_lock:
 
@@ -636,7 +641,7 @@ class ServiceManager(ServiceLauncherBase):
             for item in self._metadata_versions.values():
                 if item.version == version:
                     if item.status != Metadata.HISTORIC:
-                        self.log.error("Tried to rollback metadata to non-historic version %d; status='%s'." % (item.version, item.status))
+                        self.log.error("Tried to rollback metadata active set to non-historic version %d; status='%s'." % (item.version, item.status))
                         return False
                     loaded =  self._storage_load_meta_item(item.version)
                     self._metadata_versions[item.version] = loaded
@@ -664,6 +669,37 @@ class ServiceManager(ServiceLauncherBase):
             self._metadata_pending = (old_active_clone, self._metadata_use.clone())
 
             self.log.status("Active metadata set rolled back to version %d." % self._metadata_use.version)
+
+        return True
+
+    def _rollback_edit_metadata(self, version):
+        # version must be int
+
+        self.log.debug("Attempting to roll back metadata edit set to version %d." % version)
+
+        with self._metadata_lock:
+
+            # Load old version
+            loaded = None
+            for item in self._metadata_versions.values():
+                if item.version == version:
+                    if item.status == Metadata.EDIT:
+                        self.log.error("Tried to rollback metadata edit set to self; version %d, status='%s'." % (item.version, item.status))
+                        return False
+                    loaded =  self._storage_load_meta_item(item.version)
+                    self._metadata_versions[item.version] = loaded
+                    break
+
+            if not loaded:
+                self.log.error("Failed to load version %d for rollback; version not found." % version)
+                return False
+
+            # Replace data in current edit set
+            self._metadata_edit.data = deepcopy(loaded.data)
+            self._metadata_edit.updated = self._now
+            self._storage_save_meta_item(self._metadata_edit)
+
+            self.log.status("Metadata edit set copied from version %d." % self._metadata_use.version)
 
         return True
 
@@ -696,7 +732,7 @@ class ServiceManager(ServiceLauncherBase):
 
         return True
 
-    def _import_metadata(self, data, commit):
+    def _import_metadata(self, data, commit, message):
         # expects data to be valid dict
 
         with self._metadata_lock:
@@ -706,7 +742,7 @@ class ServiceManager(ServiceLauncherBase):
                 self._storage_save_meta_item(self._metadata_edit)
         self.log.info("New metadata imported to edit set.")
         if commit:
-            self._commit_metadata_edit_set()
+            self._commit_metadata_edit_set(message)
 
     #endregion Helper methods :: metadata
 
@@ -1545,7 +1581,7 @@ class ServiceManager(ServiceLauncherBase):
     def _mgmt_metadata_commit(self, request_handler, payload, **kwargs):
         self.log.debug("called: commit metadata")
 
-        self._commit_metadata_edit_set(payload.get("description"))
+        self._commit_metadata_edit_set(payload.get("description") if payload else None)
         return {"message": "Metadata edit set version %d committed to active." % self._metadata_use.version}
 
     def _mgmt_metadata_rollback(self, request_handler, payload, **kwargs):
@@ -1553,10 +1589,10 @@ class ServiceManager(ServiceLauncherBase):
 
         version = kwargs["version"]  # Should be an int when it gets here
 
-        if self._rollback_active_metadata(version):
-            return {"message": "Metadata active set rolled back to version %d." % self._metadata_use.version}
+        if self._rollback_edit_metadata(version):
+            return {"message": "Metadata edit set rolled back to version %d." % self._metadata_use.version}
         else:
-            return {"error": "Failed to roll back active metadata set to version %d." % version}
+            return {"error": "Failed to roll back metadata edit set to version %d." % version}
 
     def _mgmt_metadata_drop(self, request_handler, payload, **kwargs):
         self.log.debug("called: delete (drop) metadata set")
@@ -1572,11 +1608,12 @@ class ServiceManager(ServiceLauncherBase):
         self.log.debug("called: import metadata")
 
         commit = kwargs.get("commit") or False
+        message = kwargs.get("message")
 
         if not type(payload) is dict:
             return {"error": "Payload is not a valid dict."}
 
-        self._import_metadata(payload, commit)
+        self._import_metadata(payload, commit, message)
         extra_str = " and committed" if commit else ""
         return {"message": "New metadata imported to current edit set%s." % extra_str}
 
@@ -1584,6 +1621,7 @@ class ServiceManager(ServiceLauncherBase):
         self.log.debug("called: get metadata")
 
         version = kwargs.get("version")
+        path = kwargs.get("path") or ""
         if version is None or version == "":
             version = Metadata.EDIT
         elif not version in [Metadata.ACTIVE, Metadata.EDIT]:
@@ -1612,32 +1650,45 @@ class ServiceManager(ServiceLauncherBase):
             # is released, and the data is json serialized in the http service layer.
             # So we'd better deep clone here already.
 
+            data = dicthelp.get(metaitem.data, path)
+
             return {
                 "version": metaitem.version,
                 "status" : metaitem.status,
                 "updated": metaitem.updated,
-                "data"   : deepcopy(metaitem.data)
+                "data"   : deepcopy(data)
             }
 
     def _mgmt_metadata_put(self, request_handler, payload, **kwargs):
         # Can take list in data, and optionally merge instead of replace.
         self.log.debug("called: put/append metadata")
 
-        path = payload.get("path")
-        data = payload.get("data")
-        merge_list = payload.get("merge") or False
+        path  = kwargs.get("path") or ""
+        merge_list = kwargs.get("merge") or False
 
-        if not path:
-            return {"error": "Missing path."}
-        if not data:
-            return {"error": "Missing list items."}
+        if not type(payload) is dict:
+            return {"error": "Payload is not a valid dict."}
+
+        # path = payload.get("path")
+        # data = payload.get("data")
+        # merge_list = payload.get("merge") or False
+
+        data = payload
+
+        # if not path:
+        #     return {"error": "Missing path."}
+        if not isinstance(data, dict):
+            return {"error": "Missing data or data not dict."}
 
         removed = False
         error = False
         with self._metadata_lock:
             try:
-                changed = esdoc.put(self._metadata_edit, path, data, merge_list)
-                if removed:
+                changed = False
+                node = dicthelp.get(self._metadata_edit.data, path)
+                for k,v in data.iteritems():
+                    changed |= dicthelp.put(node, k, v, merge_list)
+                if changed:
                     self._storage_save_meta_item(self._metadata_edit)
             except Exception as e:
                 error = e
@@ -1662,7 +1713,7 @@ class ServiceManager(ServiceLauncherBase):
         error = False
         with self._metadata_lock:
             try:
-                removed = esdoc.remove_list_items(self._metadata_edit, path, data_list)
+                removed = dicthelp.remove_list_items(self._metadata_edit.data, path, data_list)
                 if removed:
                     self._storage_save_meta_item(self._metadata_edit)
             except Exception as e:
@@ -1686,7 +1737,7 @@ class ServiceManager(ServiceLauncherBase):
         error = False
         with self._metadata_lock:
             try:
-                deleted = esdoc.delete(self._metadata_edit, paths, collapse)
+                deleted = dicthelp.delete(self._metadata_edit.data, paths, collapse)
                 if deleted:
                     self._storage_save_meta_item(self._metadata_edit)
             except Exception as e:

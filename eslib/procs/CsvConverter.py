@@ -21,7 +21,7 @@ class CsvConverter(Processor):
 
     Config:
         index             = None     : Override '_index' meta field with this value.
-        doctype           = None     : Overried '_type' meta field with this value.
+        doctype           = None     : Override '_type' meta field with this value.
         columns           = None     : List of columns to pick from the CSV input. Use None for columns to ignore.
         skip_first_line   = False    : Skip first line of the input. (Typically column headers you don't want.
         delimiter         = ","      : CSV column delimiter character.
