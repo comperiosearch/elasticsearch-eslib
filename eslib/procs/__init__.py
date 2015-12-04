@@ -15,6 +15,8 @@ from .FileWriter            import FileWriter
 from .TcpWriter             import TcpWriter
 from .RabbitmqMonitor       import RabbitmqMonitor
 from .RabbitmqWriter        import RabbitmqWriter
+from .KafkaMonitor          import KafkaMonitor
+from .KafkaWriter           import KafkaWriter
 from .HttpMonitor           import HttpMonitor
 from .CsvConverter          import CsvConverter
 from .WebGetter             import WebGetter
@@ -47,6 +49,8 @@ __all__ = (
     "TcpWriter",
     "RabbitmqMonitor",
     "RabbitmqWriter",
+    "KafkaMonitor",
+    "KafkaWriter",
     "HttpMonitor",
     "CsvConverter",
     "WebGetter",
