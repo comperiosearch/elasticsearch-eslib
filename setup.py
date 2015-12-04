@@ -18,6 +18,9 @@ if sys.argv[-1] == 'publish':
 
 requires = [
     'elasticsearch',
+    'lxml',
+    'oauthlib',
+    'python-daemon',      # For services
     'argparse',
     'psutil', 'setproctitle',
     'pika', 'pyrabbit',   # for Rabbitmq
@@ -35,7 +38,7 @@ requires = [
 
 setup(
     name='eslib',
-    version='0.0.4',
+    version='0.0.5',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
     #long_description=open("README.md").read(),
     author='Hans Terje Bakke',

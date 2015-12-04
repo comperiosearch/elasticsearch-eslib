@@ -47,8 +47,16 @@ class EntityExtractor(Processor):
 
     _regex_email      = re.compile(r"([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})", re.UNICODE|re.IGNORECASE)
     _regex_creditcard = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
+    _regex_ipaddr     = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
     _regex_exact_format = r"\b(%s)\b"
     _regex_exact_flags  = re.DOTALL|re.IGNORECASE|re.UNICODE|re.MULTILINE
+    _regex_ipaddr = re.compile(r"\b" +
+        r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+        r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+        r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+        r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" +
+        r"(?:[:](\d+))?" +
+        r"\b")
 
     def __init__(self, **kwargs):
         super(EntityExtractor, self).__init__(**kwargs)
@@ -168,7 +176,8 @@ class EntityExtractor(Processor):
                     extracted = self._extract_email(text)
                     name = None  # Use extracted element text instead
                 elif t == "iprange":
-                    pass # TODO
+                    extracted = self._extract_iprange(pattern, text)
+                    name = None  # Use extracted element text instead
                 elif t == "creditcard":
                     extracted = self._extract_creditcard(text)
                     name = None  # Use extracted element text instead
@@ -221,6 +230,15 @@ class EntityExtractor(Processor):
     def _extract_creditcard(self, text):
 
         for match in self._regex_creditcard.finditer(text):
+            yield (
+                match.group(),
+                match.span(),
+                1.0,  # Score
+            )
+
+    def _extract_iprange(self, pattern, text):
+        "Very simple IP version 4 parser."
+        for match in self._regex_ipaddr.finditer(text):
             yield (
                 match.group(),
                 match.span(),

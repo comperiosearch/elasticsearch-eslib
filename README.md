@@ -716,7 +716,7 @@ In the list above, a question mark means 'optional' and a type is specified with
 
 ```json
 {
-  "path"    : message
+  "path"    : message,
   "list"    : list_of_terms
 }
 ```
@@ -725,7 +725,7 @@ In the list above, a question mark means 'optional' and a type is specified with
 
 ```json
 {
-  "paths"  : list_of_paths
+  "paths"  : list_of_paths,
   "collapse": true|false
 }
 ```
@@ -808,11 +808,11 @@ Body:
     "groups":
     [
         {
-            "id": "group_a"
+            "id": "group_a",
             "terms": ["a", "b"]
         },
         {
-            "id": "group_b"
+            "id": "group_b",
              "terms": ["c", "d", "e"]
         }
     ]
@@ -831,12 +831,12 @@ Body:
 {
     "groups|id:group_a":
     {
-        "id": "group_a"
+        "id": "group_a",
          "terms": ["a", "b"]
     },
     "groups|id:group_b":
     {
-        "id": "group_b"
+        "id": "group_b",
          "terms": ["c", "d", "e"]
     }
 }
@@ -852,8 +852,8 @@ Body:
 
 ```json
 {
-  "groups|id:group_a":
-     "terms": ["e", "f"]
+    "groups|id:group_a",
+    "terms": ["e", "f"]
 }
 ```
 
@@ -899,7 +899,7 @@ Body:
 
 ```json
 {
-    "path": "myarray":
+    "path": "myarray",
     "list": ["b", "c"]
 }
 ```
