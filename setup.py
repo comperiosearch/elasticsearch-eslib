@@ -24,6 +24,7 @@ requires = [
     'argparse',
     'psutil', 'setproctitle',
     'pika', 'pyrabbit',   # for Rabbitmq
+    'pykafka',            # For Kafka
     'HTMLParser',
     'requests>=2',        # version >=2 needed by TwitterAPI
     'TwitterAPI',
