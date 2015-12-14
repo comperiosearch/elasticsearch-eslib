@@ -46,7 +46,7 @@ class EntityExtractor(Processor):
     """
 
     _regex_email      = re.compile(r"([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})", re.UNICODE|re.IGNORECASE)
-    _regex_creditcard = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
+    _regex_creditcard = re.compile(r"\b(\d{4}[. ]\d{4}[. ]\d{4}[. ]\d{4})\b")
     _regex_ipaddr     = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
     _regex_exact_format = r"\b(%s)\b"
     _regex_exact_flags  = re.DOTALL|re.IGNORECASE|re.UNICODE|re.MULTILINE
