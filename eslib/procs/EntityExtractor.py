@@ -45,7 +45,7 @@ class EntityExtractor(Processor):
         entities            = {}          : The entities to look for and how. See format above.
     """
 
-    _regex_email      = re.compile(r"([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})", re.UNICODE|re.IGNORECASE)
+    _regex_email      = re.compile(r"\b([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})\b", re.UNICODE|re.IGNORECASE)
     _regex_creditcard = re.compile(r"\b(\d{4}[. ]\d{4}[. ]\d{4}[. ]\d{4})\b")
     _regex_ipaddr     = re.compile(r"\b(\d{4}[.]\d{4}[.]\d{4}[.]\d{4})\b")
     _regex_exact_format = r"\b(%s)\b"
@@ -98,9 +98,9 @@ class EntityExtractor(Processor):
                 if text is not None:
                     if not isinstance(text, basestring):
                         self.doclog.warning("Configured field '%s' of unsupported type '%s'. Doc id='%s'." % (field, type(text), doc.get("_id")))
-                    e = self._extract(field, text, lang)
-                    if e:
-                        extracted.extend(e)
+                    ee = self._extract(field, text, lang)
+                    for e in ee:
+                        extracted.append(e)
 
             # If the 'entities' part already exists, make a deep clone of it and add to it.
             existing = esdoc.getfield(doc, "_source." + self.config.target)
@@ -120,8 +120,8 @@ class EntityExtractor(Processor):
             if text is not None:
                 if not type(text) in [str, unicode]:
                     self.doclog.warning("Document of unsupported type '%s'. Expected 'str' or 'unicode'." % type(text))
-                    e = self._extract(None, text)
-                    if e:
+                    ee = self._extract(None, text)
+                    for e in ee:
                         extracted.extend(e)
             entities = self._merge(extracted)
 
