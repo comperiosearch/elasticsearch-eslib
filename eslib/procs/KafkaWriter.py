@@ -39,7 +39,7 @@ class KafkaWriter(Processor):
         self.count = 0
         self._client = KafkaClient(",".join(self.config.hosts))
         topic = self._client.topics[self.config.topic]
-        self._producer = topic.get_sync_producer()
+        self._producer = topic.get_sync_producer(min_queued_messages=1)
         self.log.info("Connected to Kafka topic '%s'." % self.config.topic)
 
     def on_close(self):
@@ -47,7 +47,7 @@ class KafkaWriter(Processor):
             self._producer.stop()
             self.log.info("Kafka producer stopped.")
             # Can't find any way to close the connection or ask it to release resources, so I try a 'del'.
-            del self._client
+            #del self._client
             self._client = None
             self.log.debug("Connection to Kafka deleted.")
 

@@ -60,7 +60,7 @@ class KafkaMonitor(Monitor):
             #del self._consumer
             self.log.info("Kafka consumer stopped.")
             # Can't find any way to close the connection or ask it to release resources, so I try a 'del'.
-            del self._client
+            #del self._client
             self._client = None
             self.log.debug("Connection to Kafka deleted.")
 

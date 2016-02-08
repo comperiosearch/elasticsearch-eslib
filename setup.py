@@ -20,7 +20,7 @@ requires = [
     'elasticsearch',
     'lxml',
     'oauthlib',
-    'python-daemon',      # For services
+    'python-daemon==2.0.6',      # For services, version 2.1 is fucked (change user stuff)
     'argparse',
     'psutil', 'setproctitle',
     'pika', 'pyrabbit',   # for Rabbitmq
@@ -39,7 +39,7 @@ requires = [
 
 setup(
     name='eslib',
-    version='0.0.8',
+    version='0.0.9',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
     #long_description=open("README.md").read(),
     author='Hans Terje Bakke',
