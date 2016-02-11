@@ -55,6 +55,8 @@ class TcpWriter(Generator):
         self._connections = []
         self._socket = sock
 
+        self.total = 0
+
     def on_close(self):
         if self._connections:
             for c in self._connections:
