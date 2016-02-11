@@ -53,7 +53,7 @@ yum install libxml2-devel libxslt-devel
 
 ### Install eslib with pip
 ```
-pip install elasticsearch-eslib
+pip install eslib
 ```
 
 ## Usage
