@@ -187,7 +187,7 @@ class TestExecution(unittest.TestCase, Connections):
         self.assertTrue(gen.suspended)  # Should still remain after abort (and stop), although it serves no purpose then
 
 
-    def callback_sequence(self, document):
+    def callback_sequence(self, proc, document):
         self.seq.append(document)
         print document
 
@@ -210,6 +210,7 @@ class TestExecution(unittest.TestCase, Connections):
         c.register_procs(p1, p2)
         c.DUMP()
 
+        print "seq=", self.seq
         self.assertTrue("p4.p3.p2.p1.hello1" in self.seq, "Expected p4.p3.p2.p1.hello1 to have been generated.")
         self.assertTrue("p4.p3.p2.hello2"    in self.seq, "Expected p4.p3.p2.hello2 to have been generated.")
 
