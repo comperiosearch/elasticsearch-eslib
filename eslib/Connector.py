@@ -115,7 +115,10 @@ class Connector(Terminal):
         self.accepting = False
         self.stopping = True  # We must wait for items in the queue to be processed before we finally stop running
         if self._thread and self._thread.isAlive():
-            self._thread.join()  # NOTE: Are we sure we want to wait for this ??
+            try:
+                self._thread.join()  # NOTE: Are we sure we want to wait for this ??
+            except:
+                pass # Ignore
         self._thread = None
 
     def abort(self):
