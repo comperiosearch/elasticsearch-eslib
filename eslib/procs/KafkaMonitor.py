@@ -4,6 +4,7 @@ from ..Monitor import Monitor
 from pykafka import KafkaClient
 import json, time
 import logging
+import zlib
 
 
 class KafkaMonitor(Monitor):
@@ -20,6 +21,7 @@ class KafkaMonitor(Monitor):
         zookeeper_hosts   = ["localhost:2181"]    : For balanced consumption via zookeeper.
         topic             = "default_topic"       :
         consumer_group    = "default_group"       : Balanced consumer group.
+        compression       = False                 : Whether to decompress the data read from Kafka.
     """
 
     CONGESTION_SLEEP_TIME = 10.0
@@ -34,7 +36,8 @@ class KafkaMonitor(Monitor):
             hosts           = ["localhost:9092"],
             zookeeper_hosts = ["localhost:2181"],
             topic           = "default_topic",
-            consumer_group  = "default_group"
+            consumer_group  = "default_group",
+            compression     = False
         )
 
         self._client   = None
@@ -111,6 +114,9 @@ class KafkaMonitor(Monitor):
 
         if not kafka_data:
             return None
+
+        if self.config.compression:
+            kafka_data = zlib.decompress(kafka_data)
 
         msg_type = None
         document = None

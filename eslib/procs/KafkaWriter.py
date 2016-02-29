@@ -5,6 +5,7 @@ __author__ = 'Hans Terje Bakke'
 from ..Processor import Processor
 from ..esdoc import tojson
 from pykafka import KafkaClient
+import zlib
 
 
 class KafkaWriter(Processor):
@@ -20,6 +21,7 @@ class KafkaWriter(Processor):
     Config:
         hosts             = ["localhost:9292"]    : List of Kafka hosts.
         topic             = "default_topic"       :
+        compression       = False                 : Whether to compress the data sent to Kafka.
     """
 
     def __init__(self, **kwargs):
@@ -28,8 +30,9 @@ class KafkaWriter(Processor):
         self._connector = self.create_connector(self._incoming, "input", None, "Document to write to configured RabbitMQ.")
 
         self.config.set_default(
-            hosts = ["localhost:9092"],
-            topic = "default_topic"
+            hosts       = ["localhost:9092"],
+            topic       = "default_topic",
+            compression = False
         )
 
         self._client   = None
@@ -75,6 +78,9 @@ class KafkaWriter(Processor):
         except TypeError as e:
             self.doclog.error("JSON serialization failed: %s" % e.message)
             return
+
+        if self.config.compression:
+            kafka_data = zlib.compress(kafka_data)
 
         self._producer.produce(kafka_data)
         self.count += 1
