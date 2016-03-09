@@ -16,6 +16,8 @@ from .PipelineService    import PipelineService
 from .ServiceManager     import ServiceManager
 from .ServiceLauncher    import ServiceLauncher
 from .DummyService       import DummyService
+from .Client             import Client
+from .RemotingService    import RemotingService
 
 
 __all__ = (
@@ -24,5 +26,7 @@ __all__ = (
     "PipelineService",
     "ServiceManager",
     "ServiceLauncher",
-    "DummyService"
+    "DummyService",
+    "Client",
+    "RemotingService"
 )
