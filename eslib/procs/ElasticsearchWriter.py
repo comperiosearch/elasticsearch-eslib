@@ -35,12 +35,14 @@ class ElasticsearchWriter(Generator):
         update_fields     = []      : If specified, only this list of fields will be updated in existing documents.
         batchsize         = 1000    : Size of batch to send to Elasticsearch; will queue up until batch is ready to send.
         batchtime         = 5.0     : Submit an incomplete batch if 'batchtime' seconds have elapsed since last shipment.
+        max_resubmits     = 0       : Number of resubmits allowed per failed batch or failed document before giving up.
     """
 
     def __init__(self, **kwargs):
         super(ElasticsearchWriter, self).__init__(**kwargs)
         self.create_connector(self._incoming, "input", "esdoc", "Incoming documents for writing to configured index.")
-        self.output = self.create_socket("output", "esdoc", "Modified documents (attempted) written to Elasticsearch.")
+        self.output = self.create_socket("output", "esdoc", "Modified documents successfully written to Elasticsearch.")
+        self.error_output = self.create_socket("error", "esdoc", "Modified documents that failed a write to Elasticsearch.")
 
         self.config.set_default(
             hosts         = None,
@@ -48,7 +50,8 @@ class ElasticsearchWriter(Generator):
             doctype       = None,
             update_fields = [],
             batchsize     = 1000,
-            batchtime     = 5.0
+            batchtime     = 5.0,
+            max_resubmits = 0
             # TODO: SHALL WE USE AN OPTIONAL ALTERNATIVE TIMESTAMP FIELD FOR PROCESSED/INDEXED TIME? (OR NOT?)
             #timefield    = "_timestamp"
         )
@@ -115,49 +118,83 @@ class ElasticsearchWriter(Generator):
         while (self.config.batchsize and len(docs) <= self.config.batchsize) and not self._queue.empty():
             (doc,l1,l2) = self._queue.get() # TODO: Or get_nowait() ?
             self._queue.task_done()
-            docs.append(doc)
-            payload.append(l1)
-            payload.append(l2)
+            retry = doc.get("_retry") or 0
+            if retry > self.config.max_resubmits:
+                self.doclog.warning(
+                    "Retry attempts exceeded (%d) for document with id '%s'. Giving up." %
+                    (self.config.max_resubmits, doc.get("_id"))
+                )
+            else:
+                docs.append(doc)
+                payload.append(l1)
+                payload.append(l2)
         self._queue_lock.release()
 
         if not len(payload):
             self._last_batch_time = time.time()
             return # Nothing to do
 
+        submit_attempts = 0
+
         self.log.trace("Sending batch to Elasticsearch.")
-
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
-        res = es.bulk(payload)
 
-        self.log.trace("Processing batch result.")
+        res = None
+        while submit_attempts <= self.config.max_resubmits:
+            try:
+                res = es.bulk(payload)
+            except:
+                submit_attempts += 1
+                self.log.exception("Batch failed with exception. Submit attempt %d out of %d." % (submit_attempts, self.config.max_resubmits +1))
+                if submit_attempts <= self.config.max_resubmits:
+                    self.log.info("Resubmitting failed batch (%d documents)." % len(docs))
+                else:
+                    self.log.info("Max resubmits (%d) exeeded. Giving up on batch (dropping %d documents.)" % (self.config.max_resubmits, len(docs)))
+                    break
 
-        for i, docop in enumerate(res["items"]):
-            if   "index"  in docop: resdoc = docop["index"]
-            if   "create" in docop: resdoc = docop["create"]
-            elif "update" in docop: resdoc = docop["update"]
-            if resdoc:
-                self.count += 1
+        if res:
+            self.log.trace("Processing batch result.")
 
-                id      = resdoc["_id"]
-                version = resdoc.get("_version")
-                index   = resdoc["_index"]
-                doctype = resdoc["_type"]
+            if res["errors"]:
+                self.log.debug("Batch returned with error(s).")
 
-                #print "*** ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), id) # DEBUG
+            for i, docop in enumerate(res["items"]):
+                if   "index"  in docop: resdoc = docop["index"]
+                elif "create" in docop: resdoc = docop["create"]
+                elif "update" in docop: resdoc = docop["update"]
+                if resdoc:
+                    self.count += 1
 
-                # Only do the following cloning etc if there are actual subscribers:
-                if self.output.has_output:
-                    original_doc = docs[i]
-                    doc = copy.copy(original_doc) # Shallow clone
-                    doc.update({"_id"     : id     }) # Might have changed, in case of new document created, without id
-                    doc.update({"_index"  : index  }) # Might have changed to self.config.index
-                    doc.update({"_type"   : doctype}) # Might have changed to self.config.doctype
-                    doc.update({"_version": version}) # Might have changed, in case of update
-                    # Send to socket
-                    self.output.send(doc)
-            else:
-                # TODO: Perhaps send failed documents to another (error) socket(?)
-                self.doclog.debug("No document %d" % i)
+                    id      = resdoc["_id"]
+                    version = resdoc.get("_version")
+                    index   = resdoc["_index"]
+                    doctype = resdoc["_type"]
+                    has_error = (resdoc.get("error") is not None)
+
+                    if has_error:
+                        self.doclog.error("Document with id '%s' in batch failed." % id)
+
+                    #print "*** ID : OLD=%s, NEW=%s" % (docs[i].get("_id"), id) # DEBUG
+
+                    # Only do the following cloning etc if there are actual subscribers:
+                    if has_error:
+                        if self.error_output.has_output:
+                            original_doc = docs[i]
+                            original_doc["_retry"] = (original_doc.get("_retry") or 0) + 1
+                            self.error_output.send(original_doc)
+                    elif self.output.has_output:
+                        original_doc = docs[i]
+                        original_doc.pop("_retry", None)  # Get rid of this field if it exists
+                        doc = copy.copy(original_doc) # Shallow clone
+                        doc.update({"_id"     : id     }) # Might have changed, in case of new document created, without id
+                        doc.update({"_index"  : index  }) # Might have changed to self.config.index
+                        doc.update({"_type"   : doctype}) # Might have changed to self.config.doctype
+                        doc.update({"_version": version}) # Might have changed, in case of update
+                        # Send to socket
+                        self.output.send(doc)
+                else:
+                    # TODO: Perhaps send failed documents to another (error) socket(?)
+                    self.doclog.debug("No document %d" % i)
 
         self._last_batch_time = time.time()
 
