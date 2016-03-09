@@ -133,7 +133,7 @@ class ElasticsearchWriter(Generator):
 
         for i, docop in enumerate(res["items"]):
             if   "index"  in docop: resdoc = docop["index"]
-            if   "create" in docop: resdoc = docop["create"]
+            elif "create" in docop: resdoc = docop["create"]
             elif "update" in docop: resdoc = docop["update"]
             if resdoc:
                 self.count += 1
