@@ -2,12 +2,8 @@ from . import HttpService
 from .. import Processor
 import Queue
 
-class DummyProc(Processor):
-    def __init__(self, **kwargs):
-        super(DummyProc, self).__init__(**kwargs)
-        self.create_connector(_incoming, "input")
-    def _incoming(self, doc):
-        self.doclog.info("Incoming doc id: %s", doc.get("_id"))
+
+# NOTE: THIS IS YET EXPERIMENTAL (htb, 2016-03-21)
 
 
 class RemotingService(HttpService):
@@ -58,9 +54,9 @@ class RemotingService(HttpService):
         else:
             return ([], -1)  #  TODO: Or rather an error
 
-        print "LIMIT=", limit
+        ##print "LIMIT=", limit
         while not queue.empty() and (limit == 0 or len(docs) < limit):
-            print "LEN(DOCS)=%d" % len(docs)
+            ##print "LEN(DOCS)=%d" % len(docs)
             doc = queue.get_nowait()
             queue.task_done()
             if doc:
@@ -73,8 +69,8 @@ class RemotingService(HttpService):
         socket_name = kwargs.get("socket")
         limit       = kwargs.get("limit") or 0  # 0 = unlimited
         limit = int(limit)
-        print "=== KWARGS:", kwargs
-        print "=== LIMIT:", limit
+        ##print "=== KWARGS:", kwargs
+        ##print "=== LIMIT:", limit
         (docs, qsize) = self._fetch(socket_name, limit)
         return {"documents": docs, "status": self.status, "queued": qsize}
 
@@ -88,18 +84,3 @@ class RemotingService(HttpService):
     def on_stats(self, stats):
         super(RemotingService, self).on_stats(stats)
         stats["queued"] = {k:q.qsize() for k,q in self._queues.iteritems()}
-
-    # def on_processing_start(self):
-    #     #self._queue = Queue.Queue() # TODO
-    #     super(RemotingService, self).on_processing_start()
-    #
-    # def on_processing_started(self):
-    #     pass
-    #
-    # def on_processing_stopped(self):
-    #     pass
-    #     #self._queue = Queue.Queue() # TODO
-    #
-    # def on_processing_aborted(self):
-    #     pass
-    #     #self._queue = Queue.Queue() # TODO
