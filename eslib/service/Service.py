@@ -350,12 +350,13 @@ class Service(Configurable):
         if ok:
             self._processing             = True
             self._processing_aborted     = False
-            self.log.status("Processing started.")
             self.stat_processing_started = time.time()
             self.stat_processing_ended   = 0
             self._time_at_resume         = self.stat_processing_started
             self._count_at_resume        = 0
             self._last_count             = 0
+            self.log.status("Processing started.")
+            self.on_processing_started()
         elif raise_on_error:
             raise ServiceOperationError("Processing failed to start.")
         return ok
@@ -408,6 +409,7 @@ class Service(Configurable):
         self._processing_stopping = False
         if ok:
             self.log.status("Processing stopped.")
+            self.on_processing_stopped()
         else:
             self.log.error("Processing failed to stop.")
         return ok
@@ -425,6 +427,7 @@ class Service(Configurable):
             self._processing_aborted = True
         if ok:
             self.log.status("Processing aborted.")
+            self.on_processing_aborted()
         elif raise_on_error:
             raise ServiceOperationError("Processing was not aborted.")
         return ok
@@ -574,6 +577,13 @@ class Service(Configurable):
         return True
     def on_metadata(self, metadata):
         return True  # No update is an ok update
+
+    def on_processing_started(self):
+        pass
+    def on_processing_stopped(self):
+        pass
+    def on_processing_aborted(self):
+        pass
 
     #endregion Processing management methods for override
 
