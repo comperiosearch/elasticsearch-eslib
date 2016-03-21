@@ -39,7 +39,7 @@ requires = [
 
 setup(
     name='eslib',
-    version='0.0.12',
+    version='0.0.13',
     description='Document processing framework and utility for Elasticsearch (or whatever).',
     #long_description=open("README.md").read(),
     author='Hans Terje Bakke',

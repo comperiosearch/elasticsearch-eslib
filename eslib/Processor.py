@@ -704,6 +704,8 @@ class Processor(Configurable):
             seen = [self]
         elif self in seen:
             return None #False
+        else:
+            seen.append(self)
 
         # If any of our sockets, or their sockets again, have processors connected that are congested: report the whole shebang as congested.
         for socket in self.sockets.values()[:]:
