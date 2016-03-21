@@ -532,15 +532,20 @@ class Processor(Configurable):
             for connector in self.connectors.itervalues():
                 connector.run()
                 self._runchan_count += 1
-            # Tell all subscribers to start running
-            # Note: We make sure the receivers are running before we start pushing data to them.
-            for subscriber in self._iter_subscribers():
-                subscriber._start_running()
         # Start running this, if generator/monitor
         self.aborted = False
         self.stopping = False
         self.suspended = False
         self.running = True
+
+        if not self.restarting:
+            # Tell all subscribers to start running
+            # (This is done after self.running is set to True, to avoid cyclic subscription infinite recursion.)
+            # Note: We make sure the receivers are running before we start pushing data to them.
+            for subscriber in self._iter_subscribers():
+                subscriber._start_running()
+
+
         if self.is_generator:
             self._thread = threading.Thread(target=self._run)
             self._thread.start()

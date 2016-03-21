@@ -440,6 +440,35 @@ class TestExecution(unittest.TestCase, Connections):
         self.assertEqual([], stopped)
         self.assertEqual(['p1', 'p3'], aborted)
 
+    def test_subscribe_to_self(self):
+
+        from eslib.procs import Transformer
+
+        docs = []
+        def func_b(proc, doc):
+            if len(doc) < 4:
+                doc += "x"
+                docs.append(doc)
+                yield doc
+
+        a = Transformer(lambda proc, doc: doc.upper(), name="trans_a")
+        b = Transformer(func_b, name="trans_b")
+        b.subscribe(a)
+        b.subscribe(b)
+
+        print "STARTING A"
+        a.start()
+        a.put("a")
+        b.put("b")
+        time.sleep(0.1)
+        a.stop()
+        b.wait()
+        print "B FINISHED"
+
+        print "DOCS =", docs
+        self.assertItemsEqual(['Ax', 'Axx', 'Axxx', 'bx', 'bxx', 'bxxx'], docs)
+
+
 from threading import Lock
 
 class SeqGen(Generator):

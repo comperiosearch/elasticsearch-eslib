@@ -118,7 +118,7 @@ class Connector(Terminal):
             try:
                 self._thread.join()  # NOTE: Are we sure we want to wait for this ??
             except:
-                pass # Ignore
+                pass  # Ignore
         self._thread = None
 
     def abort(self):

@@ -25,7 +25,6 @@ class Transformer(Processor):
         self._func = func
 
     def _incoming(self, incoming):
-
         try:
             ll = self._func(self, incoming)
             if ll:
