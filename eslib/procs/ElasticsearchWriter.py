@@ -134,17 +134,16 @@ class ElasticsearchWriter(Generator):
             self._last_batch_time = time.time()
             return # Nothing to do
 
-        submit_attempts = 0
-
         self.log.trace("Sending batch to Elasticsearch.")
         es = elasticsearch.Elasticsearch(self.config.hosts if self.config.hosts else None)
 
+        submit_attempts = 0
         res = None
-        while submit_attempts <= self.config.max_resubmits:
+        while res is None and (submit_attempts <= self.config.max_resubmits):
+            submit_attempts += 1
             try:
                 res = es.bulk(payload)
             except:
-                submit_attempts += 1
                 self.log.exception("Batch failed with exception. Submit attempt %d out of %d." % (submit_attempts, self.config.max_resubmits +1))
                 if submit_attempts <= self.config.max_resubmits:
                     self.log.info("Resubmitting failed batch (%d documents)." % len(docs))

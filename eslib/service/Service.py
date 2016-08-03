@@ -357,8 +357,10 @@ class Service(Configurable):
             self._last_count             = 0
             self.log.status("Processing started.")
             self.on_processing_started()
-        elif raise_on_error:
-            raise ServiceOperationError("Processing failed to start.")
+        else:
+            self.log.error("Processing failed to start.")
+            if raise_on_error:
+                raise ServiceOperationError("Processing failed to start.")
         return ok
 
     def processing_restart(self, wait=False, raise_on_error=False):
